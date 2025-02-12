@@ -2252,27 +2252,32 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
     /* Set the key based on cipher mode */
     switch (h->mode) {
         case GCRY_CIPHER_MODE_CBC:
-            /* WOLF-TODO: should we have separate flags for enc and dec, and only set the key once? */
-            if (h->u_mode.wolf_aes.flag_setKey) {
+            /* Set key if not already set - we defer this to encrypt time due to wolfCrypt API */
+            if (!h->u_mode.wolf_aes.enc_key_set) {
                 ret = wc_AesSetKey(
                     &h->u_mode.wolf_aes.enc_ctx, h->u_mode.wolf_aes.key,
                     h->u_mode.wolf_aes.keylen, NULL, AES_ENCRYPTION);
                 printf(
-                    "** AES CBC: Encrypt Defferred set key, len = %ld, ret=%d\n",
+                    "** AES CBC: Encrypt Set key, len = %ld, ret=%d\n",
                     h->u_mode.wolf_aes.keylen, ret);
+                if (ret != 0)
+                    return GPG_ERR_INTERNAL;
+                h->u_mode.wolf_aes.enc_key_set = 1;
+            }
 
-                /* WOLF-TODO: Best way to clear? What about secure memory? */
-                // h->u_mode.wolf_aes.flag_setKey = 0;
-                // memset(h->u_mode.wolf_aes.key, 0, h->u_mode.wolf_aes.keylen);
-                // h->u_mode.wolf_aes.keylen = 0;
+            /* Set IV if not already set - either from API or default zero */
+            if (!h->marks.iv) {
+                if (!h->u_mode.wolf_aes.flag_IVsetExt) {
+                    /* First time use - set zero IV */
+                    memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
+                }
+                ret = wc_AesSetIV(&h->u_mode.wolf_aes.enc_ctx, h->u_mode.wolf_aes.iv);
+                printf("** AES CBC: Encrypt Set IV, ret=%d\n", ret);
+                if (ret != 0)
+                    return GPG_ERR_INTERNAL;
+                h->marks.iv = 1;
             }
-            /* If IV hasn't been externally set via API, write zero buffer to it */
-            /* WOLF-TODO: should we have separate flags for enc and dec, and only set the IV once? */
-            if (!h->u_mode.wolf_aes.flag_IVsetExt) {
-              memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
-              ret = wc_AesSetIV(&h->u_mode.wolf_aes.enc_ctx, h->u_mode.wolf_aes.iv);
-              printf("** AES CBC: Encrypt Defferred set IV zero, ret=%d\n", ret);
-            }
+
             ret = wc_AesCbcEncrypt(&h->u_mode.wolf_aes.enc_ctx, out, in, inlen);
             printf("** AES CBC: Encrypt, ret=%d\n", ret);
             break;
@@ -2313,28 +2318,36 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
 
     switch (h->mode) {
         case GCRY_CIPHER_MODE_CBC:
-            if (h->u_mode.wolf_aes.flag_setKey) {
+            /* Set key if not already set - we defer this to decrypt time due to wolfCrypt API */
+            if (!h->u_mode.wolf_aes.dec_key_set) {
                 ret = wc_AesSetKey(
                     &h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.key,
                     h->u_mode.wolf_aes.keylen, NULL, AES_DECRYPTION);
                 printf(
-                    "** AES CBC: Decrypt Defferred set key, len = %ld, ret=%d\n",
+                    "** AES CBC: Decrypt Set key, len = %ld, ret=%d\n",
                     h->u_mode.wolf_aes.keylen, ret);
+                if (ret != 0)
+                    return GPG_ERR_INTERNAL;
+                h->u_mode.wolf_aes.dec_key_set = 1;
+            }
 
-                /* WOLF-TODO: Best way to clear? What about secure memory? */
-                // h->u_mode.wolf_aes.flag_setKey = 0;
-                // memset(h->u_mode.wolf_aes.key, 0, h->u_mode.wolf_aes.keylen);
-                // h->u_mode.wolf_aes.keylen = 0;
+            /* Set IV if not already set - either from API or default zero */
+            if (!h->marks.iv) {
+                if (!h->u_mode.wolf_aes.flag_IVsetExt) {
+                    /* First time use - set zero IV */
+                    memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
+                }
+                ret = wc_AesSetIV(&h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.iv);
+                printf("** AES CBC: Decrypt Set IV, ret=%d\n", ret);
+                if (ret != 0)
+                    return GPG_ERR_INTERNAL;
+                h->marks.iv = 1;
             }
-            /* If IV hasn't been externally set via API, write zero buffer to it */
-            if (!h->u_mode.wolf_aes.flag_IVsetExt) {
-              memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
-              ret = wc_AesSetIV(&h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.iv);
-              printf("** AES CBC: Decrypt Defferred set IV zero, ret=%d\n", ret);
-            }
+
             ret = wc_AesCbcDecrypt(&h->u_mode.wolf_aes.dec_ctx, out, in, inlen);
             printf("** AES CBC: Decrypt, ret=%d\n", ret);
             break;
+
         case GCRY_CIPHER_MODE_GCM:
             ret = wc_AesGcmDecryptUpdate(&h->u_mode.wolf_aes.dec_ctx, out, in,
                                          inlen, h->u_mode.wolf_aes.aadbuf,
@@ -2409,6 +2422,43 @@ gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h, const void* intag,
 gcry_err_code_t
 _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
 {
-    /* WOLF-TODO: Implement */
-    return 0;
+    gcry_err_code_t rc = 0;
+
+    switch (cmd)
+    {
+        case GCRYCTL_RESET:
+            printf("** AES CBC: Reset\n");
+            /* First call the default reset operation */
+            rc = _gcry_cipher_ctl(h, cmd, buffer, buflen);
+            if (rc)
+                return rc;
+
+            /* For CBC mode, we need to preserve the key but reset the IV state */
+            if (h->mode == GCRY_CIPHER_MODE_CBC) {
+                /* Reset IV state - will be set again on next crypt operation */
+                h->marks.iv = 0;
+
+                /* Note: We don't touch flag_IVsetExt as it tracks if IV was set via API */
+                /* Note: We don't touch enc/dec_key_set as the key should persist across resets */
+                /* Note: We don't reinitialize contexts as that would lose the key */
+            } else {
+                /* For other modes, reinitialize contexts */
+                wc_AesFree(&h->u_mode.wolf_aes.enc_ctx);
+                wc_AesFree(&h->u_mode.wolf_aes.dec_ctx);
+                if (wc_AesInit(&h->u_mode.wolf_aes.enc_ctx, NULL, INVALID_DEVID) != 0 ||
+                    wc_AesInit(&h->u_mode.wolf_aes.dec_ctx, NULL, INVALID_DEVID) != 0) {
+                    return GPG_ERR_INTERNAL;
+                }
+                h->u_mode.wolf_aes.enc_key_set = 0;
+                h->u_mode.wolf_aes.dec_key_set = 0;
+            }
+            break;
+
+        /* TODO: Implement other control commands */
+        default:
+            rc = GPG_ERR_INV_OP;
+            break;
+    }
+
+    return rc;
 }
