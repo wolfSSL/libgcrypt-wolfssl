@@ -2052,7 +2052,7 @@ int _gcry_cipher_is_wolfcrypt(int algo, int mode)
         case GCRY_CIPHER_AES256:
             switch (mode) {
                 case GCRY_CIPHER_MODE_CBC:
-                case GCRY_CIPHER_MODE_GCM:
+                // case GCRY_CIPHER_MODE_GCM:
                     return 1;
                 default:
                     return 0;
@@ -2106,6 +2106,7 @@ gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t* handle, int algo, int mode,
         return GPG_ERR_INTERNAL;
     }
 
+    printf("** AES CBC: Init\n");
     return 0;
 }
 
@@ -2142,13 +2143,14 @@ gcry_error_t _gcry_cipher_wc_setkey(gcry_cipher_hd_t h, const void* key,
     switch (h->mode) {
         case GCRY_CIPHER_MODE_CBC:
         case GCRY_CIPHER_MODE_ECB:
-        case GCRY_CIPHER_MODE_CTR:
             /* For some modes we need to know the cipher direction when we set
              * the key. Therefore buffer the key and we set it in
              * encrypt/decrypt operation*/
             memcpy(h->u_mode.wolf_aes.key, key, keylen);
+            h->u_mode.wolf_aes.keylen = keylen;
             h->u_mode.wolf_aes.flag_setKey = 1;
             ret                            = 0;
+            printf("** AES CBC: Set key, size=%ld\n", keylen);
             break;
 
         case GCRY_CIPHER_MODE_GCM:
@@ -2177,6 +2179,7 @@ gcry_error_t _gcry_cipher_wc_setiv(gcry_cipher_hd_t h, const void* iv,
 
         case GCRY_CIPHER_MODE_CBC:
             ret = wc_AesSetIV(&h->u_mode.wolf_aes.ctx, iv);
+            printf("** AES CBC: Set IV, ret=%d\n", ret);
             break;
 
         default:
@@ -2221,17 +2224,16 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
     if (outsize < inlen)
         return GPG_ERR_BUFFER_TOO_SHORT;
 
-    if (!h->u_mode.wolf_aes.flag_setDir)
-        return GPG_ERR_INV_CIPHER_MODE;
-
     /* Set the key based on cipher mode */
     switch (h->mode) {
         case GCRY_CIPHER_MODE_CBC:
             if (h->u_mode.wolf_aes.flag_setKey) {
-                int mode = (h->u_mode.wolf_aes.dir == AES_ENCRYPTION) ? AES_ENCRYPTION : AES_DECRYPTION;
                 ret = wc_AesSetKey(
                     &h->u_mode.wolf_aes.ctx, h->u_mode.wolf_aes.key,
-                    h->u_mode.wolf_aes.keylen, NULL, mode);
+                    h->u_mode.wolf_aes.keylen, NULL, AES_ENCRYPTION);
+                printf(
+                    "** AES CBC: Encrypt Defferred set key, len = %ld, ret=%d\n",
+                    h->u_mode.wolf_aes.keylen, ret);
 
                 /* WOLF-TODO: Best way to clear? What about secure memory? */
                 h->u_mode.wolf_aes.flag_setKey = 0;
@@ -2239,6 +2241,7 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
                 h->u_mode.wolf_aes.keylen = 0;
             }
             ret = wc_AesCbcEncrypt(&h->u_mode.wolf_aes.ctx, out, in, inlen);
+            printf("** AES CBC: Encrypt, ret=%d\n", ret);
             break;
 
         case GCRY_CIPHER_MODE_GCM:
@@ -2270,7 +2273,21 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
 
     switch (h->mode) {
         case GCRY_CIPHER_MODE_CBC:
+            if (h->u_mode.wolf_aes.flag_setKey) {
+                ret = wc_AesSetKey(
+                    &h->u_mode.wolf_aes.ctx, h->u_mode.wolf_aes.key,
+                    h->u_mode.wolf_aes.keylen, NULL, AES_DECRYPTION);
+                printf(
+                    "** AES CBC: Decrypt Defferred set key, len = %ld, ret=%d\n",
+                    h->u_mode.wolf_aes.keylen, ret);
+
+                /* WOLF-TODO: Best way to clear? What about secure memory? */
+                h->u_mode.wolf_aes.flag_setKey = 0;
+                memset(h->u_mode.wolf_aes.key, 0, h->u_mode.wolf_aes.keylen);
+                h->u_mode.wolf_aes.keylen = 0;
+            }
             ret = wc_AesCbcDecrypt(&h->u_mode.wolf_aes.ctx, out, in, inlen);
+            printf("** AES CBC: Decrypt, ret=%d\n", ret);
             break;
         case GCRY_CIPHER_MODE_GCM:
             ret = wc_AesGcmDecryptUpdate(&h->u_mode.wolf_aes.ctx, out, in,
