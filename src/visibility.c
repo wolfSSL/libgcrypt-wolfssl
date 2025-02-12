@@ -265,7 +265,6 @@ gcry_sexp_extract_param (gcry_sexp_t sexp, const char *path,
 }
 
 
-
 gcry_mpi_t
 gcry_mpi_new (unsigned int nbits)
 {
@@ -731,26 +730,43 @@ gcry_error_t
 gcry_cipher_open (gcry_cipher_hd_t *handle,
                   int algo, int mode, unsigned int flags)
 {
-  if (!fips_is_operational ())
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_is_wolfcrypt(algo, mode))
+    return gpg_error(_gcry_cipher_wc_open(handle, algo, mode, flags));
+
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
     {
       *handle = NULL;
       return gpg_error (fips_not_operational ());
     }
 
-  return gpg_error (_gcry_cipher_open (handle, algo, mode, flags));
+  /* Fall back to native libgcrypt implementation */
+  return gpg_error(_gcry_cipher_open(handle, algo, mode, flags));
 }
 
 void
 gcry_cipher_close (gcry_cipher_hd_t h)
 {
-  _gcry_cipher_close (h);
+  if (!h)
+    return;
+
+  if (_gcry_cipher_hd_is_wolfcrypt(h))
+    _gcry_cipher_wc_close(h);
+  else
+    _gcry_cipher_close(h);
 }
 
 gcry_error_t
 gcry_cipher_setkey (gcry_cipher_hd_t hd, const void *key, size_t keylen)
 {
-  if (!fips_is_operational ())
-    return gpg_error (fips_not_operational ());
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(hd))
+    return gpg_error(_gcry_cipher_wc_setkey(hd, key, keylen));
+
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
+    return gpg_error(fips_not_operational());
 
   return gcry_error (_gcry_cipher_setkey (hd, key, keylen));
 }
@@ -758,17 +774,25 @@ gcry_cipher_setkey (gcry_cipher_hd_t hd, const void *key, size_t keylen)
 gcry_error_t
 gcry_cipher_setiv (gcry_cipher_hd_t hd, const void *iv, size_t ivlen)
 {
-  if (!fips_is_operational ())
-    return gpg_error (fips_not_operational ());
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(hd))
+    return gpg_error(_gcry_cipher_wc_setiv(hd, iv, ivlen));
 
-  return gcry_error (_gcry_cipher_setiv (hd, iv, ivlen));
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
+    return gpg_error(fips_not_operational());
+
+  return gpg_error (_gcry_cipher_setiv (hd, iv, ivlen));
 }
 
 gpg_error_t
 gcry_cipher_setctr (gcry_cipher_hd_t hd, const void *ctr, size_t ctrlen)
 {
-  if (!fips_is_operational ())
-    return gpg_error (fips_not_operational ());
+  /* TODO: wolfcrypt */
+
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
+    return gpg_error(fips_not_operational());
 
   return gcry_error (_gcry_cipher_setctr (hd, ctr, ctrlen));
 }
@@ -792,17 +816,27 @@ gcry_cipher_geniv (gcry_cipher_hd_t hd, void *iv, size_t iv_len)
 gcry_error_t
 gcry_cipher_authenticate (gcry_cipher_hd_t hd, const void *abuf, size_t abuflen)
 {
-  if (!fips_is_operational ())
-    return gpg_error (fips_not_operational ());
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(hd))
+    return gpg_error(_gcry_cipher_wc_authenticate(hd, abuf, abuflen));
 
-  return gpg_error (_gcry_cipher_authenticate (hd, abuf, abuflen));
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
+    return gpg_error(fips_not_operational());
+
+  return gpg_error(_gcry_cipher_authenticate(hd, abuf, abuflen));
 }
 
 gcry_error_t
 gcry_cipher_gettag (gcry_cipher_hd_t hd, void *outtag, size_t taglen)
 {
-  if (!fips_is_operational ())
-    return gpg_error (fips_not_operational ());
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(hd))
+    return gpg_error(_gcry_cipher_wc_gettag(hd, outtag, taglen));
+
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
+    return gpg_error(fips_not_operational());
 
   return gpg_error (_gcry_cipher_gettag (hd, outtag, taglen));
 }
@@ -810,8 +844,13 @@ gcry_cipher_gettag (gcry_cipher_hd_t hd, void *outtag, size_t taglen)
 gcry_error_t
 gcry_cipher_checktag (gcry_cipher_hd_t hd, const void *intag, size_t taglen)
 {
-  if (!fips_is_operational ())
-    return gpg_error (fips_not_operational ());
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(hd))
+    return gpg_error(_gcry_cipher_wc_checktag(hd, intag, taglen));
+
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
+    return gpg_error(fips_not_operational());
 
   return gpg_error (_gcry_cipher_checktag (hd, intag, taglen));
 }
@@ -820,6 +859,11 @@ gcry_cipher_checktag (gcry_cipher_hd_t hd, const void *intag, size_t taglen)
 gcry_error_t
 gcry_cipher_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
 {
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(h))
+    return gpg_error(_gcry_cipher_wc_ctl(h, cmd, buffer, buflen));
+
+  /* Then do FIPS checks */
   if (!fips_is_operational ())
     return gpg_error (fips_not_operational ());
 
@@ -860,11 +904,16 @@ gcry_cipher_mode_from_oid (const char *string)
 }
 
 gcry_error_t
-gcry_cipher_encrypt (gcry_cipher_hd_t h,
+gcry_cipher_encrypt (gcry_cipher_hd_t hd,
                      void *out, size_t outsize,
                      const void *in, size_t inlen)
 {
-  if (!fips_is_operational ())
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(hd))
+    return gpg_error(_gcry_cipher_wc_encrypt(hd, out, outsize, in, inlen));
+
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
     {
       /* Make sure that the plaintext will never make it to OUT. */
       if (out)
@@ -872,18 +921,23 @@ gcry_cipher_encrypt (gcry_cipher_hd_t h,
       return gpg_error (fips_not_operational ());
     }
 
-  return gpg_error (_gcry_cipher_encrypt (h, out, outsize, in, inlen));
+  return gpg_error(_gcry_cipher_encrypt(hd, out, outsize, in, inlen));
 }
 
 gcry_error_t
-gcry_cipher_decrypt (gcry_cipher_hd_t h,
+gcry_cipher_decrypt (gcry_cipher_hd_t hd,
                      void *out, size_t outsize,
                      const void *in, size_t inlen)
 {
-  if (!fips_is_operational ())
-    return gpg_error (fips_not_operational ());
+  /* Check for wolfCrypt first */
+  if (_gcry_cipher_hd_is_wolfcrypt(hd))
+    return gpg_error(_gcry_cipher_wc_decrypt(hd, out, outsize, in, inlen));
 
-  return gpg_error (_gcry_cipher_decrypt (h, out, outsize, in, inlen));
+  /* Then do FIPS checks */
+  if (!fips_is_operational())
+    return gpg_error(fips_not_operational());
+
+  return gpg_error(_gcry_cipher_decrypt(hd, out, outsize, in, inlen));
 }
 
 size_t

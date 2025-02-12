@@ -22,6 +22,11 @@
 
 #include "./poly1305-internal.h"
 
+#ifndef WOLFSSL_USER_SETTINGS
+#include <wolfssl/options.h>
+#endif
+#include <wolfssl/wolfcrypt/types.h>
+#include <wolfssl/wolfcrypt/aes.h>
 
 /* The maximum supported size of a block in bytes.  */
 #define MAX_BLOCKSIZE 16
@@ -465,6 +470,25 @@ struct gcry_cipher_handle
     struct {
       unsigned char plen[4];
     } wrap;
+
+    /* Mode specific storage for wolfCrypt AES. */
+    struct {
+      Aes ctx;  /* wolfCrypt AES context */
+      unsigned char key[AES_MAX_KEY_SIZE];
+      unsigned char iv[AES_IV_SIZE];
+      unsigned char ctr[AES_BLOCK_SIZE];
+      unsigned char* aadbuf;
+      size_t aadlen;
+      size_t keylen;
+      size_t ivlen;
+      size_t ctrlen;
+      int dir;
+      int flag_setDir;
+      int flag_setKey;
+      int flag_setIV;
+      int flag_setCTR;
+      int aadbuf_initialized;  /* Track if AAD buffer has been initialized */
+    } wolf_aes;
   } u_mode;
 
   /* What follows are two contexts of the cipher in use.  The first

@@ -91,6 +91,41 @@ size_t _gcry_cipher_get_algo_blklen (int algo);
 #define _gcry_cipher_reset(h)  _gcry_cipher_ctl ((h), GCRYCTL_RESET, NULL, 0)
 
 
+/* Check if the algorithm/mode combination is supported by wolfCrypt */
+int _gcry_cipher_is_wolfcrypt(int algo, int mode);
+int _gcry_cipher_hd_is_wolfcrypt(gcry_cipher_hd_t hd);
+
+/* Core wolfCrypt cipher operations */
+gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t *handle,
+                                 int algo, int mode, unsigned int flags);
+
+void _gcry_cipher_wc_close(gcry_cipher_hd_t h);
+
+gcry_error_t _gcry_cipher_wc_setkey(gcry_cipher_hd_t h,
+                                   const void *key, size_t keylen);
+
+gcry_error_t _gcry_cipher_wc_setiv(gcry_cipher_hd_t h,
+                                  const void *iv, size_t ivlen);
+
+gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h,
+                                    void *out, size_t outsize,
+                                    const void *in, size_t inlen);
+
+gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h,
+                                    void *out, size_t outsize,
+                                    const void *in, size_t inlen);
+
+/* AEAD specific operations */
+gcry_error_t _gcry_cipher_wc_authenticate(gcry_cipher_hd_t h,
+                                        const void *aadbuf, size_t aadbuflen);
+
+gcry_error_t _gcry_cipher_wc_gettag(gcry_cipher_hd_t h,
+                                   void *outtag, size_t taglen);
+
+gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h,
+                                     const void *intag, size_t taglen);
+gcry_err_code_t _gcry_cipher_wc_ctl (gcry_cipher_hd_t h,
+                                     int cmd, void *buffer, size_t buflen);
 
 
 gpg_err_code_t _gcry_pk_encrypt (gcry_sexp_t *result,
