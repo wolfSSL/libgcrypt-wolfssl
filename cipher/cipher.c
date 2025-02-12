@@ -2202,7 +2202,8 @@ gcry_error_t _gcry_cipher_wc_setiv(gcry_cipher_hd_t h, const void* iv,
     }
 
     if (ret == 0) {
-      h->u_mode.wolf_aes.flag_IVsetExt = 1;
+        h->u_mode.wolf_aes.flag_IVsetExt = 1;
+        h->marks.iv = 1;  /* IV is set for this operation sequence */
     }
 
     return (ret == 0) ? 0 : GPG_ERR_INTERNAL;
@@ -2265,10 +2266,10 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
                 h->u_mode.wolf_aes.enc_key_set = 1;
             }
 
-            /* Set IV if not already set - either from API or default zero */
+            /* Set IV if not set for this operation sequence */
             if (!h->marks.iv) {
                 if (!h->u_mode.wolf_aes.flag_IVsetExt) {
-                    /* First time use - set zero IV */
+                    /* No IV set via API - use zero IV */
                     memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
                 }
                 ret = wc_AesSetIV(&h->u_mode.wolf_aes.enc_ctx, h->u_mode.wolf_aes.iv);
@@ -2331,10 +2332,10 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
                 h->u_mode.wolf_aes.dec_key_set = 1;
             }
 
-            /* Set IV if not already set - either from API or default zero */
+            /* Set IV if not set for this operation sequence */
             if (!h->marks.iv) {
                 if (!h->u_mode.wolf_aes.flag_IVsetExt) {
-                    /* First time use - set zero IV */
+                    /* No IV set via API - use zero IV */
                     memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
                 }
                 ret = wc_AesSetIV(&h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.iv);

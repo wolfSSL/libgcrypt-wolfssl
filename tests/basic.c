@@ -12593,6 +12593,8 @@ cipher_cbc_bulk_test (int cipher_algo)
       0x98,0xBA,0xF9,0x17,0xFE,0xDF,0x95,0x22
     };
 
+  printf("Begin CBC bulk test\n");
+
   if (gcry_cipher_test_algo (cipher_algo))
     return -1;
   blocksize = gcry_cipher_get_algo_blklen(cipher_algo);
@@ -12693,7 +12695,7 @@ cipher_cbc_bulk_test (int cipher_algo)
       gcry_cipher_close (hd_one);
       gcry_cipher_close (hd_cbc);
       xfree (mem);
-      fail ("%s-CBC-%d test failed (plaintext mismatch)", cipher, blocksize * 8);
+      fail ("%s-CBC-%d BULK test failed (plaintext mismatch)", cipher, blocksize * 8);
       return -1;
     }
 
