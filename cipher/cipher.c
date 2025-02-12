@@ -2099,8 +2099,13 @@ gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t* handle, int algo, int mode,
     /* Clear the entire wolf_aes context */
     memset(&h->u_mode.wolf_aes, 0, sizeof(h->u_mode.wolf_aes));
 
-    /* Initialize wolfCrypt AES context */
-    if (wc_AesInit(&h->u_mode.wolf_aes.ctx, NULL, INVALID_DEVID) != 0) {
+    /* Initialize wolfCrypt AES contexts */
+    if (wc_AesInit(&h->u_mode.wolf_aes.enc_ctx, NULL, INVALID_DEVID) != 0) {
+        _gcry_cipher_close(h);
+        *handle = NULL;
+        return GPG_ERR_INTERNAL;
+    }
+    if (wc_AesInit(&h->u_mode.wolf_aes.dec_ctx, NULL, INVALID_DEVID) != 0) {
         _gcry_cipher_close(h);
         *handle = NULL;
         return GPG_ERR_INTERNAL;
@@ -2115,8 +2120,9 @@ void _gcry_cipher_wc_close(gcry_cipher_hd_t h)
     if (!h)
         return;
 
-    /* Free wolfCrypt context */
-    wc_AesFree(&h->u_mode.wolf_aes.ctx);
+    /* Free wolfCrypt contexts */
+    wc_AesFree(&h->u_mode.wolf_aes.enc_ctx);
+    wc_AesFree(&h->u_mode.wolf_aes.dec_ctx);
 
     /* Free AAD buffer if allocated */
     if (h->u_mode.wolf_aes.aadbuf) {
@@ -2154,7 +2160,10 @@ gcry_error_t _gcry_cipher_wc_setkey(gcry_cipher_hd_t h, const void* key,
             break;
 
         case GCRY_CIPHER_MODE_GCM:
-            ret = wc_AesGcmSetKey(&h->u_mode.wolf_aes.ctx, key, keylen);
+            ret = wc_AesGcmSetKey(&h->u_mode.wolf_aes.enc_ctx, key, keylen);
+            if (ret == 0) {
+                ret = wc_AesGcmSetKey(&h->u_mode.wolf_aes.dec_ctx, key, keylen);
+            }
             break;
 
         default:
@@ -2174,16 +2183,26 @@ gcry_error_t _gcry_cipher_wc_setiv(gcry_cipher_hd_t h, const void* iv,
     int ret;
     switch (h->mode) {
         case GCRY_CIPHER_MODE_GCM:
-            ret = wc_AesGcmSetExtIV(&h->u_mode.wolf_aes.ctx, iv, ivlen);
+            ret = wc_AesGcmSetExtIV(&h->u_mode.wolf_aes.enc_ctx, iv, ivlen);
+            if (ret == 0) {
+                ret = wc_AesGcmSetExtIV(&h->u_mode.wolf_aes.dec_ctx, iv, ivlen);
+            }
             break;
 
         case GCRY_CIPHER_MODE_CBC:
-            ret = wc_AesSetIV(&h->u_mode.wolf_aes.ctx, iv);
+            ret = wc_AesSetIV(&h->u_mode.wolf_aes.enc_ctx, iv);
+            if (ret == 0) {
+                ret = wc_AesSetIV(&h->u_mode.wolf_aes.dec_ctx, iv);
+            }
             printf("** AES CBC: Set IV, ret=%d\n", ret);
             break;
 
         default:
             return GPG_ERR_INV_CIPHER_MODE;
+    }
+
+    if (ret == 0) {
+      h->u_mode.wolf_aes.flag_IVsetExt = 1;
     }
 
     return (ret == 0) ? 0 : GPG_ERR_INTERNAL;
@@ -2221,31 +2240,45 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
 {
     int ret;
 
+    /* Handle in-place encryption when in is NULL */
+    if (!in) {
+        in = out;
+        inlen = outsize;
+    }
+
     if (outsize < inlen)
         return GPG_ERR_BUFFER_TOO_SHORT;
 
     /* Set the key based on cipher mode */
     switch (h->mode) {
         case GCRY_CIPHER_MODE_CBC:
+            /* WOLF-TODO: should we have separate flags for enc and dec, and only set the key once? */
             if (h->u_mode.wolf_aes.flag_setKey) {
                 ret = wc_AesSetKey(
-                    &h->u_mode.wolf_aes.ctx, h->u_mode.wolf_aes.key,
+                    &h->u_mode.wolf_aes.enc_ctx, h->u_mode.wolf_aes.key,
                     h->u_mode.wolf_aes.keylen, NULL, AES_ENCRYPTION);
                 printf(
                     "** AES CBC: Encrypt Defferred set key, len = %ld, ret=%d\n",
                     h->u_mode.wolf_aes.keylen, ret);
 
                 /* WOLF-TODO: Best way to clear? What about secure memory? */
-                h->u_mode.wolf_aes.flag_setKey = 0;
-                memset(h->u_mode.wolf_aes.key, 0, h->u_mode.wolf_aes.keylen);
-                h->u_mode.wolf_aes.keylen = 0;
+                // h->u_mode.wolf_aes.flag_setKey = 0;
+                // memset(h->u_mode.wolf_aes.key, 0, h->u_mode.wolf_aes.keylen);
+                // h->u_mode.wolf_aes.keylen = 0;
             }
-            ret = wc_AesCbcEncrypt(&h->u_mode.wolf_aes.ctx, out, in, inlen);
+            /* If IV hasn't been externally set via API, write zero buffer to it */
+            /* WOLF-TODO: should we have separate flags for enc and dec, and only set the IV once? */
+            if (!h->u_mode.wolf_aes.flag_IVsetExt) {
+              memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
+              ret = wc_AesSetIV(&h->u_mode.wolf_aes.enc_ctx, h->u_mode.wolf_aes.iv);
+              printf("** AES CBC: Encrypt Defferred set IV zero, ret=%d\n", ret);
+            }
+            ret = wc_AesCbcEncrypt(&h->u_mode.wolf_aes.enc_ctx, out, in, inlen);
             printf("** AES CBC: Encrypt, ret=%d\n", ret);
             break;
 
         case GCRY_CIPHER_MODE_GCM:
-            ret = wc_AesGcmEncryptUpdate(&h->u_mode.wolf_aes.ctx, out, in,
+            ret = wc_AesGcmEncryptUpdate(&h->u_mode.wolf_aes.enc_ctx, out, in,
                                          inlen, h->u_mode.wolf_aes.aadbuf,
                                          h->u_mode.wolf_aes.aadlen);
             /* Free AAD buffer after use */
@@ -2268,6 +2301,13 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
                                      size_t inlen)
 {
     int ret;
+
+    /* Handle in-place decryption when in is NULL */
+    if (!in) {
+        in = out;
+        inlen = outsize;
+    }
+
     if (outsize < inlen)
         return GPG_ERR_BUFFER_TOO_SHORT;
 
@@ -2275,22 +2315,28 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
         case GCRY_CIPHER_MODE_CBC:
             if (h->u_mode.wolf_aes.flag_setKey) {
                 ret = wc_AesSetKey(
-                    &h->u_mode.wolf_aes.ctx, h->u_mode.wolf_aes.key,
+                    &h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.key,
                     h->u_mode.wolf_aes.keylen, NULL, AES_DECRYPTION);
                 printf(
                     "** AES CBC: Decrypt Defferred set key, len = %ld, ret=%d\n",
                     h->u_mode.wolf_aes.keylen, ret);
 
                 /* WOLF-TODO: Best way to clear? What about secure memory? */
-                h->u_mode.wolf_aes.flag_setKey = 0;
-                memset(h->u_mode.wolf_aes.key, 0, h->u_mode.wolf_aes.keylen);
-                h->u_mode.wolf_aes.keylen = 0;
+                // h->u_mode.wolf_aes.flag_setKey = 0;
+                // memset(h->u_mode.wolf_aes.key, 0, h->u_mode.wolf_aes.keylen);
+                // h->u_mode.wolf_aes.keylen = 0;
             }
-            ret = wc_AesCbcDecrypt(&h->u_mode.wolf_aes.ctx, out, in, inlen);
+            /* If IV hasn't been externally set via API, write zero buffer to it */
+            if (!h->u_mode.wolf_aes.flag_IVsetExt) {
+              memset(h->u_mode.wolf_aes.iv, 0, AES_IV_SIZE);
+              ret = wc_AesSetIV(&h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.iv);
+              printf("** AES CBC: Decrypt Defferred set IV zero, ret=%d\n", ret);
+            }
+            ret = wc_AesCbcDecrypt(&h->u_mode.wolf_aes.dec_ctx, out, in, inlen);
             printf("** AES CBC: Decrypt, ret=%d\n", ret);
             break;
         case GCRY_CIPHER_MODE_GCM:
-            ret = wc_AesGcmDecryptUpdate(&h->u_mode.wolf_aes.ctx, out, in,
+            ret = wc_AesGcmDecryptUpdate(&h->u_mode.wolf_aes.dec_ctx, out, in,
                                          inlen, h->u_mode.wolf_aes.aadbuf,
                                          h->u_mode.wolf_aes.aadlen);
             /* Free AAD buffer after use */
@@ -2321,12 +2367,13 @@ gcry_error_t _gcry_cipher_wc_gettag(gcry_cipher_hd_t h, void* outtag,
 
     switch (h->mode) {
         case GCRY_CIPHER_MODE_GCM:
+            /* WOLF-TODO: THis is wrong, shoudl always be encryption. Do we need dir flag? */
             if (h->u_mode.wolf_aes.flag_setDir) {
-                ret = wc_AesGcmEncryptFinal(&h->u_mode.wolf_aes.ctx, outtag,
+                ret = wc_AesGcmEncryptFinal(&h->u_mode.wolf_aes.enc_ctx, outtag,
                                             taglen);
             }
             else {
-                ret = wc_AesGcmDecryptFinal(&h->u_mode.wolf_aes.ctx, outtag,
+                ret = wc_AesGcmDecryptFinal(&h->u_mode.wolf_aes.dec_ctx, outtag,
                                             taglen);
             }
             break;
@@ -2348,7 +2395,7 @@ gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h, const void* intag,
 
     switch (h->mode) {
         case GCRY_CIPHER_MODE_GCM:
-            ret = wc_AesGcmDecrypt(&h->u_mode.wolf_aes.ctx, NULL, NULL, 0, NULL,
+            ret = wc_AesGcmDecrypt(&h->u_mode.wolf_aes.dec_ctx, NULL, NULL, 0, NULL,
                                    0, intag, taglen, NULL, 0);
             break;
 

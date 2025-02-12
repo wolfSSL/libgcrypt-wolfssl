@@ -473,10 +473,11 @@ struct gcry_cipher_handle
 
     /* Mode specific storage for wolfCrypt AES. */
     struct {
-      Aes ctx;  /* wolfCrypt AES context */
+      Aes enc_ctx;  /* wolfCrypt AES context */
+      Aes dec_ctx;  /* wolfCrypt AES context */
       unsigned char key[AES_MAX_KEY_SIZE];
-      unsigned char iv[AES_IV_SIZE];
       unsigned char ctr[AES_BLOCK_SIZE];
+      unsigned char iv[AES_IV_SIZE];
       unsigned char* aadbuf;
       size_t aadlen;
       size_t keylen;
@@ -485,7 +486,7 @@ struct gcry_cipher_handle
       int dir;
       int flag_setDir;
       int flag_setKey;
-      int flag_setIV;
+      int flag_IVsetExt;
       int flag_setCTR;
       int aadbuf_initialized;  /* Track if AAD buffer has been initialized */
     } wolf_aes;
