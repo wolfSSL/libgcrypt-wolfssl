@@ -2042,6 +2042,16 @@ _gcry_cipher_selftest (int algo, int extended, selftest_report_func_t report)
 
 #include "wolfssl/wolfcrypt/aes.h"
 
+/* Helper function to print hex values */
+void print_hex(const char* label, const unsigned char* data, size_t len) {
+    printf("%s: ", label);
+    for (size_t i = 0; i < len; i++) {
+        printf("%02x", data[i]);
+    }
+    printf("\n");
+}
+
+
 /* Check if algo/mode should use wolfCrypt */
 int _gcry_cipher_is_wolfcrypt(int algo, int mode)
 {
@@ -2111,6 +2121,8 @@ gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t* handle, int algo, int mode,
         return GPG_ERR_INTERNAL;
     }
 
+    h->u_mode.wolf_aes.flag_setDir = -1;
+
     printf("** AES CBC: Init\n");
     return 0;
 }
@@ -2157,6 +2169,7 @@ gcry_error_t _gcry_cipher_wc_setkey(gcry_cipher_hd_t h, const void* key,
             h->u_mode.wolf_aes.flag_setKey = 1;
             ret                            = 0;
             printf("** AES CBC: Set key, size=%ld\n", keylen);
+            print_hex(" Key", h->u_mode.wolf_aes.key, h->u_mode.wolf_aes.keylen);
             break;
 
         case GCRY_CIPHER_MODE_GCM:
@@ -2190,11 +2203,15 @@ gcry_error_t _gcry_cipher_wc_setiv(gcry_cipher_hd_t h, const void* iv,
             break;
 
         case GCRY_CIPHER_MODE_CBC:
+            /* Save IV in our context */
+            memcpy(h->u_mode.wolf_aes.iv, iv, ivlen);
+
             ret = wc_AesSetIV(&h->u_mode.wolf_aes.enc_ctx, iv);
             if (ret == 0) {
                 ret = wc_AesSetIV(&h->u_mode.wolf_aes.dec_ctx, iv);
             }
             printf("** AES CBC: Set IV, ret=%d\n", ret);
+            print_hex(" IV", h->u_mode.wolf_aes.iv, AES_IV_SIZE);
             break;
 
         default:
@@ -2255,9 +2272,10 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
         case GCRY_CIPHER_MODE_CBC:
             /* Set key if not already set - we defer this to encrypt time due to wolfCrypt API */
             if (!h->u_mode.wolf_aes.enc_key_set) {
+                /* Pass current IV to avoid NULL IV reset */
                 ret = wc_AesSetKey(
                     &h->u_mode.wolf_aes.enc_ctx, h->u_mode.wolf_aes.key,
-                    h->u_mode.wolf_aes.keylen, NULL, AES_ENCRYPTION);
+                    h->u_mode.wolf_aes.keylen, h->u_mode.wolf_aes.iv, AES_ENCRYPTION);
                 printf(
                     "** AES CBC: Encrypt Set key, len = %ld, ret=%d\n",
                     h->u_mode.wolf_aes.keylen, ret);
@@ -2299,8 +2317,13 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
             return GPG_ERR_INV_CIPHER_MODE;
     }
 
+    if ( ret == 0 ) {
+        h->u_mode.wolf_aes.flag_setDir = AES_ENCRYPTION;
+    }
+
     return (ret == 0) ? 0 : GPG_ERR_INTERNAL;
 }
+
 
 gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
                                      size_t outsize, const void* in,
@@ -2321,12 +2344,14 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
         case GCRY_CIPHER_MODE_CBC:
             /* Set key if not already set - we defer this to decrypt time due to wolfCrypt API */
             if (!h->u_mode.wolf_aes.dec_key_set) {
+                /* Pass current IV to avoid NULL IV reset */
                 ret = wc_AesSetKey(
                     &h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.key,
-                    h->u_mode.wolf_aes.keylen, NULL, AES_DECRYPTION);
+                    h->u_mode.wolf_aes.keylen, h->u_mode.wolf_aes.iv, AES_DECRYPTION);
                 printf(
                     "** AES CBC: Decrypt Set key, len = %ld, ret=%d\n",
                     h->u_mode.wolf_aes.keylen, ret);
+                print_hex(" Key", h->u_mode.wolf_aes.key, h->u_mode.wolf_aes.keylen);
                 if (ret != 0)
                     return GPG_ERR_INTERNAL;
                 h->u_mode.wolf_aes.dec_key_set = 1;
@@ -2340,6 +2365,7 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
                 }
                 ret = wc_AesSetIV(&h->u_mode.wolf_aes.dec_ctx, h->u_mode.wolf_aes.iv);
                 printf("** AES CBC: Decrypt Set IV, ret=%d\n", ret);
+                print_hex(" IV", h->u_mode.wolf_aes.iv, AES_IV_SIZE);
                 if (ret != 0)
                     return GPG_ERR_INTERNAL;
                 h->marks.iv = 1;
@@ -2365,6 +2391,10 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
             return GPG_ERR_INV_CIPHER_MODE;
     }
 
+    if ( ret == 0 ) {
+        h->u_mode.wolf_aes.flag_setDir = AES_DECRYPTION;
+    }
+
     return (ret == 0) ? 0 : GPG_ERR_INTERNAL;
 }
 
@@ -2382,7 +2412,7 @@ gcry_error_t _gcry_cipher_wc_gettag(gcry_cipher_hd_t h, void* outtag,
     switch (h->mode) {
         case GCRY_CIPHER_MODE_GCM:
             /* WOLF-TODO: THis is wrong, shoudl always be encryption. Do we need dir flag? */
-            if (h->u_mode.wolf_aes.flag_setDir) {
+            if (h->u_mode.wolf_aes.flag_setDir == AES_ENCRYPTION) {
                 ret = wc_AesGcmEncryptFinal(&h->u_mode.wolf_aes.enc_ctx, outtag,
                                             taglen);
             }
@@ -2452,6 +2482,36 @@ _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
                 }
                 h->u_mode.wolf_aes.enc_key_set = 0;
                 h->u_mode.wolf_aes.dec_key_set = 0;
+            }
+            break;
+
+        case PRIV_CIPHERCTL_GET_INPUT_VECTOR:
+            /* This command returns the current input block (IV) used in CBC mode.
+               Format:
+               1 byte  - Actual length of the block in bytes
+               n bytes - The block itself */
+            if (h->mode != GCRY_CIPHER_MODE_CBC)
+                return GPG_ERR_INV_CIPHER_MODE;
+
+            if (buflen < (1 + AES_BLOCK_SIZE))
+                return GPG_ERR_TOO_SHORT;
+
+            {
+                unsigned char *dst = buffer;
+
+                /* First byte is the length */
+                *dst++ = AES_BLOCK_SIZE;
+
+                /* Copy the current IV */
+                if (h->u_mode.wolf_aes.flag_setDir == AES_ENCRYPTION) {
+                    memcpy(dst, h->u_mode.wolf_aes.enc_ctx.reg, AES_BLOCK_SIZE);
+                }
+                else {
+                    memcpy(dst, h->u_mode.wolf_aes.dec_ctx.reg, AES_BLOCK_SIZE);
+                }
+
+                printf("** AES CBC: Get Input Vector\n");
+                print_hex(" IV", dst, AES_BLOCK_SIZE);
             }
             break;
 
