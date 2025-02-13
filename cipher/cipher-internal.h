@@ -472,6 +472,7 @@ struct gcry_cipher_handle
     } wrap;
 
     /* Mode specific storage for wolfCrypt AES. */
+#ifdef HAVE_WOLFSSL
     struct {
       Aes enc_ctx;
       Aes dec_ctx;
@@ -487,6 +488,8 @@ struct gcry_cipher_handle
       size_t aadlen;
       int aadbuf_initialized;
     } wolf_aes;
+#endif /* HAVE_WOLFSSL */
+
   } u_mode;
 
   /* What follows are two contexts of the cipher in use.  The first

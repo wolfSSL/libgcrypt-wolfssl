@@ -2035,6 +2035,8 @@ _gcry_cipher_selftest (int algo, int extended, selftest_report_func_t report)
 }
 
 
+#ifdef HAVE_WOLFSSL
+
 #ifndef WOLFSSL_USER_SETTINGS
 #include "wolfssl/options.h"
 #endif
@@ -2523,3 +2525,5 @@ _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
 
     return rc;
 }
+
+#endif /* HAVE_WOLFSSL */

@@ -731,8 +731,10 @@ gcry_cipher_open (gcry_cipher_hd_t *handle,
                   int algo, int mode, unsigned int flags)
 {
   /* Check for wolfCrypt first */
+#ifdef HAVE_WOLFSSL
   if (_gcry_cipher_is_wolfcrypt(algo, mode))
     return gpg_error(_gcry_cipher_wc_open(handle, algo, mode, flags));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())
@@ -751,18 +753,22 @@ gcry_cipher_close (gcry_cipher_hd_t h)
   if (!h)
     return;
 
+#ifdef HAVE_WOLFSSL
   if (_gcry_cipher_hd_is_wolfcrypt(h))
     _gcry_cipher_wc_close(h);
   else
+#endif
     _gcry_cipher_close(h);
 }
 
 gcry_error_t
 gcry_cipher_setkey (gcry_cipher_hd_t hd, const void *key, size_t keylen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(hd))
     return gpg_error(_gcry_cipher_wc_setkey(hd, key, keylen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())
@@ -774,9 +780,11 @@ gcry_cipher_setkey (gcry_cipher_hd_t hd, const void *key, size_t keylen)
 gcry_error_t
 gcry_cipher_setiv (gcry_cipher_hd_t hd, const void *iv, size_t ivlen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(hd))
     return gpg_error(_gcry_cipher_wc_setiv(hd, iv, ivlen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())
@@ -816,9 +824,11 @@ gcry_cipher_geniv (gcry_cipher_hd_t hd, void *iv, size_t iv_len)
 gcry_error_t
 gcry_cipher_authenticate (gcry_cipher_hd_t hd, const void *abuf, size_t abuflen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(hd))
     return gpg_error(_gcry_cipher_wc_authenticate(hd, abuf, abuflen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())
@@ -830,9 +840,11 @@ gcry_cipher_authenticate (gcry_cipher_hd_t hd, const void *abuf, size_t abuflen)
 gcry_error_t
 gcry_cipher_gettag (gcry_cipher_hd_t hd, void *outtag, size_t taglen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(hd))
     return gpg_error(_gcry_cipher_wc_gettag(hd, outtag, taglen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())
@@ -844,9 +856,11 @@ gcry_cipher_gettag (gcry_cipher_hd_t hd, void *outtag, size_t taglen)
 gcry_error_t
 gcry_cipher_checktag (gcry_cipher_hd_t hd, const void *intag, size_t taglen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(hd))
     return gpg_error(_gcry_cipher_wc_checktag(hd, intag, taglen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())
@@ -859,9 +873,11 @@ gcry_cipher_checktag (gcry_cipher_hd_t hd, const void *intag, size_t taglen)
 gcry_error_t
 gcry_cipher_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(h))
     return gpg_error(_gcry_cipher_wc_ctl(h, cmd, buffer, buflen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational ())
@@ -908,9 +924,11 @@ gcry_cipher_encrypt (gcry_cipher_hd_t hd,
                      void *out, size_t outsize,
                      const void *in, size_t inlen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(hd))
     return gpg_error(_gcry_cipher_wc_encrypt(hd, out, outsize, in, inlen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())
@@ -929,9 +947,11 @@ gcry_cipher_decrypt (gcry_cipher_hd_t hd,
                      void *out, size_t outsize,
                      const void *in, size_t inlen)
 {
+#ifdef HAVE_WOLFSSL
   /* Check for wolfCrypt first */
   if (_gcry_cipher_hd_is_wolfcrypt(hd))
     return gpg_error(_gcry_cipher_wc_decrypt(hd, out, outsize, in, inlen));
+#endif
 
   /* Then do FIPS checks */
   if (!fips_is_operational())

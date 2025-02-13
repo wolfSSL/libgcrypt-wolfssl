@@ -90,7 +90,7 @@ size_t _gcry_cipher_get_algo_blklen (int algo);
 
 #define _gcry_cipher_reset(h)  _gcry_cipher_ctl ((h), GCRYCTL_RESET, NULL, 0)
 
-
+#ifdef HAVE_WOLFSSL
 /* Check if the algorithm/mode combination is supported by wolfCrypt */
 int _gcry_cipher_is_wolfcrypt(int algo, int mode);
 int _gcry_cipher_hd_is_wolfcrypt(gcry_cipher_hd_t hd);
@@ -126,6 +126,7 @@ gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h,
                                      const void *intag, size_t taglen);
 gcry_err_code_t _gcry_cipher_wc_ctl (gcry_cipher_hd_t h,
                                      int cmd, void *buffer, size_t buflen);
+#endif /* HAVE_WOLFSSL */
 
 
 gpg_err_code_t _gcry_pk_encrypt (gcry_sexp_t *result,
