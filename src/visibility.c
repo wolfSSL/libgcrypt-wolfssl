@@ -732,7 +732,7 @@ gcry_cipher_open (gcry_cipher_hd_t *handle,
 {
   /* Check for wolfCrypt first */
 #ifdef HAVE_WOLFSSL
-  if (_gcry_cipher_is_wolfcrypt(algo, mode))
+  if (_gcry_cipher_is_wolfcrypt(algo, mode, flags))
     return gpg_error(_gcry_cipher_wc_open(handle, algo, mode, flags));
 #endif
 

@@ -2044,8 +2044,12 @@ _gcry_cipher_selftest (int algo, int extended, selftest_report_func_t report)
 
 #include "wolfssl/wolfcrypt/aes.h"
 
+#define NON_WOLFCRYPT_FLAGS(f) ((f) & ~GCRY_CIPHER_WOLFSSL)
+#define DBG_ENTER() printf("[DEBUG] %s\n", __func__)
+
+
 /* Helper function to print hex values */
-void print_hex(const char* label, const unsigned char* data, size_t len) {
+static void print_hex(const char* label, const unsigned char* data, size_t len) {
     printf("%s: ", label);
     for (size_t i = 0; i < len; i++) {
         printf("%02x", data[i]);
@@ -2053,11 +2057,25 @@ void print_hex(const char* label, const unsigned char* data, size_t len) {
     printf("\n");
 }
 
+static int is_wolfcrypt_handle(gcry_cipher_hd_t hd) {
+    return !!(hd->flags & GCRY_CIPHER_WOLFSSL);
+}
+
+static void set_wolfcrypt_handle(gcry_cipher_hd_t hd) {
+    hd->flags |= GCRY_CIPHER_WOLFSSL;
+}
+
+
 
 /* Check if algo/mode should use wolfCrypt */
-int _gcry_cipher_is_wolfcrypt(int algo, int mode)
+int _gcry_cipher_is_wolfcrypt(int algo, int mode, unsigned int flags)
 {
+    DBG_ENTER();
     /* For now, only support AES CBC and GCM */
+    /* Reject if any flags are set - wolfSSL doesn't support them yet */
+    if (NON_WOLFCRYPT_FLAGS(flags) != 0)
+        return 0;
+
     switch (algo) {
         case GCRY_CIPHER_AES128:
         case GCRY_CIPHER_AES192:
@@ -2077,12 +2095,14 @@ int _gcry_cipher_is_wolfcrypt(int algo, int mode)
 /* Check if handle should use wolfCrypt */
 int _gcry_cipher_hd_is_wolfcrypt(gcry_cipher_hd_t hd)
 {
-    return _gcry_cipher_is_wolfcrypt(hd->algo, hd->mode);
+    DBG_ENTER();
+    return is_wolfcrypt_handle(hd);
 }
 
 /* Map libgcrypt algo to wolfCrypt key size */
 static int map_algo_to_keybits(int algo)
 {
+    DBG_ENTER();
     switch (algo) {
         case GCRY_CIPHER_AES128:
             return 128;
@@ -2098,6 +2118,7 @@ static int map_algo_to_keybits(int algo)
 gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t* handle, int algo, int mode,
                                   unsigned int flags)
 {
+    DBG_ENTER();
     gcry_error_t     err;
     gcry_cipher_hd_t h;
 
@@ -2110,6 +2131,9 @@ gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t* handle, int algo, int mode,
 
     /* Clear the entire wolf_aes context */
     memset(&h->u_mode.wolf_aes, 0, sizeof(h->u_mode.wolf_aes));
+
+    /* Set the wolfCrypt support flag */
+    set_wolfcrypt_handle(h);
 
     /* Initialize wolfCrypt AES contexts */
     if (wc_AesInit(&h->u_mode.wolf_aes.enc_ctx, NULL, INVALID_DEVID) != 0) {
@@ -2131,8 +2155,10 @@ gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t* handle, int algo, int mode,
 
 void _gcry_cipher_wc_close(gcry_cipher_hd_t h)
 {
+    DBG_ENTER();
     if (!h)
         return;
+
 
     /* Free wolfCrypt contexts */
     wc_AesFree(&h->u_mode.wolf_aes.enc_ctx);
@@ -2144,6 +2170,9 @@ void _gcry_cipher_wc_close(gcry_cipher_hd_t h)
         h->u_mode.wolf_aes.aadbuf = NULL;
     }
 
+    /* wipe memory */
+    wipememory(&h->u_mode.wolf_aes, sizeof(h->u_mode.wolf_aes));
+
     /* Free handle */
     _gcry_cipher_close(h);
 }
@@ -2151,6 +2180,7 @@ void _gcry_cipher_wc_close(gcry_cipher_hd_t h)
 gcry_error_t _gcry_cipher_wc_setkey(gcry_cipher_hd_t h, const void* key,
                                     size_t keylen)
 {
+    DBG_ENTER();
     int ret;
     int keybits = map_algo_to_keybits(h->algo);
 
@@ -2195,6 +2225,7 @@ gcry_error_t _gcry_cipher_wc_setkey(gcry_cipher_hd_t h, const void* key,
 gcry_error_t _gcry_cipher_wc_setiv(gcry_cipher_hd_t h, const void* iv,
                                    size_t ivlen)
 {
+    DBG_ENTER();
     int ret;
     switch (h->mode) {
         case GCRY_CIPHER_MODE_GCM:
@@ -2231,6 +2262,7 @@ gcry_error_t _gcry_cipher_wc_setiv(gcry_cipher_hd_t h, const void* iv,
 gcry_error_t _gcry_cipher_wc_authenticate(gcry_cipher_hd_t h,
                                           const void* aadbuf, size_t aadbuflen)
 {
+    DBG_ENTER();
     if (h->mode != GCRY_CIPHER_MODE_GCM)
         return GPG_ERR_INV_CIPHER_MODE;
 
@@ -2258,6 +2290,7 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
                                      size_t outsize, const void* in,
                                      size_t inlen)
 {
+    DBG_ENTER();
     int ret;
 
     /* Handle in-place encryption when in is NULL */
@@ -2316,6 +2349,7 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
             break;
 
         default:
+            printf("mode: %d\n", h->mode);
             return GPG_ERR_INV_CIPHER_MODE;
     }
 
@@ -2331,6 +2365,7 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
                                      size_t outsize, const void* in,
                                      size_t inlen)
 {
+    DBG_ENTER();
     int ret;
 
     /* Handle in-place decryption when in is NULL */
@@ -2403,6 +2438,7 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
 gcry_error_t _gcry_cipher_wc_gettag(gcry_cipher_hd_t h, void* outtag,
                                     size_t taglen)
 {
+    DBG_ENTER();
     int ret;
 
     if (h->mode != GCRY_CIPHER_MODE_GCM)
@@ -2434,7 +2470,9 @@ gcry_error_t _gcry_cipher_wc_gettag(gcry_cipher_hd_t h, void* outtag,
 gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h, const void* intag,
                                       size_t taglen)
 {
+    DBG_ENTER();
     int ret;
+    printf("** AES GCM: Check Tag\n");
 
     if (h->mode != GCRY_CIPHER_MODE_GCM)
         return GPG_ERR_INV_CIPHER_MODE;
@@ -2455,6 +2493,7 @@ gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h, const void* intag,
 gcry_err_code_t
 _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
 {
+    DBG_ENTER();
     gcry_err_code_t rc = 0;
 
     switch (cmd)
@@ -2488,6 +2527,7 @@ _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
             break;
 
         case PRIV_CIPHERCTL_GET_INPUT_VECTOR:
+            printf("** AES CBC: Get Input Vector\n");
             /* This command returns the current input block (IV) used in CBC mode.
                Format:
                1 byte  - Actual length of the block in bytes
@@ -2512,7 +2552,6 @@ _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
                     memcpy(dst, h->u_mode.wolf_aes.dec_ctx.reg, AES_BLOCK_SIZE);
                 }
 
-                printf("** AES CBC: Get Input Vector\n");
                 print_hex(" IV", dst, AES_BLOCK_SIZE);
             }
             break;

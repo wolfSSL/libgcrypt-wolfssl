@@ -997,4 +997,9 @@ cipher_block_xor_n_copy(void *_dst_xor, void *_srcdst_cpy, const void *_src,
 }
 
 
+/* Function declarations */
+int _gcry_cipher_is_wolfcrypt(int algo, int mode, unsigned int flags);
+int _gcry_cipher_hd_is_wolfcrypt(gcry_cipher_hd_t hd);
+
+
 #endif /*G10_CIPHER_INTERNAL_H*/

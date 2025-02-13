@@ -92,7 +92,7 @@ size_t _gcry_cipher_get_algo_blklen (int algo);
 
 #ifdef HAVE_WOLFSSL
 /* Check if the algorithm/mode combination is supported by wolfCrypt */
-int _gcry_cipher_is_wolfcrypt(int algo, int mode);
+int _gcry_cipher_is_wolfcrypt(int algo, int mode, unsigned int flags);
 int _gcry_cipher_hd_is_wolfcrypt(gcry_cipher_hd_t hd);
 
 /* Core wolfCrypt cipher operations */
