@@ -479,14 +479,26 @@ struct gcry_cipher_handle
       unsigned char key[AES_MAX_KEY_SIZE];
       size_t keylen;
       unsigned char iv[AES_IV_SIZE];
-      int flag_setKey;
-      int flag_IVsetExt;
-      int flag_setDir;
-      int enc_key_set;  /* Track if encryption key has been set */
-      int dec_key_set;  /* Track if decryption key has been set */
+      size_t ivlen;
+      struct {
+          unsigned int key_buf_valid:1;  /* Key buffer contains valid key */
+          unsigned int key_set_enc:1;    /* Key has been set for encryption */
+          unsigned int key_set_dec:1;    /* Key has been set for decryption */
+          unsigned int iv_buf_valid:1;   /* IV buffer contains valid IV */
+          unsigned int iv_gen:1;         /* IV should be generated */
+          unsigned int iv_set_enc:1;     /* IV has been set for encryption */
+          unsigned int iv_set_dec:1;     /* IV has been set for decryption */
+          unsigned int aad_buf_init:1; /* AAD buffer contains valid AAD */
+          unsigned int aes_init_done:1; /* AES contexts have been initialized */
+          unsigned int aes_mode_init_done:1; /* AES mode specific initialization done */
+      } flags;
+
       unsigned char *aadbuf;
       size_t aadlen;
-      int aadbuf_initialized;
+
+      int flag_setDir; /* Direction of the cipher for current operation */
+
+      WC_RNG *rng; /* RNG for GCM IV generation */
     } wolf_aes;
 #endif /* HAVE_WOLFSSL */
 
