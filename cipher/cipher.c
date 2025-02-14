@@ -2149,7 +2149,6 @@ gcry_error_t _gcry_cipher_wc_open(gcry_cipher_hd_t* handle, int algo, int mode,
 
     h->u_mode.wolf_aes.flag_setDir = -1;
 
-    printf("** AES CBC: Init\n");
     return 0;
 }
 
@@ -2472,7 +2471,6 @@ gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h, const void* intag,
 {
     DBG_ENTER();
     int ret;
-    printf("** AES GCM: Check Tag\n");
 
     if (h->mode != GCRY_CIPHER_MODE_GCM)
         return GPG_ERR_INV_CIPHER_MODE;
@@ -2527,7 +2525,7 @@ _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
             break;
 
         case PRIV_CIPHERCTL_GET_INPUT_VECTOR:
-            printf("** AES CBC: Get Input Vector\n");
+            printf("** AES: get Input Vector\n");
             /* This command returns the current input block (IV) used in CBC mode.
                Format:
                1 byte  - Actual length of the block in bytes
