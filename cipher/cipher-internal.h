@@ -490,7 +490,9 @@ struct gcry_cipher_handle
           unsigned int iv_set_dec:1;     /* IV has been set for decryption */
           unsigned int aad_buf_init:1; /* AAD buffer contains valid AAD */
           unsigned int aes_init_done:1; /* AES contexts have been initialized */
-          unsigned int aes_mode_init_done:1; /* AES mode specific initialization done */
+          unsigned int aes_mode_init_enc:1; /* AES mode specific initialization done */
+          unsigned int aes_mode_init_dec:1; /* AES mode specific initialization done */
+
       } flags;
 
       unsigned char *aadbuf;

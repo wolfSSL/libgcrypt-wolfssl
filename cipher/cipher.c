@@ -2081,7 +2081,7 @@ int _gcry_cipher_is_wolfcrypt(int algo, int mode, unsigned int flags)
         case GCRY_CIPHER_AES256:
             switch (mode) {
                 case GCRY_CIPHER_MODE_CBC:
-                // case GCRY_CIPHER_MODE_GCM:
+                case GCRY_CIPHER_MODE_GCM:
                     return 1;
                 default:
                     return 0;
@@ -2339,12 +2339,12 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
 
             printf("** AES CBC: Encrypt input data, len=%ld\n", inlen);
             print_hex(" Input", in, inlen < 32 ? inlen : 32);
-            print_hex(" Current IV", h->u_mode.wolf_aes.enc_ctx.reg, AES_BLOCK_SIZE);
+            print_hex(" Current IV", (unsigned char*)h->u_mode.wolf_aes.enc_ctx.reg, AES_BLOCK_SIZE);
 
             ret = wc_AesCbcEncrypt(&h->u_mode.wolf_aes.enc_ctx, out, in, inlen);
             printf("** AES CBC: Encrypt, ret=%d\n", ret);
             print_hex(" Output", out, inlen < 32 ? inlen : 32);
-            print_hex(" Next IV", h->u_mode.wolf_aes.enc_ctx.reg, AES_BLOCK_SIZE);
+            print_hex(" Next IV", (unsigned char*)h->u_mode.wolf_aes.enc_ctx.reg, AES_BLOCK_SIZE);
             break;
 
         case GCRY_CIPHER_MODE_GCM:
@@ -2386,14 +2386,31 @@ gcry_error_t _gcry_cipher_wc_encrypt(gcry_cipher_hd_t h, void* out,
                 h->u_mode.wolf_aes.flags.iv_set_enc = 1;
             }
 
-            ret = wc_AesGcmEncryptUpdate(&h->u_mode.wolf_aes.enc_ctx, out, in,
-                                         inlen, h->u_mode.wolf_aes.aadbuf,
-                                         h->u_mode.wolf_aes.aadlen);
-            /* Free AAD buffer after use */
-            if (h->u_mode.wolf_aes.aadbuf) {
-                _gcry_free(h->u_mode.wolf_aes.aadbuf);
-                h->u_mode.wolf_aes.aadbuf = NULL;
-                h->u_mode.wolf_aes.aadlen = 0;
+            if (ret != 0) {
+                printf("** AES GCM: Set IV, ret=%d\n", ret);
+                return GPG_ERR_INTERNAL;
+            }
+
+            /* Initialize GCM if not already done. IV should always be set
+             * before this */
+            if (ret == 0 && !h->u_mode.wolf_aes.flags.aes_mode_init_enc) {
+                ret = wc_AesGcmInit(&h->u_mode.wolf_aes.enc_ctx,
+                                    h->u_mode.wolf_aes.iv, AES_IV_SIZE,
+                                    NULL, 0);
+                printf("** AES GCM: Init, ret=%d\n", ret);
+                h->u_mode.wolf_aes.flags.aes_mode_init_enc = 1;
+            }
+
+            if (ret == 0) {
+                ret = wc_AesGcmEncryptUpdate(&h->u_mode.wolf_aes.enc_ctx, out, in,
+                                             inlen, h->u_mode.wolf_aes.aadbuf,
+                                             h->u_mode.wolf_aes.aadlen);
+                /* Free AAD buffer after use */
+                if (h->u_mode.wolf_aes.aadbuf) {
+                    _gcry_free(h->u_mode.wolf_aes.aadbuf);
+                    h->u_mode.wolf_aes.aadbuf = NULL;
+                    h->u_mode.wolf_aes.aadlen = 0;
+                }
             }
             break;
 
@@ -2467,12 +2484,12 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
 
             printf("** AES CBC: Decrypt input data, len=%ld\n", inlen);
             print_hex(" Input", in, inlen < 32 ? inlen : 32);
-            print_hex(" Current IV", h->u_mode.wolf_aes.dec_ctx.reg, AES_BLOCK_SIZE);
+            print_hex(" Current IV", (unsigned char*)h->u_mode.wolf_aes.dec_ctx.reg, AES_BLOCK_SIZE);
 
             ret = wc_AesCbcDecrypt(&h->u_mode.wolf_aes.dec_ctx, out, in, inlen);
             printf("** AES CBC: Decrypt, ret=%d\n", ret);
             print_hex(" Output", out, inlen < 32 ? inlen : 32);
-            print_hex(" Next IV", h->u_mode.wolf_aes.dec_ctx.reg, AES_BLOCK_SIZE);
+            print_hex(" Next IV", (unsigned char*)h->u_mode.wolf_aes.dec_ctx.reg, AES_BLOCK_SIZE);
             break;
 
         case GCRY_CIPHER_MODE_GCM:
@@ -2514,6 +2531,22 @@ gcry_error_t _gcry_cipher_wc_decrypt(gcry_cipher_hd_t h, void* out,
                 h->u_mode.wolf_aes.flags.iv_set_dec = 1;
             }
 
+            if (ret != 0) {
+                printf("** AES GCM: Set IV, ret=%d\n", ret);
+                return GPG_ERR_INTERNAL;
+            }
+
+            /* Initialize GCM if not already done. IV should always be set
+             * before this */
+            if (ret == 0 && !h->u_mode.wolf_aes.flags.aes_mode_init_dec) {
+                ret = wc_AesGcmInit(&h->u_mode.wolf_aes.dec_ctx,
+                                    h->u_mode.wolf_aes.iv, AES_IV_SIZE,
+                                    NULL, 0);
+                printf("** AES GCM: Init, ret=%d\n", ret);
+                h->u_mode.wolf_aes.flags.aes_mode_init_dec = 1;
+            }
+
+
             ret = wc_AesGcmDecryptUpdate(&h->u_mode.wolf_aes.dec_ctx, out, in,
                                          inlen, h->u_mode.wolf_aes.aadbuf,
                                          h->u_mode.wolf_aes.aadlen);
@@ -2543,10 +2576,16 @@ gcry_error_t _gcry_cipher_wc_gettag(gcry_cipher_hd_t h, void* outtag,
     int ret;
 
     if (h->mode != GCRY_CIPHER_MODE_GCM)
+    {
+        printf("** AES GCM: Invalid cipher mode %d\n", h->mode);
         return GPG_ERR_INV_CIPHER_MODE;
+    }
 
     if (h->u_mode.wolf_aes.flag_setDir == -1)
+    {
+        printf("** AES GCM: Direction not set\n");
         return GPG_ERR_INV_CIPHER_MODE;
+    }
 
     switch (h->mode) {
         case GCRY_CIPHER_MODE_GCM:
@@ -2554,10 +2593,12 @@ gcry_error_t _gcry_cipher_wc_gettag(gcry_cipher_hd_t h, void* outtag,
             if (h->u_mode.wolf_aes.flag_setDir == AES_ENCRYPTION) {
                 ret = wc_AesGcmEncryptFinal(&h->u_mode.wolf_aes.enc_ctx, outtag,
                                             taglen);
+                printf("** AES GCM: Encrypt final, ret=%d\n", ret);
             }
             else {
                 ret = wc_AesGcmDecryptFinal(&h->u_mode.wolf_aes.dec_ctx, outtag,
                                             taglen);
+                printf("** AES GCM: Decrypt final, ret=%d\n", ret);
             }
             break;
 
@@ -2579,8 +2620,8 @@ gcry_error_t _gcry_cipher_wc_checktag(gcry_cipher_hd_t h, const void* intag,
 
     switch (h->mode) {
         case GCRY_CIPHER_MODE_GCM:
-            ret = wc_AesGcmDecrypt(&h->u_mode.wolf_aes.dec_ctx, NULL, NULL, 0, NULL,
-                                   0, intag, taglen, NULL, 0);
+            ret = wc_AesGcmDecryptFinal(&h->u_mode.wolf_aes.dec_ctx, intag, taglen);
+            printf("** AES GCM: Check tag, ret=%d\n", ret);
             break;
 
         default:
@@ -2599,7 +2640,7 @@ _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
     switch (cmd)
     {
         case GCRYCTL_RESET:
-            printf("** AES CBC: Reset\n");
+            printf("** AES Reset\n");
             /* First call the default reset operation */
             rc = _gcry_cipher_ctl(h, cmd, buffer, buflen);
             if (rc)
@@ -2630,6 +2671,8 @@ _gcry_cipher_wc_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
                     /* manually reset the AES nonce set flag */
                     h->u_mode.wolf_aes.enc_ctx.nonceSet = 0;
                     h->u_mode.wolf_aes.dec_ctx.nonceSet = 0;
+                    h->u_mode.wolf_aes.flags.aes_mode_init_enc = 0;
+                    h->u_mode.wolf_aes.flags.aes_mode_init_dec = 0;
                     break;
             }
             break;
