@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/hash.h>
 
 #include "g10lib.h"
 #include "mpi.h"
@@ -61,6 +63,27 @@ static const char *rsa_names[] =
     "oid.1.2.840.113549.1.1.1",
     NULL,
   };
+
+/* Convert libgcrypt MPI to wolfCrypt byte array */
+static int mpi_to_byte_array(gcry_mpi_t mpi, byte* out, word32* outLen)
+{
+    size_t n = 0;
+    int rc = _gcry_mpi_print(GCRYMPI_FMT_USG, out, *outLen, &n, mpi);
+    if (rc) return rc;
+    *outLen = (word32)n;
+    return 0;
+}
+
+/* Convert wolfCrypt error codes to libgcrypt error codes */
+static gcry_err_code_t wolf_to_gcry_error(int ret)
+{
+    switch (ret) {
+        case 0: return GPG_ERR_NO_ERROR;
+        case BAD_FUNC_ARG: return GPG_ERR_INV_ARG;
+        case BAD_PADDING_E: return GPG_ERR_BAD_SIGNATURE;
+        default: return GPG_ERR_INTERNAL;
+    }
+}
 
 
 /* A sample 2048 bit RSA key used for the selftests.  */
@@ -1670,77 +1693,278 @@ rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 }
 
 
+/* Extract RSA key parameters from S-expression */
+static gcry_err_code_t
+extract_key_params(gcry_sexp_t keyparms, byte **n, word32 *nLen,
+                  byte **e, word32 *eLen)
+{
+    gcry_err_code_t rc;
+    gcry_mpi_t n_mpi = NULL, e_mpi = NULL;
+    byte tmp[1024]; /* Temporary buffer for MPI conversion */
+    word32 tmpLen = sizeof(tmp);
+
+    /* Extract the key parameters */
+    rc = sexp_extract_param(keyparms, NULL, "ne", &n_mpi, &e_mpi, NULL);
+    if (rc)
+        goto leave;
+
+    /* Convert n to byte array */
+    tmpLen = sizeof(tmp);
+    rc = mpi_to_byte_array(n_mpi, tmp, &tmpLen);
+    if (rc)
+        goto leave;
+    *n = _gcry_malloc(tmpLen);
+    if (!*n) {
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+    }
+    memcpy(*n, tmp, tmpLen);
+    *nLen = tmpLen;
+
+    /* Convert e to byte array */
+    tmpLen = sizeof(tmp);
+    rc = mpi_to_byte_array(e_mpi, tmp, &tmpLen);
+    if (rc)
+        goto leave;
+    *e = _gcry_malloc(tmpLen);
+    if (!*e) {
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+    }
+    memcpy(*e, tmp, tmpLen);
+    *eLen = tmpLen;
+
+leave:
+    _gcry_mpi_release(n_mpi);
+    _gcry_mpi_release(e_mpi);
+    if (rc) {
+        _gcry_free(*n);
+        _gcry_free(*e);
+        *n = *e = NULL;
+    }
+    return rc;
+}
+
+/* Extract signature and hash from S-expressions */
+static gcry_err_code_t
+extract_sig_and_hash(gcry_sexp_t sig, gcry_sexp_t data,
+                     byte **sigBuf, word32 *sigLen,
+                     byte **hash, word32 *hashLen)
+{
+    gcry_err_code_t rc;
+    gcry_sexp_t l1 = NULL;
+    gcry_mpi_t sig_mpi = NULL;
+    gcry_mpi_t hash_mpi = NULL;
+    byte tmp[1024];
+    word32 tmpLen;
+
+    /* Extract the signature value */
+    rc = _gcry_pk_util_preparse_sigval(sig, rsa_names, &l1, NULL);
+    if (rc)
+        goto leave;
+    rc = sexp_extract_param(l1, NULL, "s", &sig_mpi, NULL);
+    if (rc)
+        goto leave;
+
+    /* Convert signature to byte array */
+    tmpLen = sizeof(tmp);
+    rc = mpi_to_byte_array(sig_mpi, tmp, &tmpLen);
+    if (rc)
+        goto leave;
+    *sigBuf = _gcry_malloc(tmpLen);
+    if (!*sigBuf) {
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+    }
+    memcpy(*sigBuf, tmp, tmpLen);
+    *sigLen = tmpLen;
+
+    /* Extract the hash value */
+    rc = _gcry_pk_util_data_to_mpi(data, &hash_mpi, NULL);
+    if (rc)
+        goto leave;
+
+    /* Convert hash to byte array */
+    tmpLen = sizeof(tmp);
+    rc = mpi_to_byte_array(hash_mpi, tmp, &tmpLen);
+    if (rc)
+        goto leave;
+    *hash = _gcry_malloc(tmpLen);
+    if (!*hash) {
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+    }
+    memcpy(*hash, tmp, tmpLen);
+    *hashLen = tmpLen;
+
+leave:
+    _gcry_mpi_release(sig_mpi);
+    _gcry_mpi_release(hash_mpi);
+    sexp_release(l1);
+    if (rc) {
+        _gcry_free(*sigBuf);
+        _gcry_free(*hash);
+        *sigBuf = *hash = NULL;
+    }
+    return rc;
+}
+
+/* Verify RSA PSS signature */
+/* Extract signature from S-expression */
+static gcry_err_code_t
+extract_signature(gcry_sexp_t sig, byte **sigBuf, word32 *sigLen)
+{
+    gcry_err_code_t rc;
+    gcry_sexp_t l1 = NULL;
+    gcry_mpi_t sig_mpi = NULL;
+    byte tmp[1024];
+    word32 tmpLen;
+
+    /* Extract the signature value */
+    rc = _gcry_pk_util_preparse_sigval(sig, rsa_names, &l1, NULL);
+    if (rc)
+        goto leave;
+    rc = sexp_extract_param(l1, NULL, "s", &sig_mpi, NULL);
+    if (rc)
+        goto leave;
+
+    /* Convert signature to byte array */
+    tmpLen = sizeof(tmp);
+    rc = mpi_to_byte_array(sig_mpi, tmp, &tmpLen);
+    if (rc)
+        goto leave;
+    *sigBuf = _gcry_malloc(tmpLen);
+    if (!*sigBuf) {
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+    }
+    memcpy(*sigBuf, tmp, tmpLen);
+    *sigLen = tmpLen;
+
+leave:
+    _gcry_mpi_release(sig_mpi);
+    sexp_release(l1);
+    if (rc) {
+        _gcry_free(*sigBuf);
+        *sigBuf = NULL;
+    }
+    return rc;
+}
+
+/* Verify RSA PKCS#1 v1.5 signature */
+static gcry_err_code_t
+verify_pkcs1(struct pk_encoding_ctx *ctx, RsaKey *key,
+             gcry_sexp_t sig, gcry_sexp_t data)
+{
+    gcry_err_code_t rc;
+    byte *sigBuf = NULL;
+    byte *out = NULL;
+    word32 sigLen = 0;
+    word32 outLen;
+    int ret;
+
+    /* Extract signature */
+    rc = extract_signature(sig, &sigBuf, &sigLen);
+    if (rc)
+        goto leave;
+
+    /* Allocate output buffer */
+    outLen = sigLen;  /* Maximum possible size */
+    out = _gcry_malloc(outLen);
+    if (!out) {
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+    }
+
+    /* Verify using wolfCrypt */
+    ret = wc_RsaSSL_Verify(sigBuf, sigLen, out, outLen, key);
+    rc = wolf_to_gcry_error(ret);
+
+leave:
+    _gcry_free(sigBuf);
+    _gcry_free(out);
+    return rc;
+}
+
+static gcry_err_code_t
+verify_pss(struct pk_encoding_ctx *ctx, RsaKey *key,
+           gcry_sexp_t sig, gcry_sexp_t data)
+{
+    gcry_err_code_t rc;
+    byte *sigBuf = NULL, *hash = NULL;
+    word32 sigLen = 0, hashLen = 0;
+    int ret;
+
+    /* Extract signature and hash */
+    rc = extract_sig_and_hash(sig, data, &sigBuf, &sigLen, &hash, &hashLen);
+    if (rc)
+        goto leave;
+
+    /* Verify using wolfCrypt */
+    ret = wc_RsaPSS_Verify(sigBuf, sigLen, hash, hashLen,
+                          ctx->hash_algo, WC_MGF1SHA1, key);
+    rc = wolf_to_gcry_error(ret);
+
+leave:
+    _gcry_free(sigBuf);
+    _gcry_free(hash);
+    return rc;
+}
+
 static gcry_err_code_t
 rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 {
-  gcry_err_code_t rc;
-  struct pk_encoding_ctx ctx;
-  gcry_sexp_t l1 = NULL;
-  gcry_mpi_t sig = NULL;
-  gcry_mpi_t data = NULL;
-  RSA_public_key pk = { NULL, NULL };
-  gcry_mpi_t result = NULL;
-  unsigned int nbits = rsa_get_nbits (keyparms);
+    gcry_err_code_t rc;
+    struct pk_encoding_ctx ctx;
+    RsaKey wolf_key;
+    byte *n = NULL, *e = NULL;
+    word32 nLen = 0, eLen = 0;
+    int ret;
+    unsigned int nbits;
 
-  rc = rsa_check_verify_keysize (nbits);
-  if (rc)
+    /* Check key size */
+    nbits = rsa_get_nbits(keyparms);
+    rc = rsa_check_verify_keysize(nbits);
+    if (rc)
+        return rc;
+
+    /* Initialize context */
+    _gcry_pk_util_init_encoding_ctx(&ctx, PUBKEY_OP_VERIFY, nbits);
+
+    /* Initialize wolfCrypt key */
+    ret = wc_InitRsaKey(&wolf_key, NULL);
+    if (ret != 0) {
+        rc = GPG_ERR_INTERNAL;
+        goto done;
+    }
+
+    /* Extract and convert key parameters */
+    rc = extract_key_params(keyparms, &n, &nLen, &e, &eLen);
+    if (rc)
+        goto done;
+
+    /* Import public key */
+    ret = wc_RsaPublicKeyDecodeRaw(n, nLen, e, eLen, &wolf_key);
+    if (ret != 0) {
+        rc = GPG_ERR_BAD_KEY;
+        goto done;
+    }
+
+    /* Handle verification based on padding type */
+    if (ctx.encoding == PUBKEY_ENC_PSS) {
+        rc = verify_pss(&ctx, &wolf_key, s_sig, s_data);
+    } else {
+        rc = verify_pkcs1(&ctx, &wolf_key, s_sig, s_data);
+    }
+
+done:
+    wc_FreeRsaKey(&wolf_key);
+    _gcry_free(n);
+    _gcry_free(e);
+    _gcry_pk_util_free_encoding_ctx(&ctx);
+    if (DBG_CIPHER)
+        log_debug("rsa_verify    => %s\n", rc ? gpg_strerror(rc) : "Good");
     return rc;
-
-  _gcry_pk_util_init_encoding_ctx (&ctx, PUBKEY_OP_VERIFY, nbits);
-
-  /* Extract the data.  */
-  rc = _gcry_pk_util_data_to_mpi (s_data, &data, &ctx);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    log_printmpi ("rsa_verify data", data);
-  if (ctx.encoding != PUBKEY_ENC_PSS && mpi_is_opaque (data))
-    {
-      rc = GPG_ERR_INV_DATA;
-      goto leave;
-    }
-
-  /* Extract the signature value.  */
-  rc = _gcry_pk_util_preparse_sigval (s_sig, rsa_names, &l1, NULL);
-  if (rc)
-    goto leave;
-  rc = sexp_extract_param (l1, NULL, "s", &sig, NULL);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    log_printmpi ("rsa_verify  sig", sig);
-
-  /* Extract the key.  */
-  rc = sexp_extract_param (keyparms, NULL, "ne", &pk.n, &pk.e, NULL);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    {
-      log_printmpi ("rsa_verify    n", pk.n);
-      log_printmpi ("rsa_verify    e", pk.e);
-    }
-
-  /* Do RSA computation and compare.  */
-  result = mpi_new (0);
-  public (result, sig, &pk);
-  if (DBG_CIPHER)
-    log_printmpi ("rsa_verify  cmp", result);
-  if (ctx.verify_cmp)
-    rc = ctx.verify_cmp (&ctx, result);
-  else
-    rc = mpi_cmp (result, data) ? GPG_ERR_BAD_SIGNATURE : 0;
-
- leave:
-  _gcry_mpi_release (result);
-  _gcry_mpi_release (pk.n);
-  _gcry_mpi_release (pk.e);
-  _gcry_mpi_release (data);
-  _gcry_mpi_release (sig);
-  sexp_release (l1);
-  _gcry_pk_util_free_encoding_ctx (&ctx);
-  if (DBG_CIPHER)
-    log_debug ("rsa_verify    => %s\n", rc?gpg_strerror (rc):"Good");
-  return rc;
 }
 
 
