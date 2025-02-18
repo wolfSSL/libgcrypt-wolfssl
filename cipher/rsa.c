@@ -1673,74 +1673,57 @@ rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 static gcry_err_code_t
 rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 {
-  gcry_err_code_t rc;
-  struct pk_encoding_ctx ctx;
-  gcry_sexp_t l1 = NULL;
-  gcry_mpi_t sig = NULL;
-  gcry_mpi_t data = NULL;
-  RSA_public_key pk = { NULL, NULL };
-  gcry_mpi_t result = NULL;
-  unsigned int nbits = rsa_get_nbits (keyparms);
+    gcry_err_code_t rc;
+    struct pk_encoding_ctx ctx;
+    RsaKey wolf_key;
+    byte *n = NULL, *e = NULL;
+    word32 nLen = 0, eLen = 0;
+    int ret;
+    unsigned int nbits;
 
-  rc = rsa_check_verify_keysize (nbits);
-  if (rc)
+    /* Check key size */
+    nbits = rsa_get_nbits(keyparms);
+    rc = rsa_check_verify_keysize(nbits);
+    if (rc)
+        return rc;
+
+    /* Initialize context */
+    _gcry_pk_util_init_encoding_ctx(&ctx, PUBKEY_OP_VERIFY, nbits);
+
+    /* Initialize wolfCrypt key */
+    ret = wc_InitRsaKey(&wolf_key, NULL);
+    if (ret != 0) {
+        rc = GPG_ERR_INTERNAL;
+        goto done;
+    }
+
+    /* Extract and convert key parameters */
+    rc = extract_key_params(keyparms, &n, &nLen, &e, &eLen);
+    if (rc)
+        goto done;
+
+    /* Import public key */
+    ret = wc_RsaPublicKeyDecodeRaw(n, nLen, e, eLen, &wolf_key);
+    if (ret != 0) {
+        rc = GPG_ERR_BAD_KEY;
+        goto done;
+    }
+
+    /* Handle verification based on padding type */
+    if (ctx.encoding == PUBKEY_ENC_PSS) {
+        rc = verify_pss(&ctx, &wolf_key, s_sig, s_data);
+    } else {
+        rc = verify_pkcs1(&ctx, &wolf_key, s_sig, s_data);
+    }
+
+done:
+    wc_FreeRsaKey(&wolf_key);
+    _gcry_free(n);
+    _gcry_free(e);
+    _gcry_pk_util_free_encoding_ctx(&ctx);
+    if (DBG_CIPHER)
+        log_debug("rsa_verify    => %s\n", rc ? gpg_strerror(rc) : "Good");
     return rc;
-
-  _gcry_pk_util_init_encoding_ctx (&ctx, PUBKEY_OP_VERIFY, nbits);
-
-  /* Extract the data.  */
-  rc = _gcry_pk_util_data_to_mpi (s_data, &data, &ctx);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    log_printmpi ("rsa_verify data", data);
-  if (ctx.encoding != PUBKEY_ENC_PSS && mpi_is_opaque (data))
-    {
-      rc = GPG_ERR_INV_DATA;
-      goto leave;
-    }
-
-  /* Extract the signature value.  */
-  rc = _gcry_pk_util_preparse_sigval (s_sig, rsa_names, &l1, NULL);
-  if (rc)
-    goto leave;
-  rc = sexp_extract_param (l1, NULL, "s", &sig, NULL);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    log_printmpi ("rsa_verify  sig", sig);
-
-  /* Extract the key.  */
-  rc = sexp_extract_param (keyparms, NULL, "ne", &pk.n, &pk.e, NULL);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    {
-      log_printmpi ("rsa_verify    n", pk.n);
-      log_printmpi ("rsa_verify    e", pk.e);
-    }
-
-  /* Do RSA computation and compare.  */
-  result = mpi_new (0);
-  public (result, sig, &pk);
-  if (DBG_CIPHER)
-    log_printmpi ("rsa_verify  cmp", result);
-  if (ctx.verify_cmp)
-    rc = ctx.verify_cmp (&ctx, result);
-  else
-    rc = mpi_cmp (result, data) ? GPG_ERR_BAD_SIGNATURE : 0;
-
- leave:
-  _gcry_mpi_release (result);
-  _gcry_mpi_release (pk.n);
-  _gcry_mpi_release (pk.e);
-  _gcry_mpi_release (data);
-  _gcry_mpi_release (sig);
-  sexp_release (l1);
-  _gcry_pk_util_free_encoding_ctx (&ctx);
-  if (DBG_CIPHER)
-    log_debug ("rsa_verify    => %s\n", rc?gpg_strerror (rc):"Good");
-  return rc;
 }
 
 
