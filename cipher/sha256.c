@@ -47,6 +47,7 @@
 #include "hash-common.h"
 
 
+#if !defined(HAVE_WOLFSSL) || defined(NO_SHA256)
 /* USE_SSSE3 indicates whether to compile with Intel SSSE3 code. */
 #undef USE_SSSE3
 #if defined(__x86_64__) && defined(HAVE_GCC_INLINE_ASM_SSSE3) && \
@@ -666,6 +667,275 @@ _gcry_sha224_hash_buffers (void *outbuf, size_t nbytes,
 }
 
 
+#endif /* HAVE_WOLFSSL && !NO_SHA256 */
+
+/* wolfCrypt port - Start */
+#if defined(HAVE_WOLFSSL) && !defined(NO_SHA256)
+
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+
+typedef struct {
+  gcry_md_block_ctx_t bctx;
+  u32  h[8];
+  /* wc_Sha256 type is used for sha224 and sha256 for wolfCrypt */
+  wc_Sha256 wc_sha2[1];
+} SHA256_CONTEXT;
+
+/* Allocate a context for the wolfSSL digest context */
+/* to be used by libgcrypt */
+static unsigned int
+wolfssl_sha224_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
+{
+  int ret = 0;
+  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)ctx;
+
+  ret = wc_Sha224Update(&hd->wc_sha2, data, 64 * nblks);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha224_transform_generic): wc_Sha224Update failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  return 0;
+}
+
+static unsigned int
+wolfssl_sha256_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
+{
+  int ret = 0;
+  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)ctx;
+
+  ret = wc_Sha256Update(&hd->wc_sha2, data, 64 * nblks);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha256_transform_generic): wc_Sha256Update failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  return 0;
+}
+
+static void
+wolfssl_sha224_common_init (SHA256_CONTEXT *hd)
+{
+  hd->bctx.nblocks = 0;
+  hd->bctx.nblocks_high = 0;
+  hd->bctx.count = 0;
+  hd->bctx.blocksize_shift = _gcry_ctz(64);
+
+  /* Order of feature checks is important here; last match will be
+   * selected.  Keep slower implementations at the top and faster at
+   * the bottom.  */
+  hd->bctx.bwrite = wolfssl_sha224_transform_generic;
+
+  return;
+}
+
+static void
+wolfssl_sha256_common_init (SHA256_CONTEXT *hd)
+{
+  hd->bctx.nblocks = 0;
+  hd->bctx.nblocks_high = 0;
+  hd->bctx.count = 0;
+  hd->bctx.blocksize_shift = _gcry_ctz(64);
+
+  /* Order of feature checks is important here; last match will be
+   * selected.  Keep slower implementations at the top and faster at
+   * the bottom.  */
+  hd->bctx.bwrite = wolfssl_sha256_transform_generic;
+
+  return;
+}
+
+static void
+wolfssl_sha256_digest_alloc(void* context, int algorithm)
+{
+  SHA256_CONTEXT *hd = context;
+
+  hd = (SHA256_CONTEXT*)XMALLOC(sizeof(SHA256_CONTEXT), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (hd == NULL) {
+    printf("Error libgcrypt (wolfssl_sha256_init): malloc failed\n");
+    return;
+  }
+  return;
+}
+
+/* Deallocate a context for the wolfSSL digest context */
+/* to be used by libgcrypt */
+static void
+wolfssl_sha256_digest_free(void* context, int algorithm)
+{
+  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
+
+  if (hd != NULL) {
+    XFREE(hd, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    hd = NULL;
+  }
+  else {
+    printf("Error libgcrypt (wolfssl_sha256_deinit): wc_sha2 is already NULL\n");
+  }
+
+  return;
+}
+
+static void
+wolfssl_sha224_init(void* context, int flags)
+{
+  int ret = 0;
+  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
+  (void)flags;
+  ret = wc_InitSha224(&hd->wc_sha2);
+  if (ret != 0) {
+    printf("Error libgcrypt (sha224_init): wc_InitSha224 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  wolfssl_sha224_common_init(hd);
+}
+
+
+static void
+wolfssl_sha256_init(void* context, int flags)
+{
+  int ret = 0;
+  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha256(&hd->wc_sha2);
+  if (ret != 0) {
+    printf("Error libgcrypt (sha256_init): wc_InitSha256 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  wolfssl_sha256_common_init(hd);
+}
+
+
+static byte *
+wolfssl_sha256_read(void *context)
+{
+  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
+
+  return hd->bctx.buf;
+}
+
+static byte *
+wolfssl_sha224_read(void *context)
+{
+  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
+
+  return hd->bctx.buf;
+}
+
+
+static void
+wolfssl_sha224_final(void *context)
+{
+  int ret = 0;
+  SHA256_CONTEXT *hd = context;
+  byte temp_buffer[WC_SHA224_DIGEST_SIZE];
+
+  if (hd->bctx.count > 0) {
+    ret = wc_Sha224Update(&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
+    if (ret != 0) {
+      printf("Error libgcrypt (wolfssl_sha224_final): wc_Sha224Update failed\n");
+      printf("Return: %d\n", ret);
+    }
+  }
+
+  ret = wc_Sha224Final(&hd->wc_sha2, temp_buffer);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha224_final): wc_Sha224Final failed\n");
+    printf("Return: %d\n", ret);
+  }
+  memcpy(hd->bctx.buf, temp_buffer, WC_SHA224_DIGEST_SIZE);
+  hd->bctx.count = 0;
+
+  return;
+}
+
+
+
+static void
+wolfssl_sha256_final(void *context)
+{
+  int ret = 0;
+  SHA256_CONTEXT *hd = context;
+  byte temp_buffer[WC_SHA256_DIGEST_SIZE]; /* Temporary buffer for the hash result */
+
+  /* First update with any remaining bytes in the buffer */
+  if (hd->bctx.count > 0) {
+    ret = wc_Sha256Update(&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
+    if (ret != 0) {
+      printf("Error libgcrypt (sha256_final): wc_Sha256Update failed\n");
+      printf("Return: %d\n", ret);
+    }
+  }
+  /* Might need to use wc_Sha256GetHash instead of wc_Sha256Final */
+  /* This is due to sha256_final does not necassarly mean the hash is ready */
+  ret = wc_Sha256Final(&hd->wc_sha2, temp_buffer);
+  if (ret != 0) {
+    printf("Error libgcrypt (sha256_final): wc_Sha256Final failed\n");
+    printf("Return: %d\n", ret);
+  }
+  /* Copy the hash to hd->bctx.buf where libgcrypt expects it */
+  memcpy(hd->bctx.buf, temp_buffer, WC_SHA256_DIGEST_SIZE);
+
+  /* Reset the count to 0 */
+  hd->bctx.count = 0;
+
+  return;
+}
+
+
+
+
+
+/* Shortcut functions which puts the hash value of the supplied buffer iov
+ * into outbuf which must have a size of 32 bytes.  */
+static void
+_gcry_wolfssl_sha256_hash_buffers (void *outbuf, size_t nbytes,
+			   const gcry_buffer_t *iov, int iovcnt)
+{
+  SHA256_CONTEXT hd;
+  /* Since all the hashing happens on the stack we can just init the wolfSSL context here */
+  /* Then map the wolfSSL stack context to the libgcrypt context */
+
+  (void)nbytes;
+
+
+  wolfssl_sha256_init(&hd, 0);
+  for (;iovcnt > 0; iov++, iovcnt--)
+    _gcry_md_block_write (&hd,
+                          (const char*)iov[0].data + iov[0].off, iov[0].len);
+  wolfssl_sha256_final(&hd);
+  memcpy (outbuf, hd.bctx.buf, WC_SHA256_DIGEST_SIZE);
+}
+
+
+/* Shortcut functions which puts the hash value of the supplied buffer iov
+ * into outbuf which must have a size of 28 bytes.  */
+static void
+_gcry_wolfssl_sha224_hash_buffers (void *outbuf, size_t nbytes,
+			   const gcry_buffer_t *iov, int iovcnt)
+{
+  SHA256_CONTEXT hd;
+
+  /* Since all the hashing happens on the stack we can just init the wolfSSL context here */
+  /* Then map the wolfSSL stack context to the libgcrypt context */
+  (void)nbytes;
+
+  wolfssl_sha224_init(&hd, 0);
+  for (;iovcnt > 0; iov++, iovcnt--)
+    _gcry_md_block_write (&hd,
+                          (const char*)iov[0].data + iov[0].off, iov[0].len);
+  wolfssl_sha224_final(&hd);
+  memcpy (outbuf, hd.bctx.buf, WC_SHA224_DIGEST_SIZE);
+}
+
+
+#endif /* HAVE_WOLFSSL && !NO_SHA256 */
+
 
 /*
      Self-test section.
@@ -820,6 +1090,34 @@ static const gcry_md_oid_spec_t oid_spec_sha256[] =
     { NULL },
   };
 
+#if defined(HAVE_WOLFSSL)
+
+const gcry_md_spec_t _gcry_digest_spec_sha224 =
+  {
+    GCRY_MD_SHA224, {0, 1},
+    "SHA224", asn224, DIM (asn224),  oid_spec_sha224, 28,
+    wolfssl_sha224_init, _gcry_md_block_write, wolfssl_sha224_final, wolfssl_sha224_read, NULL,
+    _gcry_wolfssl_sha224_hash_buffers,
+    sizeof(SHA256_CONTEXT),
+    run_selftests
+    //wolfssl_sha224_digest_alloc,
+    //wolfssl_sha224_digest_free,
+  };
+
+const gcry_md_spec_t _gcry_digest_spec_sha256 =
+  {
+    GCRY_MD_SHA256, {0, 1},
+    "SHA256", asn256, DIM (asn256), oid_spec_sha256, 32,
+    wolfssl_sha256_init, _gcry_md_block_write, wolfssl_sha256_final, wolfssl_sha256_read, NULL,
+    _gcry_wolfssl_sha256_hash_buffers,
+    sizeof(SHA256_CONTEXT),
+    run_selftests
+    //wolfssl_sha256_digest_alloc,
+    //wolfssl_sha256_digest_free,
+  };
+#endif /* HAVE_WOLFSSL */
+
+#if !defined(HAVE_WOLFSSL)
 const gcry_md_spec_t _gcry_digest_spec_sha224 =
   {
     GCRY_MD_SHA224, {0, 1},
@@ -839,3 +1137,5 @@ const gcry_md_spec_t _gcry_digest_spec_sha256 =
     sizeof (SHA256_CONTEXT),
     run_selftests
   };
+
+#endif /* !HAVE_WOLFSSL */

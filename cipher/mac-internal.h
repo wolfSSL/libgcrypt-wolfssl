@@ -23,6 +23,9 @@
 #include "cipher-proto.h"
 #include "gost.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/wolfcrypt/hmac.h"
+#endif
 
 /* The data object used to hold a handle to an encryption object.  */
 struct gcry_mac_handle;
@@ -105,6 +108,10 @@ struct gcry_mac_handle
   int algo;
   const gcry_mac_spec_t *spec;
   gcry_ctx_t gcry_ctx;
+#if defined(HAVE_WOLFSSL)
+  Hmac wc_hmac;
+  byte* final_digest;
+#endif
   union {
     struct {
       gcry_md_hd_t md_ctx;

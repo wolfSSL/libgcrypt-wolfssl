@@ -28,6 +28,17 @@
 #include "g10lib.h"
 #include "cipher.h"
 
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/sha.h"
+#include "wolfssl/wolfcrypt/sha256.h"
+#include "wolfssl/wolfcrypt/sha512.h"
+#include "wolfssl/wolfcrypt/sha3.h"
+#include "wolfssl/wolfcrypt/md5.h"
+#include "wolfssl/wolfcrypt/hmac.h"
+#include "wolfssl/wolfcrypt/hash.h"
+#endif /* HAVE_WOLFSSL */
 
 /* This is the list of the digest implementations included in
    libgcrypt.  */
@@ -302,6 +313,402 @@ map_algo (int algo)
   return algo;
 }
 
+/* Some utility functions for wolfSSL */
+/* These functions are used to map libgcrypt hmac to wolfSSL hmac */
+#if defined(HAVE_WOLFSSL)
+static int
+map_algo_to_wc_algo (int algo)
+{
+  /* Map libgcrypt digest to wolfSSL digest for HMAC */
+  switch (algo) {
+    case GCRY_MD_SHA1:
+      return WC_HASH_TYPE_SHA;
+    case GCRY_MD_SHA224:
+      return WC_HASH_TYPE_SHA224;
+    case GCRY_MD_SHA256:
+      return WC_HASH_TYPE_SHA256;
+    case GCRY_MD_SHA384:
+      return WC_HASH_TYPE_SHA384;
+    case GCRY_MD_SHA512:
+      return WC_HASH_TYPE_SHA512;
+#ifdef WC_HASH_TYPE_SHA3_224
+    case GCRY_MD_SHA3_224:
+      return WC_HASH_TYPE_SHA3_224;
+#endif
+#ifdef WC_HASH_TYPE_SHA3_256
+    case GCRY_MD_SHA3_256:
+      return WC_HASH_TYPE_SHA3_256;
+#endif
+#ifdef WC_HASH_TYPE_SHA3_384
+    case GCRY_MD_SHA3_384:
+      return WC_HASH_TYPE_SHA3_384;
+#endif
+#ifdef WC_HASH_TYPE_SHA3_512
+    case GCRY_MD_SHA3_512:
+      return WC_HASH_TYPE_SHA3_512;
+#endif
+    default:
+      return WC_HASH_TYPE_NONE;
+  }
+}
+
+
+static int
+wc_get_digest_size(int wc_algo)
+{
+  switch (wc_algo) {
+    case WC_HASH_TYPE_SHA:
+      return WC_SHA_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA256:
+      return WC_SHA256_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA384:
+      return WC_SHA384_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA512:
+      return WC_SHA512_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA224:
+      return WC_SHA224_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA3_224:
+      return WC_SHA3_224_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA3_256:
+      return WC_SHA3_256_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA3_384:
+      return WC_SHA3_384_DIGEST_SIZE;
+    case WC_HASH_TYPE_SHA3_512:
+      return WC_SHA3_512_DIGEST_SIZE;
+    case WC_HASH_TYPE_MD5:
+      return WC_MD5_DIGEST_SIZE;
+    default:
+      /* Default to a safe size if unknown */
+      return 64;
+  }
+}
+
+/* Check if wolfSSL supports the digest */
+/* 0 for not supported, 1 for supported */
+static int
+wc_is_digest_supported(int* wc_algo)
+{
+  if (wc_algo == NULL) {
+    /* If the algo is not set, return 0 */
+    return 0;
+  }
+  switch (*wc_algo) {
+    case WC_HASH_TYPE_SHA:
+    case WC_HASH_TYPE_SHA256:
+    case WC_HASH_TYPE_SHA384:
+    case WC_HASH_TYPE_SHA512:
+    case WC_HASH_TYPE_SHA224:
+    case WC_HASH_TYPE_SHA3_224:
+    case WC_HASH_TYPE_SHA3_384:
+    case WC_HASH_TYPE_SHA3_512:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static int
+wc_Hmac_copy(Hmac *dst, Hmac *src, int wc_algo)
+{
+  switch (wc_algo) {
+    case WC_SHA:
+      return wc_ShaCopy((wc_Sha *)&(src->hash), (wc_Sha *)&(dst->hash));
+    case WC_SHA224:
+      return wc_Sha224Copy((wc_Sha224 *)&(src->hash), (wc_Sha224 *) &(dst->hash));
+    case WC_SHA256:
+      return wc_Sha256Copy((wc_Sha256 *)&(src->hash), (wc_Sha256 *) &(dst->hash));
+    case WC_SHA384:
+      return wc_Sha384Copy((wc_Sha384 *)&(src->hash), (wc_Sha384 *) &(dst->hash));
+    case WC_SHA512:
+      return wc_Sha512Copy((wc_Sha512 *)&(src->hash), (wc_Sha512 *) &(dst->hash));
+    case WC_SHA3_224:
+      return wc_Sha3_224_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    case WC_SHA3_256:
+      return wc_Sha3_256_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    case WC_SHA3_384:
+      return wc_Sha3_384_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    case WC_SHA3_512:
+      return wc_Sha3_512_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    default:
+      return -1;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+static int
+_gcry_wc_md_open (gcry_md_hd_t hd, int algo, unsigned int flags)
+{
+  int rc = 0;
+  int wc_algo;
+
+  /* Initialize wolfSSL fields to NULL */
+  hd->wc_Hmac_ptr = NULL;
+  hd->wc_algo_ptr = NULL;
+  hd->final_digest = NULL;
+
+  /* If HMAC flag is set and algorithm is supported by wolfSSL, set up HMAC */
+  if (flags & GCRY_MD_FLAG_HMAC) {
+    /* Map libgcrypt digest to wolfSSL digest for HMAC */
+    wc_algo = map_algo_to_wc_algo(algo);
+
+    if (wc_is_digest_supported(&wc_algo)) {
+      /* Initialize the HMAC structure */
+      rc = wc_HmacInit(&(hd->wc_Hmac), NULL, 0);
+      if (rc != 0) {
+        /* Failed to initialize HMAC */
+        printf("Error libgcrypt (md_open): wc_HmacInit failed\n");
+        printf("Return: %d\n", rc);
+        md_close(hd);
+        return GPG_ERR_INTERNAL;
+      }
+
+      /* Allocate memory for algorithm ID */
+      hd->wc_algo_ptr = (int*)XMALLOC(sizeof(int), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (hd->wc_algo_ptr == NULL) {
+        /* Memory allocation failed */
+        wc_HmacFree(&(hd->wc_Hmac));
+        md_close(hd);
+        return GPG_ERR_ENOMEM;
+      }
+
+      /* Store the algorithm ID */
+      *(hd->wc_algo_ptr) = wc_algo;
+
+      /* Allocate memory for the digest */
+      int digest_size = wc_get_digest_size(wc_algo);
+
+      /* Ensure we have a valid digest size */
+      if (digest_size <= 0) {
+        XFREE(hd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        wc_HmacFree(&(hd->wc_Hmac));
+        md_close(hd);
+        return GPG_ERR_INTERNAL;
+      }
+
+      hd->final_digest = (byte *)XMALLOC(digest_size, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (hd->final_digest == NULL) {
+        /* Memory allocation failed */
+        XFREE(hd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        wc_HmacFree(&(hd->wc_Hmac));
+        md_close(hd);
+        return GPG_ERR_ENOMEM;
+      }
+
+      /* Set up the HMAC pointer */
+      hd->wc_Hmac_ptr = &hd->wc_Hmac;
+    }
+  }
+
+  return 0;
+}
+
+
+
+
+
+static int
+_gcry_wc_md_copy (gcry_md_hd_t ahd, gcry_md_hd_t bhd)
+{
+  int err = 0;
+
+  /* Initialize wolfSSL fields to NULL first */
+  bhd->wc_Hmac_ptr = NULL;
+  bhd->wc_algo_ptr = NULL;
+  bhd->final_digest = NULL;
+
+  /* Deep copy wolfSSL fields if they exist in the source */
+  if (ahd->wc_algo_ptr != NULL) {
+    /* Copy algorithm information */
+    bhd->wc_algo_ptr = (int *)XMALLOC(sizeof(int), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (!bhd->wc_algo_ptr) {
+      err = gpg_err_code_from_syserror();
+      md_close(bhd);
+      return err;
+    }
+
+    /* Copy the algorithm value */
+    memcpy(bhd->wc_algo_ptr, ahd->wc_algo_ptr, sizeof(int));
+
+    /* Initialize the new HMAC structure */
+    int hmac_rc = wc_HmacInit(&(bhd->wc_Hmac), NULL, 0);
+    if (hmac_rc != 0) {
+      XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      bhd->wc_algo_ptr = NULL;
+      err = GPG_ERR_INTERNAL;
+      md_close(bhd);
+      return err;
+    }
+
+    /* Set the HMAC_ptr to point to the newly initialized HMAC structure */
+    bhd->wc_Hmac_ptr = &(bhd->wc_Hmac);
+
+    /* Copy the HMAC type */
+    memcpy(bhd->wc_Hmac_ptr->ipad, ahd->wc_Hmac_ptr->ipad, sizeof(bhd->wc_Hmac_ptr->ipad));
+    memcpy(bhd->wc_Hmac_ptr->opad, ahd->wc_Hmac_ptr->opad, sizeof(bhd->wc_Hmac_ptr->opad));
+    memcpy(bhd->wc_Hmac_ptr->innerHash, ahd->wc_Hmac_ptr->innerHash, sizeof(bhd->wc_Hmac_ptr->innerHash));
+    bhd->wc_Hmac_ptr->innerHashKeyed = ahd->wc_Hmac_ptr->innerHashKeyed;
+    bhd->wc_Hmac_ptr->macType = ahd->wc_Hmac_ptr->macType;
+
+    if (wc_Hmac_copy(&(bhd->wc_Hmac), &(ahd->wc_Hmac), *(ahd->wc_algo_ptr)) != 0) {
+      wc_HmacFree(bhd->wc_Hmac_ptr);
+      XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      bhd->wc_algo_ptr = NULL;
+      err = GPG_ERR_INTERNAL;
+      md_close(bhd);
+      return err;
+    }
+
+    /* Create a new buffer for the final digest */
+    if (ahd->final_digest != NULL) {
+      int digest_size = wc_get_digest_size(*(bhd->wc_algo_ptr));
+      /* Double-check that we have a valid size */
+      if (digest_size <= 0) {
+        wc_HmacFree(bhd->wc_Hmac_ptr);
+        XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        bhd->wc_algo_ptr = NULL;
+        err = GPG_ERR_INTERNAL;
+        md_close(bhd);
+        return err;
+      }
+
+      bhd->final_digest = (byte *)XMALLOC(digest_size, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (!bhd->final_digest) {
+        wc_HmacFree(bhd->wc_Hmac_ptr);
+        XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        bhd->wc_algo_ptr = NULL;
+        err = gpg_err_code_from_syserror();
+        md_close(bhd);
+        return err;
+      }
+
+      memcpy(bhd->final_digest, ahd->final_digest, digest_size);
+    }
+  }
+
+  return 0;
+}
+
+static void
+_gcry_wc_md_close (gcry_md_hd_t a)
+{
+  if (a == NULL)
+    return;
+
+  /* Properly cleanup wolfSSL HMAC resources */
+  if (a->wc_Hmac_ptr != NULL) {
+    /* Only free HMAC if it's been initialized */
+    wc_HmacFree(a->wc_Hmac_ptr);
+    a->wc_Hmac_ptr = NULL;
+  }
+
+  if (a->final_digest != NULL) {
+    XFREE(a->final_digest, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    a->final_digest = NULL;
+  }
+
+  if (a->wc_algo_ptr != NULL) {
+    XFREE(a->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    a->wc_algo_ptr = NULL;
+  }
+}
+
+static int
+_gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
+{
+  /* Check if this is a wolfSSL HMAC operation */
+  if (hd->wc_algo_ptr != NULL && hd->wc_Hmac_ptr != NULL) {
+    /* Use wc_is_digest_supported which safely checks for NULL and algorithm type */
+    if (wc_is_digest_supported(hd->wc_algo_ptr)) {
+      int rc = wc_HmacUpdate(hd->wc_Hmac_ptr, inbuf, inlen);
+      if (rc != 0) {
+        /* Log error but continue to fallback path */
+        printf("Error in _gcry_md_write: wc_HmacUpdate failed with %d\n", rc);
+        return rc;
+      }
+
+      /* Successfully processed data with wolfSSL */
+      return 0;
+    }
+  }
+
+  /* Return a code that indicates to use the fallback path */
+  return -1;
+}
+
+
+
+/* Set the key for a wolfSSL HMAC operation.
+   Returns 0 on success or a gcry_err_code_t on failure. */
+static gcry_err_code_t
+_gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
+{
+  int rc;
+
+  /* Check if this is a wolfSSL HMAC operation */
+  if (hd->wc_algo_ptr == NULL || hd->wc_Hmac_ptr == NULL)
+    return -1;  /* Not a wolfSSL handle */
+
+  /* Use wc_is_digest_supported which safely checks for algorithm type */
+  if (!wc_is_digest_supported(hd->wc_algo_ptr))
+    return -1;  /* Algorithm not supported by wolfSSL */
+
+  /* Set the key for the HMAC operation */
+  rc = wc_HmacSetKey(hd->wc_Hmac_ptr, *(hd->wc_algo_ptr), key, keylen);
+  if (rc != 0) {
+    printf("Error libgcrypt (_gcry_wc_md_setkey): wc_HmacSetKey failed with %d\n", rc);
+    return GPG_ERR_INTERNAL;
+  }
+
+  return 0; /* Success */
+}
+
+
+
+
+/* Read the final digest from a wolfSSL HMAC operation.
+   Returns pointer to the digest on success or NULL on failure. */
+static byte *
+_gcry_wc_md_read (gcry_md_hd_t hd, int algo)
+{
+  (void)algo; /* Not used - wolfSSL handles the algorithm internally */
+
+  /* Check if this is a wolfSSL HMAC operation */
+  if (hd->wc_algo_ptr == NULL || hd->wc_Hmac_ptr == NULL || hd->final_digest == NULL)
+    return NULL;  /* Not a wolfSSL handle */
+
+  /* Use wc_is_digest_supported which safely checks for algorithm type */
+  if (!wc_is_digest_supported(hd->wc_algo_ptr))
+    return NULL;  /* Algorithm not supported by wolfSSL */
+
+  /* Compute the HMAC final digest */
+  int rc = wc_HmacFinal(hd->wc_Hmac_ptr, hd->final_digest);
+  if (rc != 0) {
+    /* Log error but continue to fallback path */
+    printf("Error in _gcry_wc_md_read: wc_HmacFinal failed with %d\n", rc);
+    return NULL;
+  }
+
+  /* Return the computed digest */
+  return hd->final_digest;
+}
+
+
+#endif
 
 /* Return the spec structure for the hash algorithm ALGO.  For an
    unknown algorithm NULL is returned.  */
@@ -544,8 +951,18 @@ _gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
                  | GCRY_MD_FLAG_HMAC
                  | GCRY_MD_FLAG_BUGEMU1)))
     rc = GPG_ERR_INV_ARG;
-  else
+  else {
+    /* This allocates the memory for the handle and the context */
     rc = md_open (&hd, algo, flags);
+    if (rc == 0) {
+#if defined(HAVE_WOLFSSL)
+      int wc_rc = _gcry_wc_md_open(hd, algo, flags);
+      if (wc_rc != 0) {
+        rc = wc_rc;
+      }
+#endif
+    }
+  }
 
   *h = rc? NULL : hd;
   return rc;
@@ -658,6 +1075,15 @@ md_copy (gcry_md_hd_t ahd, gcry_md_hd_t *b_hd)
   b->list = NULL;
   b->debug = NULL;
 
+#if defined(HAVE_WOLFSSL)
+  /* Use the dedicated function for wolfSSL copy */
+  int wc_result = _gcry_wc_md_copy(ahd, bhd);
+  if (wc_result != 0) {
+    err = wc_result;
+    goto leave;
+  }
+#endif
+
   /* Copy the complete list of algorithms.  The copied list is
      reversed, but that doesn't matter. */
   for (ar = a->list; ar; ar = ar->next)
@@ -736,6 +1162,10 @@ md_close (gcry_md_hd_t a)
 
   if (! a)
     return;
+#if defined(HAVE_WOLFSSL)
+  /* Use dedicated function for wolfSSL cleanup */
+  _gcry_wc_md_close(a);
+#endif
   if (a->ctx->debug)
     md_stop_debug (a);
   for (r = a->ctx->list; r; r = r2)
@@ -787,9 +1217,17 @@ md_write (gcry_md_hd_t a, const void *inbuf, size_t inlen)
 void
 _gcry_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
 {
-  md_write (hd, inbuf, inlen);
+#if defined(HAVE_WOLFSSL)
+  /* Try wolfSSL implementation first */
+  int wc_result = _gcry_wc_md_write(hd, inbuf, inlen);
+  if (wc_result == 0) {
+    /* Successfully handled by wolfSSL */
+    return;
+  }
+#endif
+  /* Default path using libgcrypt's native implementation */
+    md_write (hd, inbuf, inlen);
 }
-
 
 static void
 md_final (gcry_md_hd_t a)
@@ -1087,9 +1525,24 @@ _gcry_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
 {
   gcry_err_code_t rc;
 
+#if defined(HAVE_WOLFSSL)
+  /* Try wolfSSL implementation first */
+  rc = _gcry_wc_md_setkey(hd, key, keylen);
+  if (rc == 0) {
+    /* Successfully handled by wolfSSL */
+    return 0;
+  }
+  else if (rc != -1) {
+    /* An actual error occurred in the wolfSSL function */
+    return rc;
+  }
+  /* Otherwise (-1) fall through to the default implementation */
+#endif
+
+  /* Default path using libgcrypt's native implementation */
   if (hd->ctx->flags.hmac)
     {
-      rc = prepare_macpads (hd, key, keylen);
+      rc = prepare_macpads(hd, key, keylen);
       if (!rc)
 	_gcry_md_reset (hd);
     }
@@ -1165,6 +1618,16 @@ _gcry_md_read (gcry_md_hd_t hd, int algo)
   /* This function is expected to always return a digest, thus we
      can't return an error which we actually should do in
      non-operational state.  */
+#if defined(HAVE_WOLFSSL)
+  /* Try wolfSSL implementation first */
+  byte *digest = _gcry_wc_md_read(hd, algo);
+  if (digest != NULL) {
+    /* Successfully handled by wolfSSL */
+    return digest;
+  }
+  /* Otherwise fall through to the default implementation */
+#endif
+  /* Default path using libgcrypt's native implementation */
   _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
   return md_read (hd, algo);
 }
@@ -1537,7 +2000,7 @@ _gcry_md_algo_info (int algo, int what, void *buffer, size_t *nbytes)
     default:
       rc = GPG_ERR_INV_OP;
       break;
-  }
+    }
 
   return rc;
 }

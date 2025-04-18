@@ -55,6 +55,8 @@
 #include "hash-common.h"
 
 
+
+#ifndef HAVE_WOLFSSL
 /* Helper macro to force alignment to 64 bytes.  */
 #ifdef HAVE_GCC_ATTRIBUTE_ALIGNED
 # define ATTR_ALIGNED_64  __attribute__ ((aligned (64)))
@@ -1015,7 +1017,397 @@ _gcry_sha512_224_hash_buffers (void *outbuf, size_t nbytes,
   sha512_final (&hd);
   memcpy (outbuf, hd.bctx.buf, 28);
 }
+#endif
 
+/* wolfCrypt port - Start */
+#if defined(HAVE_WOLFSSL)
+
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha512.h>
+
+typedef struct
+{
+  u64 h[8];
+} SHA512_STATE;
+
+typedef struct {
+  gcry_md_block_ctx_t bctx;
+  SHA512_STATE state;
+  /* wc_Sha512 type is used for sha384, sha512, sha512_224 and sha512_256 for wolfCrypt */
+  wc_Sha512 wc_sha512[1];
+} WOLF_SHA512_CONTEXT;
+
+/* Allocate a context for the wolfSSL digest context */
+/* to be used by libgcrypt */
+static unsigned int
+wolfssl_sha384_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
+
+  ret = wc_Sha384Update(&hd->wc_sha512, data, 128 * nblks);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha384_transform_generic): wc_Sha384Update failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  return 0;
+}
+
+static unsigned int
+wolfssl_sha512_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
+
+  ret = wc_Sha512Update(&hd->wc_sha512, data, 128 * nblks);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_transform_generic): wc_Sha512Update failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  return 0;
+}
+
+static unsigned int
+wolfssl_sha512_224_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
+
+  ret = wc_Sha512_224Update(&hd->wc_sha512, data, 128 * nblks);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_224_transform_generic): wc_Sha512_224Update failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  return 0;
+}
+
+static unsigned int
+wolfssl_sha512_256_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
+
+  ret = wc_Sha512_256Update(&hd->wc_sha512, data, 128 * nblks);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_256_transform_generic): wc_Sha512_256Update failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  return 0;
+}
+
+static void
+wolfssl_sha512_common_init (WOLF_SHA512_CONTEXT *hd)
+{
+  hd->bctx.nblocks = 0;
+  hd->bctx.nblocks_high = 0;
+  hd->bctx.count = 0;
+  hd->bctx.blocksize_shift = _gcry_ctz(128);
+
+  /* Default to the standard implementation */
+  hd->bctx.bwrite = wolfssl_sha512_transform_generic;
+
+  return;
+}
+
+static void
+wolfssl_sha384_common_init (WOLF_SHA512_CONTEXT *hd)
+{
+  hd->bctx.nblocks = 0;
+  hd->bctx.nblocks_high = 0;
+  hd->bctx.count = 0;
+  hd->bctx.blocksize_shift = _gcry_ctz(128);
+
+  /* Default to the standard implementation */
+  hd->bctx.bwrite = wolfssl_sha384_transform_generic;
+
+  return;
+}
+
+static void
+wolfssl_sha512_224_common_init (WOLF_SHA512_CONTEXT *hd)
+{
+  hd->bctx.nblocks = 0;
+  hd->bctx.nblocks_high = 0;
+  hd->bctx.count = 0;
+  hd->bctx.blocksize_shift = _gcry_ctz(128);
+
+  /* Default to the standard implementation */
+  hd->bctx.bwrite = wolfssl_sha512_224_transform_generic;
+
+  return;
+}
+
+static void
+wolfssl_sha512_256_common_init (WOLF_SHA512_CONTEXT *hd)
+{
+  hd->bctx.nblocks = 0;
+  hd->bctx.nblocks_high = 0;
+  hd->bctx.count = 0;
+  hd->bctx.blocksize_shift = _gcry_ctz(128);
+
+  /* Default to the standard implementation */
+  hd->bctx.bwrite = wolfssl_sha512_256_transform_generic;
+
+  return;
+}
+
+static void
+wolfssl_sha384_init(void* context, unsigned int flags)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha384(&hd->wc_sha512);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha384_init): wc_InitSha384 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  wolfssl_sha384_common_init(hd);
+}
+
+static void
+wolfssl_sha512_init(void* context, unsigned int flags)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha512(&hd->wc_sha512);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_init): wc_InitSha512 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  wolfssl_sha512_common_init(hd);
+}
+
+static void
+wolfssl_sha512_224_init(void* context, unsigned int flags)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha512_224(&hd->wc_sha512);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_224_init): wc_InitSha512_224 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  wolfssl_sha512_224_common_init(hd);
+}
+
+static void
+wolfssl_sha512_256_init(void* context, unsigned int flags)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha512_256(&hd->wc_sha512);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_256_init): wc_InitSha512_256 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  wolfssl_sha512_256_common_init(hd);
+}
+
+static byte *
+wolfssl_sha512_read(void *context)
+{
+  WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
+  return hd->bctx.buf;
+}
+
+static void
+wolfssl_sha384_final(void *context)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = context;
+  byte temp_buffer[WC_SHA384_DIGEST_SIZE];
+
+  if (hd->bctx.count > 0) {
+    ret = wc_Sha384Update(&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
+    if (ret != 0) {
+      printf("Error libgcrypt (wolfssl_sha384_final): wc_Sha384Update failed\n");
+      printf("Return: %d\n", ret);
+    }
+  }
+
+  ret = wc_Sha384Final(&hd->wc_sha512, temp_buffer);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha384_final): wc_Sha384Final failed\n");
+    printf("Return: %d\n", ret);
+  }
+  memcpy(hd->bctx.buf, temp_buffer, WC_SHA384_DIGEST_SIZE);
+  hd->bctx.count = 0;
+
+  return;
+}
+
+static void
+wolfssl_sha512_final(void *context)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = context;
+  byte temp_buffer[WC_SHA512_DIGEST_SIZE];
+
+  if (hd->bctx.count > 0) {
+    ret = wc_Sha512Update(&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
+    if (ret != 0) {
+      printf("Error libgcrypt (wolfssl_sha512_final): wc_Sha512Update failed\n");
+      printf("Return: %d\n", ret);
+    }
+  }
+
+  ret = wc_Sha512Final(&hd->wc_sha512, temp_buffer);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_final): wc_Sha512Final failed\n");
+    printf("Return: %d\n", ret);
+  }
+  memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_DIGEST_SIZE);
+  hd->bctx.count = 0;
+
+  return;
+}
+
+static void
+wolfssl_sha512_224_final(void *context)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = context;
+  byte temp_buffer[WC_SHA512_224_DIGEST_SIZE];
+
+  if (hd->bctx.count > 0) {
+    ret = wc_Sha512_224Update(&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
+    if (ret != 0) {
+      printf("Error libgcrypt (wolfssl_sha512_224_final): wc_Sha512_224Update failed\n");
+      printf("Return: %d\n", ret);
+    }
+  }
+
+  ret = wc_Sha512_224Final(&hd->wc_sha512, temp_buffer);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_224_final): wc_Sha512_224Final failed\n");
+    printf("Return: %d\n", ret);
+  }
+  memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_224_DIGEST_SIZE);
+  hd->bctx.count = 0;
+
+  return;
+}
+
+static void
+wolfssl_sha512_256_final(void *context)
+{
+  int ret = 0;
+  WOLF_SHA512_CONTEXT *hd = context;
+  byte temp_buffer[WC_SHA512_256_DIGEST_SIZE];
+
+  if (hd->bctx.count > 0) {
+    ret = wc_Sha512_256Update(&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
+    if (ret != 0) {
+      printf("Error libgcrypt (wolfssl_sha512_256_final): wc_Sha512_256Update failed\n");
+      printf("Return: %d\n", ret);
+    }
+  }
+
+  ret = wc_Sha512_256Final(&hd->wc_sha512, temp_buffer);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha512_256_final): wc_Sha512_256Final failed\n");
+    printf("Return: %d\n", ret);
+  }
+  memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_256_DIGEST_SIZE);
+  hd->bctx.count = 0;
+
+  return;
+}
+
+/* Shortcut functions which puts the hash value of the supplied buffer iov
+ * into outbuf which must have a size of 64 bytes.  */
+static void
+_gcry_wolfssl_sha512_hash_buffers (void *outbuf, size_t nbytes,
+                          const gcry_buffer_t *iov, int iovcnt)
+{
+  WOLF_SHA512_CONTEXT hd;
+  /* Since all the hashing happens on the stack we can just init the wolfSSL context here */
+  /* Then map the wolfSSL stack context to the libgcrypt context */
+
+  (void)nbytes;
+
+  wolfssl_sha512_init(&hd, 0);
+  for (;iovcnt > 0; iov++, iovcnt--)
+    _gcry_md_block_write (&hd,
+                          (const char*)iov[0].data + iov[0].off, iov[0].len);
+  wolfssl_sha512_final(&hd);
+  memcpy (outbuf, hd.bctx.buf, WC_SHA512_DIGEST_SIZE);
+}
+
+/* Shortcut functions which puts the hash value of the supplied buffer iov
+ * into outbuf which must have a size of 48 bytes.  */
+static void
+_gcry_wolfssl_sha384_hash_buffers (void *outbuf, size_t nbytes,
+                          const gcry_buffer_t *iov, int iovcnt)
+{
+  WOLF_SHA512_CONTEXT hd;
+  /* Since all the hashing happens on the stack we can just init the wolfSSL context here */
+  /* Then map the wolfSSL stack context to the libgcrypt context */
+
+  (void)nbytes;
+
+  wolfssl_sha384_init(&hd, 0);
+  for (;iovcnt > 0; iov++, iovcnt--)
+    _gcry_md_block_write (&hd,
+                          (const char*)iov[0].data + iov[0].off, iov[0].len);
+  wolfssl_sha384_final(&hd);
+  memcpy (outbuf, hd.bctx.buf, WC_SHA384_DIGEST_SIZE);
+}
+
+/* Shortcut functions which puts the hash value of the supplied buffer iov
+ * into outbuf which must have a size of 28 bytes.  */
+static void
+_gcry_wolfssl_sha512_224_hash_buffers (void *outbuf, size_t nbytes,
+                              const gcry_buffer_t *iov, int iovcnt)
+{
+  WOLF_SHA512_CONTEXT hd;
+
+  (void)nbytes;
+
+  wolfssl_sha512_224_init(&hd, 0);
+  for (;iovcnt > 0; iov++, iovcnt--)
+    _gcry_md_block_write (&hd,
+                          (const char*)iov[0].data + iov[0].off, iov[0].len);
+  wolfssl_sha512_224_final(&hd);
+  memcpy (outbuf, hd.bctx.buf, WC_SHA512_224_DIGEST_SIZE);
+}
+
+/* Shortcut functions which puts the hash value of the supplied buffer iov
+ * into outbuf which must have a size of 32 bytes.  */
+static void
+_gcry_wolfssl_sha512_256_hash_buffers (void *outbuf, size_t nbytes,
+                              const gcry_buffer_t *iov, int iovcnt)
+{
+  WOLF_SHA512_CONTEXT hd;
+
+  (void)nbytes;
+
+  wolfssl_sha512_256_init(&hd, 0);
+  for (;iovcnt > 0; iov++, iovcnt--)
+    _gcry_md_block_write (&hd,
+                          (const char*)iov[0].data + iov[0].off, iov[0].len);
+  wolfssl_sha512_256_final(&hd);
+  memcpy (outbuf, hd.bctx.buf, WC_SHA512_256_DIGEST_SIZE);
+}
+
+#endif /* HAVE_WOLFSSL */
 
 
 /*
@@ -1273,6 +1665,20 @@ static const gcry_md_oid_spec_t oid_spec_sha512[] =
     { NULL }
   };
 
+#if defined(HAVE_WOLFSSL)
+
+const gcry_md_spec_t _gcry_digest_spec_sha512 =
+  {
+    GCRY_MD_SHA512, {0, 1},
+    "SHA512", sha512_asn, DIM (sha512_asn), oid_spec_sha512, 64,
+    wolfssl_sha512_init, _gcry_md_block_write, wolfssl_sha512_final, wolfssl_sha512_read, NULL,
+    _gcry_wolfssl_sha512_hash_buffers,
+    sizeof (WOLF_SHA512_CONTEXT),
+    run_selftests
+  };
+
+#else
+
 const gcry_md_spec_t _gcry_digest_spec_sha512 =
   {
     GCRY_MD_SHA512, {0, 1},
@@ -1282,6 +1688,8 @@ const gcry_md_spec_t _gcry_digest_spec_sha512 =
     sizeof (SHA512_CONTEXT),
     run_selftests
   };
+
+#endif
 
 static const byte sha384_asn[] =	/* Object ID is 2.16.840.1.101.3.4.2.2 */
   {
@@ -1306,6 +1714,20 @@ static const gcry_md_oid_spec_t oid_spec_sha384[] =
     { NULL },
   };
 
+#if defined(HAVE_WOLFSSL)
+
+const gcry_md_spec_t _gcry_digest_spec_sha384 =
+  {
+    GCRY_MD_SHA384, {0, 1},
+    "SHA384", sha384_asn, DIM (sha384_asn), oid_spec_sha384, 48,
+    wolfssl_sha384_init, _gcry_md_block_write, wolfssl_sha384_final, wolfssl_sha512_read, NULL,
+    _gcry_wolfssl_sha384_hash_buffers,
+    sizeof (WOLF_SHA512_CONTEXT),
+    run_selftests
+  };
+
+#else
+
 const gcry_md_spec_t _gcry_digest_spec_sha384 =
   {
     GCRY_MD_SHA384, {0, 1},
@@ -1315,6 +1737,8 @@ const gcry_md_spec_t _gcry_digest_spec_sha384 =
     sizeof (SHA512_CONTEXT),
     run_selftests
   };
+
+#endif
 
 static const byte sha512_256_asn[] =
   {
@@ -1330,6 +1754,20 @@ static const gcry_md_oid_spec_t oid_spec_sha512_256[] =
     { NULL },
   };
 
+#if defined(HAVE_WOLFSSL)
+
+const gcry_md_spec_t _gcry_digest_spec_sha512_256 =
+  {
+    GCRY_MD_SHA512_256, {0, 1},
+    "SHA512_256", sha512_256_asn, DIM (sha512_256_asn), oid_spec_sha512_256, 32,
+    wolfssl_sha512_256_init, _gcry_md_block_write, wolfssl_sha512_256_final, wolfssl_sha512_read, NULL,
+    _gcry_wolfssl_sha512_256_hash_buffers,
+    sizeof (WOLF_SHA512_CONTEXT),
+    run_selftests
+  };
+
+#else
+
 const gcry_md_spec_t _gcry_digest_spec_sha512_256 =
   {
     GCRY_MD_SHA512_256, {0, 1},
@@ -1339,6 +1777,8 @@ const gcry_md_spec_t _gcry_digest_spec_sha512_256 =
     sizeof (SHA512_CONTEXT),
     run_selftests
   };
+
+#endif
 
 static const byte sha512_224_asn[] =
   {
@@ -1354,6 +1794,20 @@ static const gcry_md_oid_spec_t oid_spec_sha512_224[] =
     { NULL },
   };
 
+#if defined(HAVE_WOLFSSL)
+
+const gcry_md_spec_t _gcry_digest_spec_sha512_224 =
+  {
+    GCRY_MD_SHA512_224, {0, 1},
+    "SHA512_224", sha512_224_asn, DIM (sha512_224_asn), oid_spec_sha512_224, 28,
+    wolfssl_sha512_224_init, _gcry_md_block_write, wolfssl_sha512_224_final, wolfssl_sha512_read, NULL,
+    _gcry_wolfssl_sha512_224_hash_buffers,
+    sizeof (WOLF_SHA512_CONTEXT),
+    run_selftests
+  };
+
+#else
+
 const gcry_md_spec_t _gcry_digest_spec_sha512_224 =
   {
     GCRY_MD_SHA512_224, {0, 1},
@@ -1363,3 +1817,5 @@ const gcry_md_spec_t _gcry_digest_spec_sha512_224 =
     sizeof (SHA512_CONTEXT),
     run_selftests
   };
+
+#endif

@@ -43,6 +43,11 @@
 #include "sha1.h"
 
 
+#ifndef HAVE_WOLFSSL
+#define HAVE_WOLFSSL
+#warning "Not already defined for compile time. HAVE_WOLFSSL sha1.c"
+#endif
+
 /* USE_SSSE3 indicates whether to compile with Intel SSSE3 code. */
 #undef USE_SSSE3
 #if defined(__x86_64__) && defined(HAVE_GCC_INLINE_ASM_SSSE3) && \
@@ -631,7 +636,6 @@ sha1_read( void *context )
   return hd->bctx.buf;
 }
 
-
 /****************
  * Shortcut functions which puts the hash value of the supplied buffer iov
  * into outbuf which must have a size of 20 bytes.
@@ -663,6 +667,122 @@ _gcry_sha1_hash_buffer (void *outbuf, const void *buffer, size_t length)
 
   _gcry_sha1_hash_buffers (outbuf, 20, &iov, 1);
 }
+
+
+/* wolfCrypt port - Start */
+#if defined(HAVE_WOLFSSL)
+
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha.h>
+
+/* Allocate a context for the wolfSSL digest context */
+/* to be used by libgcrypt */
+static unsigned int
+wolfssl_sha1_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
+{
+  int ret = 0;
+  SHA1_CONTEXT *hd = (SHA1_CONTEXT*)ctx;
+
+  ret = wc_ShaUpdate(&hd->wc_sha1, data, 64 * nblks);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha1_transform_generic): wc_ShaUpdate failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  return 0;
+}
+
+static void
+wolfssl_sha1_common_init (SHA1_CONTEXT *hd)
+{
+  hd->bctx.nblocks = 0;
+  hd->bctx.nblocks_high = 0;
+  hd->bctx.count = 0;
+  hd->bctx.blocksize_shift = _gcry_ctz(64);
+
+  /* Order of feature checks is important here; last match will be
+   * selected.  Keep slower implementations at the top and faster at
+   * the bottom.  */
+  hd->bctx.bwrite = wolfssl_sha1_transform_generic;
+
+  return;
+}
+
+static void
+wolfssl_sha1_init(void* context, unsigned int flags)
+{
+  int ret = 0;
+  SHA1_CONTEXT *hd = (SHA1_CONTEXT*)context;
+  (void)flags;
+  ret = wc_InitSha(&hd->wc_sha1);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha1_init): wc_InitSha failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  wolfssl_sha1_common_init(hd);
+}
+
+static void
+wolfssl_sha1_final(void *context)
+{
+  int ret = 0;
+  SHA1_CONTEXT *hd = context;
+  byte temp_buffer[WC_SHA_DIGEST_SIZE]; /* Temporary buffer for the hash result */
+
+  /* First update with any remaining bytes in the buffer */
+  if (hd->bctx.count > 0) {
+    ret = wc_ShaUpdate(&hd->wc_sha1, hd->bctx.buf, hd->bctx.count);
+    if (ret != 0) {
+      printf("Error libgcrypt (wolfssl_sha1_final): wc_ShaUpdate failed\n");
+      printf("Return: %d\n", ret);
+    }
+  }
+
+  ret = wc_ShaFinal(&hd->wc_sha1, temp_buffer);
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_sha1_final): wc_ShaFinal failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  /* Copy the hash to hd->bctx.buf where libgcrypt expects it */
+  memcpy(hd->bctx.buf, temp_buffer, WC_SHA_DIGEST_SIZE);
+
+  /* Reset the count to 0 */
+  hd->bctx.count = 0;
+
+  return;
+}
+
+static byte *
+wolfssl_sha1_read(void *context)
+{
+  SHA1_CONTEXT *hd = (SHA1_CONTEXT*)context;
+
+  return hd->bctx.buf;
+}
+
+/* Shortcut functions which puts the hash value of the supplied buffer iov
+ * into outbuf which must have a size of 20 bytes.  */
+static void
+_gcry_wolfssl_sha1_hash_buffers (void *outbuf, size_t nbytes,
+                               const gcry_buffer_t *iov, int iovcnt)
+{
+  SHA1_CONTEXT hd;
+  /* Since all the hashing happens on the stack we can just init the wolfSSL context here */
+  /* Then map the wolfSSL stack context to the libgcrypt context */
+
+  (void)nbytes;
+
+  wolfssl_sha1_init(&hd, 0);
+  for (;iovcnt > 0; iov++, iovcnt--)
+    _gcry_md_block_write (&hd, (const char*)iov[0].data + iov[0].off, iov[0].len);
+  wolfssl_sha1_final(&hd);
+  memcpy (outbuf, hd.bctx.buf, WC_SHA_DIGEST_SIZE);
+}
+
+#endif /* HAVE_WOLFSSL */
 
 
 
@@ -757,6 +877,21 @@ static const gcry_md_oid_spec_t oid_spec_sha1[] =
     { NULL },
   };
 
+
+#ifdef HAVE_WOLFSSL
+
+const gcry_md_spec_t _gcry_digest_spec_sha1 =
+  {
+    GCRY_MD_SHA1, {0, 1},
+    "SHA1", asn, DIM (asn), oid_spec_sha1, 20,
+    wolfssl_sha1_init, _gcry_md_block_write, wolfssl_sha1_final, wolfssl_sha1_read, NULL,
+    _gcry_wolfssl_sha1_hash_buffers,
+    sizeof (SHA1_CONTEXT),
+    run_selftests
+  };
+
+#else /* !HAVE_WOLFSSL */
+
 const gcry_md_spec_t _gcry_digest_spec_sha1 =
   {
     GCRY_MD_SHA1, {0, 1},
@@ -766,3 +901,4 @@ const gcry_md_spec_t _gcry_digest_spec_sha1 =
     sizeof (SHA1_CONTEXT),
     run_selftests
   };
+#endif /* HAVE_WOLFSSL */

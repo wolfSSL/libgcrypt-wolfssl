@@ -21,6 +21,12 @@
 
 #include "hash-common.h"
 
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha.h>
+#endif
+
 
 /* SHA1_USE_S390X_CRYPTO indicates whether to enable zSeries code. */
 #undef SHA1_USE_S390X_CRYPTO
@@ -37,6 +43,9 @@ typedef struct
 #ifdef SHA1_USE_S390X_CRYPTO
   u32          final_len_msb, final_len_lsb; /* needs to be right after h4. */
   int          use_s390x_crypto;
+#endif
+#ifdef HAVE_WOLFSSL
+  wc_Sha wc_sha1;
 #endif
 } SHA1_CONTEXT;
 

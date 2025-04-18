@@ -838,6 +838,64 @@ AC_DEFINE(GPG_ERR_SOURCE_DEFAULT, GPG_ERR_SOURCE_GCRYPT,
 AM_CONDITIONAL(USE_GPGRT_CONFIG, [test -n "$GPGRT_CONFIG" \
                                   -a "$ac_cv_path_GPG_ERROR_CONFIG" = no])
 
+
+#
+# Check for wolfSSL
+#
+AC_ARG_WITH([wolfssl],
+  [AS_HELP_STRING([--with-wolfssl@<:@=DIR@:>@],
+    [use wolfSSL from given prefix (optional), or from system if not specified])],
+  [
+    if test "$withval" = "yes"; then
+      # Try pkg-config first
+      PKG_CHECK_MODULES([WOLFSSL], [wolfssl], [
+        have_wolfssl=yes
+        LIBS="$LIBS $WOLFSSL_LIBS"
+        CFLAGS="$CFLAGS $WOLFSSL_CFLAGS"
+      ], [
+        # Fallback to manual detection
+        AC_CHECK_LIB([wolfssl], [wolfCrypt_Init],
+          [have_wolfssl=yes
+           WOLFSSL_LIBS="-lwolfssl"
+           WOLFSSL_CFLAGS=""
+           LIBS="$LIBS $WOLFSSL_LIBS"
+           CFLAGS="$CFLAGS $WOLFSSL_CFLAGS"],
+          [have_wolfssl=no])
+      ])
+    elif test "$withval" = "no"; then
+      have_wolfssl=no
+    else
+      have_wolfssl=yes
+      WOLFSSL_CFLAGS="-I$withval/include"
+      WOLFSSL_LIBS="-L$withval/lib -lwolfssl"
+      # Save current flags
+      _cppflags=$CPPFLAGS
+      _ldflags=$LDFLAGS
+      # Set flags for detection
+      CPPFLAGS="$CPPFLAGS $WOLFSSL_CFLAGS"
+      LDFLAGS="$LDFLAGS $WOLFSSL_LIBS"
+      # Check if we can find the header and link the library
+      AC_CHECK_HEADER([wolfssl/wolfcrypt/settings.h], [],
+        [AC_MSG_ERROR([wolfSSL headers not found in $withval])])
+      AC_CHECK_LIB([wolfssl], [wolfCrypt_Init], [],
+        [AC_MSG_ERROR([wolfSSL library not found in $withval/lib])])
+      # Restore flags
+      CPPFLAGS=$_cppflags
+      LDFLAGS=$_ldflags
+      # Add to global flags
+      LIBS="$LIBS $WOLFSSL_LIBS"
+      CFLAGS="$CFLAGS $WOLFSSL_CFLAGS"
+    fi
+  ],
+  [have_wolfssl=no])
+
+if test "x$have_wolfssl" = "xyes"; then
+  AC_DEFINE([HAVE_WOLFSSL], [1], [Define if you have wolfSSL])
+fi
+AC_SUBST([WOLFSSL_CFLAGS])
+AC_SUBST([WOLFSSL_LIBS])
+
+
 #
 # Check whether pthreads is available
 #

@@ -122,6 +122,16 @@
 # endif
 #endif
 
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/types.h>
+#include <wolfssl/wolfcrypt/sha.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/sha512.h>
+#include <wolfssl/wolfcrypt/sha3.h>
+#include <wolfssl/wolfcrypt/hmac.h>
+#endif
+
 typedef union
 {
   int a;
@@ -131,6 +141,16 @@ typedef union
   u64 e;
   float f;
   double g;
+  #ifdef HAVE_WOLFSSL
+  wc_Sha256 h;
+  wc_Sha i;
+  wc_Sha512 j;
+  wc_Sha384 k;
+  wc_Sha512_224 l;
+  wc_Sha512_256 m;
+  wc_Sha3 n;
+  Hmac o;
+  #endif
 } PROPERLY_ALIGNED_TYPE;
 
 #endif /*GCRYPT_TYPES_H*/

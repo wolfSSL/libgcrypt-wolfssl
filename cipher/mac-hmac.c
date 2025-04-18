@@ -29,6 +29,25 @@
 #include "bufhelp.h"
 #include "cipher.h"
 
+#ifndef HAVE_WOLFSSL
+  #define HAVE_WOLFSSL
+#endif
+
+
+
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/sha.h"
+#include "wolfssl/wolfcrypt/sha256.h"
+#include "wolfssl/wolfcrypt/sha512.h"
+#include "wolfssl/wolfcrypt/sha3.h"
+#include "wolfssl/wolfcrypt/md5.h"
+#include "wolfssl/wolfcrypt/hmac.h"
+#include "wolfssl/wolfcrypt/hash.h"
+#endif
+
+
 
 static int
 map_mac_algo_to_md (int mac_algo)
@@ -223,6 +242,205 @@ hmac_get_keylen (int algo)
       return 64;
     }
 }
+
+
+#if defined(HAVE_WOLFSSL)
+static int map_algo_to_wc_algo (int algo)
+{
+  /* Map libgcrypt digest to wolfSSL digest for HMAC */
+  switch (algo) {
+    case GCRY_MD_SHA1:
+      return WC_HASH_TYPE_SHA;
+    case GCRY_MD_SHA224:
+      return WC_HASH_TYPE_SHA224;
+    case GCRY_MD_SHA256:
+      return WC_HASH_TYPE_SHA256;
+    case GCRY_MD_SHA384:
+      return WC_HASH_TYPE_SHA384;
+    case GCRY_MD_SHA512:
+      return WC_HASH_TYPE_SHA512;
+    case GCRY_MD_SHA3_224:
+      return WC_HASH_TYPE_SHA3_224;
+    case GCRY_MD_SHA3_256:
+      return WC_HASH_TYPE_SHA3_256;
+    case GCRY_MD_SHA3_384:
+      return WC_HASH_TYPE_SHA3_384;
+    case GCRY_MD_SHA3_512:
+      return WC_HASH_TYPE_SHA3_512;
+    default:
+      return WC_HASH_TYPE_NONE;
+  }
+}
+
+
+static int wc_hmac_size_by_type(unsigned int type)
+{
+
+  switch (type) {
+    case WC_SHA:
+      return WC_SHA_DIGEST_SIZE;
+    case WC_SHA224:
+      return WC_SHA224_DIGEST_SIZE;
+    case WC_SHA256:
+      return WC_SHA256_DIGEST_SIZE;
+    case WC_SHA384:
+      return WC_SHA384_DIGEST_SIZE;
+    case WC_SHA512:
+      return WC_SHA512_DIGEST_SIZE;
+    case WC_SHA3_224:
+      return WC_SHA3_224_DIGEST_SIZE;
+    case WC_SHA3_256:
+      return WC_SHA3_256_DIGEST_SIZE;
+    case WC_SHA3_384:
+      return WC_SHA3_384_DIGEST_SIZE;
+    case WC_SHA3_512:
+      return WC_SHA3_512_DIGEST_SIZE;
+    default:
+      return 0;
+  }
+
+}
+
+
+static gcry_err_code_t
+wc_hmac_open(gcry_mac_hd_t h)
+{
+  gcry_err_code_t err;
+  gcry_md_hd_t hd;
+  int secure = (h->magic == CTX_MAC_MAGIC_SECURE);
+  unsigned int flags;
+  int md_algo, ret;
+
+  md_algo = map_mac_algo_to_md(h->spec->algo);
+  h->u.hmac.md_algo = md_algo;
+  flags = GCRY_MD_FLAG_HMAC;
+  flags |= (secure ? GCRY_MD_FLAG_SECURE : 0);
+
+  ret = wc_HmacInit(&(h->wc_hmac), NULL, 0);
+  if (ret != 0) {
+    return GPG_ERR_INV_ARG;
+  }
+
+  h->final_digest = NULL;
+
+  return GPG_ERR_NO_ERROR;
+}
+
+static void
+wc_hmac_close(gcry_mac_hd_t h)
+{
+  wc_HmacFree(&h->wc_hmac);
+  if (h->final_digest != NULL) {
+    free(h->final_digest);
+    h->final_digest = NULL;
+  }
+  return;
+}
+
+static gcry_err_code_t
+wc_hmac_setkey(gcry_mac_hd_t h, const unsigned char *key, size_t keylen)
+{
+  int ret;
+
+  ret = wc_HmacSetKey(&h->wc_hmac, map_algo_to_wc_algo(h->u.hmac.md_algo), key, keylen);
+  if (ret != 0) {
+    printf("wc_hmac_setkey failed\n");
+    return GPG_ERR_INV_ARG;
+  }
+
+  return GPG_ERR_NO_ERROR;
+}
+
+
+static gcry_err_code_t
+wc_hmac_reset(gcry_mac_hd_t h)
+{
+  int ret;
+  wc_HmacFree(&h->wc_hmac);
+
+  if (h->final_digest != NULL) {
+    free(h->final_digest);
+    h->final_digest = NULL;
+  }
+
+  ret = wc_HmacInit(&h->wc_hmac, NULL, 0);
+  if (ret != 0) {
+    printf("wc_hmac_reset failed\n");
+    return GPG_ERR_INV_ARG;
+  }
+
+  return GPG_ERR_NO_ERROR;
+}
+
+static gcry_err_code_t
+wc_hmac_write(gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
+{
+  int ret;
+  ret = wc_HmacUpdate(&h->wc_hmac, buf, buflen);
+  if (ret != 0) {
+    printf("wc_hmac_write failed\n");
+    return GPG_ERR_INV_ARG;
+  }
+  return GPG_ERR_NO_ERROR;
+}
+
+static gcry_err_code_t
+wc_hmac_read(gcry_mac_hd_t h, unsigned char *outbuf, size_t *outlen)
+{
+  int ret;
+  unsigned int dlen = _gcry_md_get_algo_dlen (h->u.hmac.md_algo);
+
+  if (h->final_digest == NULL) {
+    h->final_digest = (byte*)malloc(WC_HMAC_BLOCK_SIZE  / sizeof(word32));
+    if (h->final_digest == NULL) {
+      printf("wc_hmac_read failed to allocate memory\n");
+      return GPG_ERR_INV_ARG;
+    }
+    ret = wc_HmacFinal(&h->wc_hmac, h->final_digest);
+    if (ret != 0) {
+      printf("wc_hmac_read failed: %d\n", ret);
+      return GPG_ERR_INV_ARG;
+    }
+  }
+
+  if (*outlen <= dlen) {
+    buf_cpy (outbuf, h->final_digest, *outlen);
+  }
+  else {
+    buf_cpy (outbuf, h->final_digest, dlen);
+    *outlen = dlen;
+  }
+
+  return GPG_ERR_NO_ERROR;
+}
+
+static gcry_err_code_t
+wc_hmac_verify(gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
+{
+  (void)buf;
+  (void)buflen;
+
+  int ret;
+  int dlen;
+  byte* digest;
+
+
+  dlen = _gcry_md_get_algo_dlen (h->u.hmac.md_algo);
+  digest = (byte*)malloc(dlen);
+
+  ret = wc_hmac_read(h, digest, &dlen);
+  if (ret != 0) {
+    printf("wc_hmac_verify failed\n");
+    return GPG_ERR_INV_ARG;
+  }
+
+  return buf_eq_const (buf, digest, buflen) ? 0 : GPG_ERR_CHECKSUM;
+}
+
+
+#endif
+
+
 
 
 /* Check one HMAC with digest ALGO using the regualr HAMC
@@ -1312,66 +1530,167 @@ static const gcry_mac_spec_ops_t hmac_ops = {
 };
 
 
+
+#if defined(HAVE_WOLFSSL)
+
+static const gcry_mac_spec_ops_t wc_hmac_ops = {
+  wc_hmac_open,
+  wc_hmac_close,
+  wc_hmac_setkey,
+  NULL,
+  wc_hmac_reset,
+  wc_hmac_write,
+  wc_hmac_read,
+  wc_hmac_verify,
+  hmac_get_maclen,
+  hmac_get_keylen,
+  NULL,
+  hmac_selftest
+};
+
+#endif
+
+
+
+
+
 #if USE_SHA1
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha1 = {
+  GCRY_MAC_HMAC_SHA1, {0, 1}, "HMAC_SHA1",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha1 = {
   GCRY_MAC_HMAC_SHA1, {0, 1}, "HMAC_SHA1",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 #endif
 #if USE_SHA256
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha256 = {
+  GCRY_MAC_HMAC_SHA256, {0, 1}, "HMAC_SHA256",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha256 = {
   GCRY_MAC_HMAC_SHA256, {0, 1}, "HMAC_SHA256",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha224 = {
+  GCRY_MAC_HMAC_SHA224, {0, 1}, "HMAC_SHA224",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha224 = {
   GCRY_MAC_HMAC_SHA224, {0, 1}, "HMAC_SHA224",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 #endif
 #if USE_SHA512
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512 = {
+  GCRY_MAC_HMAC_SHA512, {0, 1}, "HMAC_SHA512",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512 = {
   GCRY_MAC_HMAC_SHA512, {0, 1}, "HMAC_SHA512",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha384 = {
+  GCRY_MAC_HMAC_SHA384, {0, 1}, "HMAC_SHA384",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha384 = {
   GCRY_MAC_HMAC_SHA384, {0, 1}, "HMAC_SHA384",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_256 = {
+  GCRY_MAC_HMAC_SHA512_256, {0, 1}, "HMAC_SHA512_256",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_256 = {
   GCRY_MAC_HMAC_SHA512_256, {0, 1}, "HMAC_SHA512_256",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_224 = {
+  GCRY_MAC_HMAC_SHA512_224, {0, 1}, "HMAC_SHA512_224",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_224 = {
   GCRY_MAC_HMAC_SHA512_224, {0, 1}, "HMAC_SHA512_224",
   &hmac_ops
 };
-
+#endif /* HAVE_WOLFSSL */
 #endif
 #if USE_SHA3
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_224 = {
+  GCRY_MAC_HMAC_SHA3_224, {0, 1}, "HMAC_SHA3_224",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_224 = {
   GCRY_MAC_HMAC_SHA3_224, {0, 1}, "HMAC_SHA3_224",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_256 = {
+  GCRY_MAC_HMAC_SHA3_256, {0, 1}, "HMAC_SHA3_256",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_256 = {
   GCRY_MAC_HMAC_SHA3_256, {0, 1}, "HMAC_SHA3_256",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_384 = {
+  GCRY_MAC_HMAC_SHA3_384, {0, 1}, "HMAC_SHA3_384",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_384 = {
   GCRY_MAC_HMAC_SHA3_384, {0, 1}, "HMAC_SHA3_384",
   &hmac_ops
 };
+#endif /* HAVE_WOLFSSL */
 
+#if defined(HAVE_WOLFSSL)
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_512 = {
+  GCRY_MAC_HMAC_SHA3_512, {0, 1}, "HMAC_SHA3_512",
+  &wc_hmac_ops
+};
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha3_512 = {
   GCRY_MAC_HMAC_SHA3_512, {0, 1}, "HMAC_SHA3_512",
   &hmac_ops
 };
-#endif
+#endif /* HAVE_WOLFSSL */
+#endif /* USE_SHA3 */
+
 #if USE_GOST_R_3411_94
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_gost3411_94 = {
   GCRY_MAC_HMAC_GOSTR3411_94, {0, 0}, "HMAC_GOSTR3411_94",

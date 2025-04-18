@@ -32,6 +32,15 @@
 
 #include <sys/types.h>
 
+
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/sha.h"
+#include "wolfssl/wolfcrypt/hmac.h"
+#endif /* HAVE_WOLFSSL */
+
+
 #if defined _WIN32 || defined __WIN32__
 # ifndef __GNUC__
   typedef long ssize_t;
@@ -1335,6 +1344,15 @@ typedef struct gcry_md_handle
   int  bufpos;
   int  bufsize;
   unsigned char buf[1];
+
+#if defined(HAVE_WOLFSSL)
+  /* wolfSSL HMAC context top level structure... */
+  Hmac wc_Hmac;
+  Hmac *wc_Hmac_ptr;
+  int* wc_algo_ptr;
+  byte* final_digest;
+#endif /* HAVE_WOLFSSL */
+
 } *gcry_md_hd_t;
 
 /* Compatibility types, do not use them.  */

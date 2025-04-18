@@ -136,7 +136,26 @@ typedef struct
 			   unsigned int outlen);
 } keccak_ops_t;
 
+#if defined(HAVE_WOLFSSL)
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha3.h>
 
+typedef struct {
+  KECCAK_STATE state;
+  unsigned int outlen;
+  unsigned int blocksize;
+  unsigned int count;
+  unsigned int suffix:8;
+  unsigned int shake_in_extract_mode:1;
+  unsigned int shake_in_read_mode:1;
+  const keccak_ops_t *ops;
+  /* wolfSSL SHA3 context */
+  wc_Sha3 wc_sha3[1];
+} WOLFSSL_KECCAK_CONTEXT;
+typedef WOLFSSL_KECCAK_CONTEXT KECCAK_CONTEXT;
+
+#else
 typedef struct KECCAK_CONTEXT_S
 {
   KECCAK_STATE state;
@@ -153,7 +172,7 @@ typedef struct KECCAK_CONTEXT_S
   byte buf[1344 / 8]; /* SHAKE128 requires biggest buffer, 1344 bits. */
 #endif
 } KECCAK_CONTEXT;
-
+#endif /* HAVE_WOLFSSL */
 
 
 #ifdef NEED_COMMON64
@@ -1567,6 +1586,259 @@ _gcry_cshake256_hash_buffers (void *outbuf, size_t nbytes,
 
   cshake_hash_buffers (spec, outbuf, nbytes, iov, iovcnt);
 }
+
+
+/* Start wolfssl port */
+
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_SHA3)
+
+
+/* SHA3-224 functions */
+static void
+wolfssl_sha3_224_init(void *context, unsigned int flags)
+{
+  int ret = 0;
+  WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha3_224(hd->wc_sha3, NULL, INVALID_DEVID);
+  if (ret != 0) {
+    printf("Error libgcrypt (sha3_224_init): wc_InitSha3_224 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  hd->count = 0;
+  hd->shake_in_extract_mode = 0;
+  hd->shake_in_read_mode = 0;
+  hd->suffix = SHA3_DELIMITED_SUFFIX;
+  hd->blocksize = 1152 / 8;
+  hd->outlen = 224 / 8;
+}
+
+/* SHA3-256 functions */
+static void
+wolfssl_sha3_256_init(void *context, unsigned int flags)
+{
+  int ret = 0;
+  WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha3_256(hd->wc_sha3, NULL, INVALID_DEVID);
+  if (ret != 0) {
+    printf("Error libgcrypt (sha3_256_init): wc_InitSha3_256 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  hd->count = 0;
+  hd->shake_in_extract_mode = 0;
+  hd->shake_in_read_mode = 0;
+  hd->suffix = SHA3_DELIMITED_SUFFIX;
+  hd->blocksize = 1088 / 8;
+  hd->outlen = 256 / 8;
+}
+
+/* SHA3-384 functions */
+static void
+wolfssl_sha3_384_init(void *context, unsigned int flags)
+{
+  int ret = 0;
+  WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha3_384(hd->wc_sha3, NULL, INVALID_DEVID);
+  if (ret != 0) {
+    printf("Error libgcrypt (sha3_384_init): wc_InitSha3_384 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  hd->count = 0;
+  hd->shake_in_extract_mode = 0;
+  hd->shake_in_read_mode = 0;
+  hd->suffix = SHA3_DELIMITED_SUFFIX;
+  hd->blocksize = 832 / 8;
+  hd->outlen = 384 / 8;
+}
+
+/* SHA3-512 functions */
+static void
+wolfssl_sha3_512_init(void *context, unsigned int flags)
+{
+  int ret = 0;
+  WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
+  (void)flags;
+
+  ret = wc_InitSha3_512(hd->wc_sha3, NULL, INVALID_DEVID);
+  if (ret != 0) {
+    printf("Error libgcrypt (sha3_512_init): wc_InitSha3_512 failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  hd->count = 0;
+  hd->shake_in_extract_mode = 0;
+  hd->shake_in_read_mode = 0;
+  hd->suffix = SHA3_DELIMITED_SUFFIX;
+  hd->blocksize = 576 / 8;
+  hd->outlen = 512 / 8;
+}
+
+/* Common write function for all SHA3 variants */
+static void
+wolfssl_keccak_write(void *context, const void *inbuf_arg, size_t inlen)
+{
+  int ret = 0;
+  WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
+  const byte *inbuf = inbuf_arg;
+
+  /* SHA3-224, SHA3-256, SHA3-384, SHA3-512 */
+  switch (hd->outlen) {
+    case 28: /* SHA3-224 */
+      ret = wc_Sha3_224_Update(hd->wc_sha3, inbuf, inlen);
+      break;
+    case 32: /* SHA3-256 */
+      ret = wc_Sha3_256_Update(hd->wc_sha3, inbuf, inlen);
+      break;
+    case 48: /* SHA3-384 */
+      ret = wc_Sha3_384_Update(hd->wc_sha3, inbuf, inlen);
+      break;
+    case 64: /* SHA3-512 */
+      ret = wc_Sha3_512_Update(hd->wc_sha3, inbuf, inlen);
+      break;
+    default:
+      printf("Error libgcrypt (wolfssl_keccak_write): Unknown SHA3 variant\n");
+      return;
+  }
+
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_keccak_write): Update failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  hd->count += inlen;
+}
+
+/* Common final function for all SHA3 variants */
+static void
+wolfssl_keccak_final(void *context)
+{
+  int ret = 0;
+  WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
+  byte digest[64]; /* Maximum possible size (SHA3-512) */
+
+  /* SHA3-224, SHA3-256, SHA3-384, SHA3-512 */
+  switch (hd->outlen) {
+    case 28: /* SHA3-224 */
+      ret = wc_Sha3_224_Final(hd->wc_sha3, digest);
+      break;
+    case 32: /* SHA3-256 */
+      ret = wc_Sha3_256_Final(hd->wc_sha3, digest);
+      break;
+    case 48: /* SHA3-384 */
+      ret = wc_Sha3_384_Final(hd->wc_sha3, digest);
+      break;
+    case 64: /* SHA3-512 */
+      ret = wc_Sha3_512_Final(hd->wc_sha3, digest);
+      break;
+    default:
+      printf("Error libgcrypt (wolfssl_keccak_final): Unknown SHA3 variant\n");
+      return;
+  }
+
+  if (ret != 0) {
+    printf("Error libgcrypt (wolfssl_keccak_final): Final failed\n");
+    printf("Return: %d\n", ret);
+  }
+
+  /* Copy digest to the state for keccak_read to access */
+  memcpy(&hd->state.u, digest, hd->outlen);
+  hd->count = 0;
+}
+
+/* Common read function for SHA3 variants */
+static byte *
+wolfssl_keccak_read(void *context)
+{
+  WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
+  return (byte *)&hd->state.u;
+}
+
+/* Hash buffer functions */
+static void
+_gcry_wolfssl_sha3_hash_buffer(int algo, void *outbuf, size_t nbytes,
+                            const gcry_buffer_t *iov, int iovcnt)
+{
+  int ret = 0;
+  wc_Sha3 sha3;
+
+  /* Initialize based on algorithm */
+  switch (algo) {
+    case GCRY_MD_SHA3_224:
+      ret = wc_InitSha3_224(&sha3, NULL, INVALID_DEVID);
+      for (;iovcnt > 0; iov++, iovcnt--)
+        wc_Sha3_224_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
+      wc_Sha3_224_Final(&sha3, outbuf);
+      break;
+    case GCRY_MD_SHA3_256:
+      ret = wc_InitSha3_256(&sha3, NULL, INVALID_DEVID);
+      for (;iovcnt > 0; iov++, iovcnt--)
+        wc_Sha3_256_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
+      wc_Sha3_256_Final(&sha3, outbuf);
+      break;
+    case GCRY_MD_SHA3_384:
+      ret = wc_InitSha3_384(&sha3, NULL, INVALID_DEVID);
+      for (;iovcnt > 0; iov++, iovcnt--)
+        wc_Sha3_384_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
+      wc_Sha3_384_Final(&sha3, outbuf);
+      break;
+    case GCRY_MD_SHA3_512:
+      ret = wc_InitSha3_512(&sha3, NULL, INVALID_DEVID);
+      for (;iovcnt > 0; iov++, iovcnt--)
+        wc_Sha3_512_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
+      wc_Sha3_512_Final(&sha3, outbuf);
+      break;
+    default:
+      printf("Error libgcrypt (_gcry_wolfssl_sha3_hash_buffer): Unknown algorithm\n");
+  }
+
+  if (ret != 0) {
+    printf("Error libgcrypt (_gcry_wolfssl_sha3_hash_buffer): Init failed\n");
+    printf("Return: %d\n", ret);
+  }
+}
+
+/* Helper functions that call the general hash buffer function */
+static void
+_gcry_wolfssl_sha3_224_hash_buffers(void *outbuf, size_t nbytes,
+                                 const gcry_buffer_t *iov, int iovcnt)
+{
+  _gcry_wolfssl_sha3_hash_buffer(GCRY_MD_SHA3_224, outbuf, nbytes, iov, iovcnt);
+}
+
+static void
+_gcry_wolfssl_sha3_256_hash_buffers(void *outbuf, size_t nbytes,
+                                 const gcry_buffer_t *iov, int iovcnt)
+{
+  _gcry_wolfssl_sha3_hash_buffer(GCRY_MD_SHA3_256, outbuf, nbytes, iov, iovcnt);
+}
+
+static void
+_gcry_wolfssl_sha3_384_hash_buffers(void *outbuf, size_t nbytes,
+                                 const gcry_buffer_t *iov, int iovcnt)
+{
+  _gcry_wolfssl_sha3_hash_buffer(GCRY_MD_SHA3_384, outbuf, nbytes, iov, iovcnt);
+}
+
+static void
+_gcry_wolfssl_sha3_512_hash_buffers(void *outbuf, size_t nbytes,
+                                 const gcry_buffer_t *iov, int iovcnt)
+{
+  _gcry_wolfssl_sha3_hash_buffer(GCRY_MD_SHA3_512, outbuf, nbytes, iov, iovcnt);
+}
+
+#endif /* HAVE_WOLFSSL && WOLFSSL_SHA3 */
+
+/* End wolfssl port */
+
+
 
 /*
      Self-test section.
@@ -1828,6 +2100,17 @@ static const gcry_md_oid_spec_t oid_spec_shake256[] =
     { NULL }
   };
 
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_SHA3)
+const gcry_md_spec_t _gcry_digest_spec_sha3_224 =
+  {
+    GCRY_MD_SHA3_224, {0, 1},
+    "SHA3-224", sha3_224_asn, DIM (sha3_224_asn), oid_spec_sha3_224, 28,
+    wolfssl_sha3_224_init, wolfssl_keccak_write, wolfssl_keccak_final, wolfssl_keccak_read, NULL,
+    _gcry_wolfssl_sha3_224_hash_buffers,
+    sizeof (WOLFSSL_KECCAK_CONTEXT),
+    run_selftests
+  };
+#else
 const gcry_md_spec_t _gcry_digest_spec_sha3_224 =
   {
     GCRY_MD_SHA3_224, {0, 1},
@@ -1837,6 +2120,19 @@ const gcry_md_spec_t _gcry_digest_spec_sha3_224 =
     sizeof (KECCAK_CONTEXT),
     run_selftests
   };
+#endif
+
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_SHA3)
+const gcry_md_spec_t _gcry_digest_spec_sha3_256 =
+  {
+    GCRY_MD_SHA3_256, {0, 1},
+    "SHA3-256", sha3_256_asn, DIM (sha3_256_asn), oid_spec_sha3_256, 32,
+    wolfssl_sha3_256_init, wolfssl_keccak_write, wolfssl_keccak_final, wolfssl_keccak_read, NULL,
+    _gcry_wolfssl_sha3_256_hash_buffers,
+    sizeof (WOLFSSL_KECCAK_CONTEXT),
+    run_selftests
+  };
+#else
 const gcry_md_spec_t _gcry_digest_spec_sha3_256 =
   {
     GCRY_MD_SHA3_256, {0, 1},
@@ -1846,6 +2142,19 @@ const gcry_md_spec_t _gcry_digest_spec_sha3_256 =
     sizeof (KECCAK_CONTEXT),
     run_selftests
   };
+#endif
+
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_SHA3)
+const gcry_md_spec_t _gcry_digest_spec_sha3_384 =
+  {
+    GCRY_MD_SHA3_384, {0, 1},
+    "SHA3-384", sha3_384_asn, DIM (sha3_384_asn), oid_spec_sha3_384, 48,
+    wolfssl_sha3_384_init, wolfssl_keccak_write, wolfssl_keccak_final, wolfssl_keccak_read, NULL,
+    _gcry_wolfssl_sha3_384_hash_buffers,
+    sizeof (WOLFSSL_KECCAK_CONTEXT),
+    run_selftests
+  };
+#else
 const gcry_md_spec_t _gcry_digest_spec_sha3_384 =
   {
     GCRY_MD_SHA3_384, {0, 1},
@@ -1855,6 +2164,19 @@ const gcry_md_spec_t _gcry_digest_spec_sha3_384 =
     sizeof (KECCAK_CONTEXT),
     run_selftests
   };
+#endif
+
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_SHA3)
+const gcry_md_spec_t _gcry_digest_spec_sha3_512 =
+  {
+    GCRY_MD_SHA3_512, {0, 1},
+    "SHA3-512", sha3_512_asn, DIM (sha3_512_asn), oid_spec_sha3_512, 64,
+    wolfssl_sha3_512_init, wolfssl_keccak_write, wolfssl_keccak_final, wolfssl_keccak_read, NULL,
+    _gcry_wolfssl_sha3_512_hash_buffers,
+    sizeof (WOLFSSL_KECCAK_CONTEXT),
+    run_selftests
+  };
+#else
 const gcry_md_spec_t _gcry_digest_spec_sha3_512 =
   {
     GCRY_MD_SHA3_512, {0, 1},
@@ -1864,6 +2186,8 @@ const gcry_md_spec_t _gcry_digest_spec_sha3_512 =
     sizeof (KECCAK_CONTEXT),
     run_selftests
   };
+#endif
+
 const gcry_md_spec_t _gcry_digest_spec_shake128 =
   {
     GCRY_MD_SHAKE128, {0, 1},
@@ -1874,6 +2198,7 @@ const gcry_md_spec_t _gcry_digest_spec_shake128 =
     sizeof (KECCAK_CONTEXT),
     run_selftests
   };
+
 const gcry_md_spec_t _gcry_digest_spec_shake256 =
   {
     GCRY_MD_SHAKE256, {0, 1},
@@ -1884,6 +2209,7 @@ const gcry_md_spec_t _gcry_digest_spec_shake256 =
     sizeof (KECCAK_CONTEXT),
     run_selftests
   };
+
 const gcry_md_spec_t _gcry_digest_spec_cshake128 =
   {
     GCRY_MD_CSHAKE128, {0, 1},
@@ -1893,6 +2219,7 @@ const gcry_md_spec_t _gcry_digest_spec_cshake128 =
     sizeof (KECCAK_CONTEXT),
     run_selftests
   };
+
 const gcry_md_spec_t _gcry_digest_spec_cshake256 =
   {
     GCRY_MD_CSHAKE256, {0, 1},
