@@ -22,6 +22,10 @@
 
 #include "./poly1305-internal.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/aes.h"
+#endif
 
 /* The maximum supported size of a block in bytes.  */
 #define MAX_BLOCKSIZE 16
@@ -356,6 +360,27 @@ struct gcry_cipher_handle
 
       /* --- Following members are not cleared in gcry_cipher_reset --- */
 
+      /* wolfSSL AES GCM context */
+      #ifdef HAVE_WOLFSSL
+      Aes wc_aes_gcm_enc;
+      Aes wc_aes_gcm_dec;
+
+      byte* key;
+      unsigned int keySz;
+
+      byte* iv;
+      unsigned int ivSz;
+
+      byte* authIn;
+      unsigned int authInSz;
+
+      byte authTag[16];
+      unsigned int authTagSz;
+      unsigned int wcAesGcmInit:1;
+      unsigned int wcAesEncrypt:1;
+      unsigned int wcAesDecrypt:1;
+      #endif
+
       /* GHASH multiplier from key.  */
       union {
         cipher_context_alignment_t iv_align;
@@ -607,6 +632,34 @@ gcry_err_code_t _gcry_cipher_eax_setkey
 
 
 /*-- cipher-gcm.c --*/
+#ifdef HAVE_WOLFSSL
+gcry_err_code_t _wc_cipher_aes_gcm_encrypt
+/*           */   (gcry_cipher_hd_t c,
+                   unsigned char *outbuf, size_t outbuflen,
+                   const unsigned char *inbuf, size_t inbuflen);
+gcry_err_code_t _wc_cipher_aes_gcm_decrypt
+/*           */   (gcry_cipher_hd_t c,
+                   unsigned char *outbuf, size_t outbuflen,
+                   const unsigned char *inbuf, size_t inbuflen);
+gcry_err_code_t _wc_cipher_aes_gcm_setiv
+/*           */   (gcry_cipher_hd_t c,
+                   const unsigned char *iv, size_t ivlen);
+gcry_err_code_t _wc_cipher_aes_gcm_authenticate
+/*           */   (gcry_cipher_hd_t c,
+                   const unsigned char *aadbuf, size_t aadbuflen);
+gcry_err_code_t _wc_cipher_aes_gcm_get_tag
+/*           */   (gcry_cipher_hd_t c,
+                   unsigned char *outtag, size_t taglen);
+gcry_err_code_t _wc_cipher_aes_gcm_check_tag
+/*           */   (gcry_cipher_hd_t c,
+                   const unsigned char *intag, size_t taglen);
+void _wc_cipher_aes_gcm_setkey
+/*           */   (gcry_cipher_hd_t c, const byte *key, size_t keylen);
+void _wc_cipher_aes_gcm_setupM
+/*           */   (gcry_cipher_hd_t c);
+void _wc_cipher_aes_gcm_reset(gcry_cipher_hd_t c);
+#endif
+
 gcry_err_code_t _gcry_cipher_gcm_encrypt
 /*           */   (gcry_cipher_hd_t c,
                    unsigned char *outbuf, size_t outbuflen,

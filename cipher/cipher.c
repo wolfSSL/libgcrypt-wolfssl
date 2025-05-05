@@ -30,6 +30,13 @@
 #include "cipher.h"
 #include "./cipher-internal.h"
 
+#undef HAVE_WOLFSSL
+
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/aes.h"
+#endif
 
 /* This is the list of the default ciphers, which are included in
    libgcrypt.  */
@@ -732,6 +739,33 @@ _gcry_cipher_close (gcry_cipher_hd_t h)
   else
     h->magic = 0;
 
+  /* do this only for AESGCM mode */
+  if (h->mode == GCRY_CIPHER_MODE_GCM) {
+    switch (h->spec->algo) {
+      case GCRY_CIPHER_AES:
+      case GCRY_CIPHER_AES192:
+      case GCRY_CIPHER_AES256:
+        /* explicitly free the authIn buffer */
+        if (h->u_mode.gcm.authIn != NULL) {
+          free(h->u_mode.gcm.authIn);
+          h->u_mode.gcm.authIn = NULL;
+        }
+
+        /* explicitly free the iv buffer */
+        if (h->u_mode.gcm.iv != NULL) {
+          free(h->u_mode.gcm.iv);
+          h->u_mode.gcm.iv = NULL;
+        }
+
+        if (h->u_mode.gcm.key != NULL) {
+          free(h->u_mode.gcm.key);
+          h->u_mode.gcm.key = NULL;
+        }
+        break;
+      default:
+        break;
+    }
+  }
   /* We always want to wipe out the memory even when the context has
      been allocated in secure memory.  The user might have disabled
      secure memory or is using his own implementation which does not
@@ -798,7 +832,18 @@ cipher_setkey (gcry_cipher_hd_t c, byte *key, size_t keylen)
           break;
 
         case GCRY_CIPHER_MODE_GCM:
-          _gcry_cipher_gcm_setkey (c);
+            switch (c->spec->algo) {
+          #ifdef HAVE_WOLFSSL
+              case GCRY_CIPHER_AES:     /* AES-128, AES-192, AES-256 */
+              case GCRY_CIPHER_AES192:  /* These are all supported by wolfSSL */
+              case GCRY_CIPHER_AES256:  /* These are all supported by wolfSSL */
+                _wc_cipher_aes_gcm_setkey (c, key, keylen);
+                break;
+          #endif
+              default:
+                _gcry_cipher_gcm_setkey (c);
+                break;
+            }
           break;
 
         case GCRY_CIPHER_MODE_GCM_SIV:
@@ -1470,8 +1515,21 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_GCM:
-      c->mode_ops.encrypt = _gcry_cipher_gcm_encrypt;
-      c->mode_ops.decrypt = _gcry_cipher_gcm_decrypt;
+      switch(c->spec->algo) {
+      #ifdef HAVE_WOLFSSL
+        case GCRY_CIPHER_AES:
+        case GCRY_CIPHER_AES192:
+        case GCRY_CIPHER_AES256:
+          /* Init wolfssl aes Structures aswell*/
+          c->mode_ops.encrypt = _wc_cipher_aes_gcm_encrypt;
+          c->mode_ops.decrypt = _wc_cipher_aes_gcm_decrypt;
+          break;
+      #endif
+        default:
+          c->mode_ops.encrypt = _gcry_cipher_gcm_encrypt;
+          c->mode_ops.decrypt = _gcry_cipher_gcm_decrypt;
+          break;
+      }
       break;
 
     case GCRY_CIPHER_MODE_POLY1305:
@@ -1517,9 +1575,19 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_GCM:
-      c->mode_ops.setiv =  _gcry_cipher_gcm_setiv;
+      switch(c->spec->algo) {
+      #ifdef HAVE_WOLFSSL
+        case GCRY_CIPHER_AES:
+        case GCRY_CIPHER_AES192:
+        case GCRY_CIPHER_AES256:
+          c->mode_ops.setiv = _wc_cipher_aes_gcm_setiv;
+          break;
+      #endif
+        default:
+          c->mode_ops.setiv =  _gcry_cipher_gcm_setiv;
+          break;
+      }
       break;
-
     case GCRY_CIPHER_MODE_POLY1305:
       c->mode_ops.setiv = _gcry_cipher_poly1305_setiv;
       break;
@@ -1564,9 +1632,22 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_GCM:
-      c->mode_ops.authenticate = _gcry_cipher_gcm_authenticate;
-      c->mode_ops.get_tag      = _gcry_cipher_gcm_get_tag;
-      c->mode_ops.check_tag    = _gcry_cipher_gcm_check_tag;
+      switch(c->spec->algo) {
+      #ifdef HAVE_WOLFSSL
+        case GCRY_CIPHER_AES:
+        case GCRY_CIPHER_AES192:
+        case GCRY_CIPHER_AES256:
+          c->mode_ops.authenticate = _wc_cipher_aes_gcm_authenticate;
+          c->mode_ops.get_tag      = _wc_cipher_aes_gcm_get_tag;
+          c->mode_ops.check_tag    = _wc_cipher_aes_gcm_check_tag;
+          break;
+      #endif
+        default:
+          c->mode_ops.authenticate = _gcry_cipher_gcm_authenticate;
+          c->mode_ops.get_tag      = _gcry_cipher_gcm_get_tag;
+          c->mode_ops.check_tag    = _gcry_cipher_gcm_check_tag;
+          break;
+      }
       break;
 
     case GCRY_CIPHER_MODE_POLY1305:
@@ -1609,8 +1690,25 @@ _gcry_cipher_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
 
   switch (cmd)
     {
+      /* Only do special reset for GCM mode */
     case GCRYCTL_RESET:
-      cipher_reset (h);
+      if (h->mode == GCRY_CIPHER_MODE_GCM) {
+        switch(h->spec->algo) {
+      #ifdef HAVE_WOLFSSL
+          case GCRY_CIPHER_AES:
+          case GCRY_CIPHER_AES192:
+          case GCRY_CIPHER_AES256:
+            _wc_cipher_aes_gcm_reset(h);
+            break;
+      #endif
+          default:
+            cipher_reset (h);
+            break;
+        }
+      }
+      else {
+        cipher_reset (h);
+      }
       break;
 
     case GCRYCTL_FINALIZE:

@@ -50,6 +50,16 @@
 #include "./cipher-internal.h"
 
 
+
+
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/aes.h"
+#include "wolfssl/wolfcrypt/logging.h"
+#endif
+
+
+
 #ifdef USE_AMD64_ASM
 /* AMD64 assembly implementations of AES */
 extern unsigned int _gcry_aes_amd64_encrypt_block(const void *keysched_enc,
@@ -1538,6 +1548,488 @@ _gcry_aes_xts_crypt (void *context, unsigned char *tweak,
     _gcry_burn_stack (burn_depth + 5 * sizeof(void *));
 }
 
+#ifdef HAVE_WOLFSSL
+
+
+
+
+static void
+wc_prepare_decryption(RIJNDAEL_context *ctx)
+{
+  int ret;
+  if (ctx->decryption_prepared)
+    return;
+
+  ctx->decryption_prepared = 1;
+}
+
+
+static void
+wc_prepare_encryption(RIJNDAEL_context *ctx)
+{
+  int ret;
+  if (ctx->decryption_prepared == 0)
+    return;
+  ctx->decryption_prepared = 0;
+}
+
+
+
+
+
+static unsigned int
+wc_do_encrypt (const RIJNDAEL_context *ctx,
+            unsigned char *bx, const unsigned char *ax)
+{
+  unsigned int ret = 0;
+  ret = wc_AesEncryptDirect(&ctx->wc_aes_enc, bx, ax);
+  if (ret != 0) {
+    printf("wc_AesEncryptDirect failed\n");
+    return ret;
+  }
+  return WC_AES_BLOCK_SIZE;
+}
+
+
+/* Decrypt one block.  AX and BX may be the same. */
+static unsigned int
+wc_do_decrypt (const RIJNDAEL_context *ctx, unsigned char *bx,
+            const unsigned char *ax)
+{
+  unsigned int ret = 0;
+  ret = wc_AesDecryptDirect(&ctx->wc_aes_dec, bx, ax);
+  if (ret != 0) {
+    printf("wc_AesDecryptDirect failed\n");
+    return ret;
+  }
+  return WC_AES_BLOCK_SIZE;
+}
+
+
+
+
+
+
+static void
+_wc_aes_ecb_enc (RIJNDAEL_context *ctx, unsigned char *dst,
+			   const unsigned char *src, size_t nblocks,
+			   int encrypt)
+{
+  int ret = 0;
+
+  /* Convert nblocks to bytes */
+  word32 sz = nblocks*WC_AES_BLOCK_SIZE;
+
+  if (encrypt != 0) {
+    ret = wc_AesEcbEncrypt(&ctx->wc_aes_enc, dst, src, sz);
+    if (ret != 0) {
+      printf("wc_AesEcbEncrypt failed: %d\n", ret);
+    }
+  } else {
+    ret = wc_AesEcbDecrypt(&ctx->wc_aes_dec, dst, src, sz);
+    if (ret != 0) {
+      printf("wc_AesEcbDecrypt failed: %d\n", ret);
+    }
+  }
+
+
+  return;
+}
+
+
+
+
+
+
+
+
+static void
+_wc_aes_cbc_enc (void *context, unsigned char *iv,
+                   void *outbuf_arg, const void *inbuf_arg,
+                   size_t nblocks, int cbc_mac)
+{
+  int ret = 0;
+  RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
+  unsigned char *outbuf = outbuf_arg;
+  const unsigned char *inbuf = inbuf_arg;
+  unsigned char tmpbuf[WC_AES_BLOCK_SIZE];
+  unsigned char *ivp = iv;
+  if (nblocks == 0)
+    return;
+  if (cbc_mac && nblocks > 0) {
+    /* CBC-MAC mode: process blocks one at a time, overwriting the output */
+    /* Set initial IV */
+    ret = wc_AesSetIV(&ctx->wc_aes_enc, ivp);
+    if (ret != 0) {
+      printf("wc_AesSetIV failed: %d\n", ret);
+      return;
+    }
+    /* Process blocks one at a time, always writing to outbuf */
+    while (nblocks--) {
+      /* Encrypt this block */
+      ret = wc_AesCbcEncrypt(&ctx->wc_aes_enc, outbuf, inbuf, WC_AES_BLOCK_SIZE);
+      if (ret != 0) {
+        printf("wc_AesCbcEncrypt failed: %d\n", ret);
+        return;
+      }
+      /* For next block, use current output as new IV */
+      ivp = outbuf;
+      ret = wc_AesSetIV(&ctx->wc_aes_enc, ivp);
+      if (ret != 0) {
+        printf("wc_AesSetIV failed: %d\n", ret);
+        return;
+      }
+      /* Move to next input block, but keep same output location for CBC-MAC */
+      inbuf += WC_AES_BLOCK_SIZE;
+    }
+    /* Final result is already in outbuf, update IV */
+    memcpy(iv, outbuf, WC_AES_BLOCK_SIZE);
+  } else {
+    /* Normal CBC encryption */
+    ret = wc_AesSetIV(&ctx->wc_aes_enc, iv);
+    if (ret != 0) {
+      printf("wc_AesSetIV failed: %d\n", ret);
+      return;
+    }
+    ret = wc_AesCbcEncrypt(&ctx->wc_aes_enc, outbuf, inbuf, nblocks * WC_AES_BLOCK_SIZE);
+    if (ret != 0) {
+      printf("wc_AesCbcEncrypt failed: %d\n", ret);
+      return;
+    }
+    /* Update IV to last ciphertext block */
+    memcpy(iv, ctx->wc_aes_enc.reg, WC_AES_BLOCK_SIZE);
+  }
+}
+
+
+
+static void
+_wc_aes_cbc_dec (void *context, unsigned char *iv,
+                   void *outbuf_arg, const void *inbuf_arg,
+                   size_t nblocks)
+{
+  int ret = 0;
+  RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
+  word32 sz = nblocks*WC_AES_BLOCK_SIZE;
+
+
+  ret = wc_AesSetIV(&ctx->wc_aes_dec, iv);
+  if (ret != 0) {
+    printf("wc_AesSetIV failed: %d\n", ret);
+  }
+
+  ret = wc_AesCbcDecrypt(&ctx->wc_aes_dec, outbuf_arg, inbuf_arg, sz);
+  if (ret != 0) {
+    printf("wc_AesCbcDecrypt failed: %d\n", ret);
+  }
+
+  memcpy(iv, ctx->wc_aes_dec.reg, WC_AES_BLOCK_SIZE);
+
+  return;
+}
+
+
+
+
+
+
+
+static void
+_wc_aes_ofb_enc (void *context, unsigned char *iv,
+                   void *outbuf_arg, const void *inbuf_arg,
+                   size_t nblocks)
+{
+  int ret = 0;
+  RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
+  word32 sz = nblocks*WC_AES_BLOCK_SIZE;
+
+  ret = wc_AesSetIV(&ctx->wc_aes_enc, iv);
+  if (ret != 0) {
+    printf("wc_AesSetIV failed: %d\n", ret);
+  }
+
+
+  ret = wc_AesOfbEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz);
+  if (ret != 0) {
+    printf("wc_AesOfbEncrypt failed: %d\n", ret);
+  }
+
+  memcpy(iv, ctx->wc_aes_enc.reg, WC_AES_BLOCK_SIZE);
+
+  return;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+static void
+_wc_aes_ctr_enc (void *context, unsigned char *ctr,
+                   void *outbuf_arg, const void *inbuf_arg,
+                   size_t nblocks)
+{
+  int ret = 0;
+  RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
+  word32 sz = nblocks*WC_AES_BLOCK_SIZE;
+
+  ret = wc_AesSetIV(&ctx->wc_aes_enc, ctr);
+  if (ret != 0) {
+    printf("wc_AesSetIV failed: %d\n", ret);
+  }
+
+  ret = wc_AesCtrEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz);
+  if (ret != 0) {
+    printf("wc_AesCtrEncrypt failed: %d\n", ret);
+  }
+
+  /* Update the counter value for the next call */
+  memcpy(ctr, ctx->wc_aes_enc.reg, WC_AES_BLOCK_SIZE);
+  return;
+}
+
+
+
+
+
+
+
+
+#if 1
+static size_t
+_wc_aes_gcm_crypt (gcry_cipher_hd_t c, void *outbuf_arg,
+                   const void *inbuf_arg, size_t nblocks, int encrypt)
+{
+  int ret = 0;
+  RIJNDAEL_context *ctx = (RIJNDAEL_context *)(&c->context.c);
+
+  /* Map function parameters properly */
+  byte* out = (byte*)outbuf_arg;
+  byte* in = (byte*)inbuf_arg;
+  word32 sz = nblocks * WC_AES_BLOCK_SIZE;
+
+  /* IV from libgcrypt */
+  //const byte *iv = c->u_mode.gcm.tagiv;
+  byte *iv = (byte*)c->u_mode.gcm.tagiv;
+  word32 ivSz = MAX_BLOCKSIZE; /* Standard GCM IV size */
+
+  /* Authentication tag */
+  //byte *authTag = c->u_mode.gcm.u_tag.tag;
+  byte *authTag = (byte*)c->u_mode.gcm.u_tag.tag;
+  word32 authTagSz = MAX_BLOCKSIZE; /* 16-byte auth tag */
+
+  /* AAD data */
+  byte *authIn = (byte*)c->u_mode.gcm.macbuf;
+  word32 authInSz = sizeof(c->u_mode.gcm.macbuf)*sizeof(byte);
+
+  if (encrypt) {
+    /* For encryption, authTag is output parameter */
+    ret = wc_AesGcmEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz,
+                          iv, WC_AES_BLOCK_SIZE,
+                          authTag, authTagSz,
+                          authIn, authInSz);
+    if (ret != 0) {
+      printf("wc_AesGcmEncrypt failed: %d\n", ret);
+    }
+  }
+  else {
+    /* For decryption, authTag is input parameter for verification */
+    ret = wc_AesGcmDecrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz,
+                          iv, WC_AES_BLOCK_SIZE,
+                          authTag, authTagSz,
+                          authIn, authInSz);
+    if (ret != 0) {
+      printf("wc_AesGcmDecrypt failed: %d\n", ret);
+    }
+  }
+}
+#endif
+
+
+
+
+
+static void
+wc_aes_setiv (void *context, const byte *iv, size_t ivlen)
+{
+  int ret = 0;
+  (void)ivlen;
+  RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
+  ret = wc_AesSetIV(&ctx->wc_aes_enc, iv);
+  if (ret != 0) {
+    printf("wc_AesSetIV failed: %d\n", ret);
+  }
+  ret = wc_AesSetIV(&ctx->wc_aes_dec, iv);
+  if (ret != 0) {
+    printf("wc_AesSetIV failed: %d\n", ret);
+  }
+
+  return;
+}
+
+
+
+
+/* Perform the key setup.  */
+static gcry_err_code_t
+wc_do_setkey (RIJNDAEL_context *ctx, const byte *key, const unsigned keylen,
+           cipher_bulk_ops_t *bulk_ops)
+{
+  static int initialized = 0;
+  static const char *selftest_failed = 0;
+  void (*hw_setkey)(RIJNDAEL_context *ctx, const byte *key) = NULL;
+  int rounds;
+  unsigned int KC;
+  unsigned int hwfeatures;
+
+  /* The on-the-fly self tests are only run in non-fips mode. In fips
+     mode explicit self-tests are required.  Actually the on-the-fly
+     self-tests are not fully thread-safe and it might happen that a
+     failed self-test won't get noticed in another thread.
+
+     FIXME: We might want to have a central registry of succeeded
+     self-tests. */
+  if (!fips_mode () && !initialized)
+    {
+      initialized = 1;
+      selftest_failed = selftest ();
+      if (selftest_failed)
+        log_error ("%s\n", selftest_failed );
+    }
+  if (selftest_failed)
+    return GPG_ERR_SELFTEST_FAILED;
+
+  if( keylen == 128/8 )
+    {
+      rounds = 10;
+      KC = 4;
+    }
+  else if ( keylen == 192/8 )
+    {
+      rounds = 12;
+      KC = 6;
+    }
+  else if ( keylen == 256/8 )
+    {
+      rounds = 14;
+      KC = 8;
+    }
+  else
+    return GPG_ERR_INV_KEYLEN;
+
+  ctx->rounds = rounds;
+  hwfeatures = _gcry_get_hw_features ();
+
+  ctx->decryption_prepared = 0;
+
+  /* Setup default bulk encryption routines.  */
+  memset (bulk_ops, 0, sizeof(*bulk_ops));
+
+  bulk_ops->ecb_crypt = _wc_aes_ecb_enc;
+
+  #if 0
+  bulk_ops->cbc_enc = _wc_aes_cbc_enc;
+  bulk_ops->cbc_dec = _wc_aes_cbc_dec;
+  bulk_ops->ofb_enc = _wc_aes_ofb_enc;
+  bulk_ops->ctr_enc = _wc_aes_ctr_enc;
+  bulk_ops->gcm_crypt = _wc_aes_gcm_crypt;
+  #else
+  bulk_ops->cbc_enc = _wc_aes_cbc_enc;
+  bulk_ops->cbc_dec = _wc_aes_cbc_dec;
+  bulk_ops->ofb_enc = _wc_aes_ofb_enc;
+  bulk_ops->ctr_enc = _wc_aes_ctr_enc;
+  //bulk_ops->gcm_crypt = _wc_aes_gcm_crypt;
+  #endif
+
+
+
+  /* Not wc fips supported*/
+  bulk_ops->cfb_enc = NULL;
+  bulk_ops->cfb_dec = NULL;
+  bulk_ops->ocb_auth  = NULL;
+  bulk_ops->xts_crypt = NULL;
+
+  (void)hwfeatures;
+
+
+  ctx->encrypt_fn = wc_do_encrypt;
+  ctx->decrypt_fn = wc_do_decrypt;
+  ctx->prefetch_enc_fn = prefetch_enc;
+  ctx->prefetch_dec_fn = prefetch_dec;
+  ctx->prepare_decryption = prepare_decryption;
+  (void)hwfeatures;
+
+
+  return 0;
+}
+
+static gcry_err_code_t
+wc_aes_setkey(void *context, const byte *key, const unsigned keylen,
+                 cipher_bulk_ops_t *bulk_ops)
+{
+  gcry_err_code_t ret = -1;
+  RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
+
+  ret = wc_AesInit(&ctx->wc_aes_enc, NULL, INVALID_DEVID);
+  if (ret != 0) {
+    printf("wc_AesInit failed\n");
+    return ret;
+  }
+  ret = wc_AesSetKey(&ctx->wc_aes_enc, key, keylen, NULL, AES_ENCRYPTION);
+  if (ret != 0) {
+    printf("wc_AesSetKey failed\n");
+    return ret;
+  }
+  ret = wc_AesInit(&ctx->wc_aes_dec, NULL, INVALID_DEVID);
+  if (ret != 0) {
+    printf("wc_AesInit failed\n");
+    return ret;
+  }
+  ret = wc_AesSetKey(&ctx->wc_aes_dec, key, keylen, NULL, AES_DECRYPTION);
+  if (ret != 0) {
+    printf("wc_AesSetKey failed\n");
+    return ret;
+  }
+  ret = wc_do_setkey (ctx, key, keylen, bulk_ops);
+  return ret;
+}
+
+
+
+
+static unsigned int
+wc_aes_encrypt (void *context, byte *b, const byte *a)
+{
+  unsigned int ret = 0;
+
+  RIJNDAEL_context *ctx = context;
+
+  ret = ctx->encrypt_fn (ctx, b, a);
+
+  return ret;
+}
+
+static unsigned int
+wc_aes_decrypt (void *context, byte *b, const byte *a)
+{
+  unsigned int ret = 0;
+  RIJNDAEL_context *ctx = context;
+
+
+  ret = ctx->decrypt_fn (ctx, b, a);
+
+  return ret;
+}
+
+#endif /* HAVE_WOLFSSL */
+
 
 /* Run the self-tests for AES 128.  Returns NULL on success. */
 static const char*
@@ -1967,6 +2459,17 @@ static const gcry_cipher_oid_spec_t rijndael_oids[] =
     { NULL }
   };
 
+#ifdef HAVE_WOLFSSL
+gcry_cipher_spec_t _gcry_cipher_spec_aes =
+  {
+    GCRY_CIPHER_AES, {0, 1},
+    "AES", rijndael_names, rijndael_oids, 16, 128,
+    sizeof (RIJNDAEL_context),
+    wc_aes_setkey, wc_do_encrypt, wc_do_decrypt,
+    NULL, NULL,
+    run_selftests
+  };
+#else
 gcry_cipher_spec_t _gcry_cipher_spec_aes =
   {
     GCRY_CIPHER_AES, {0, 1},
@@ -1976,6 +2479,7 @@ gcry_cipher_spec_t _gcry_cipher_spec_aes =
     NULL, NULL,
     run_selftests
   };
+#endif /* HAVE_WOLFSSL */
 
 
 static const char *rijndael192_names[] =
@@ -1996,6 +2500,17 @@ static const gcry_cipher_oid_spec_t rijndael192_oids[] =
     { NULL }
   };
 
+#ifdef HAVE_WOLFSSL
+gcry_cipher_spec_t _gcry_cipher_spec_aes192 =
+  {
+    GCRY_CIPHER_AES192, {0, 1},
+    "AES192", rijndael192_names, rijndael192_oids, 16, 192,
+    sizeof (RIJNDAEL_context),
+    wc_aes_setkey, wc_do_encrypt, wc_do_decrypt,
+    NULL, NULL,
+    run_selftests
+  };
+#else
 gcry_cipher_spec_t _gcry_cipher_spec_aes192 =
   {
     GCRY_CIPHER_AES192, {0, 1},
@@ -2005,6 +2520,7 @@ gcry_cipher_spec_t _gcry_cipher_spec_aes192 =
     NULL, NULL,
     run_selftests
   };
+#endif /* HAVE_WOLFSSL */
 
 
 static const char *rijndael256_names[] =
@@ -2025,6 +2541,18 @@ static const gcry_cipher_oid_spec_t rijndael256_oids[] =
     { NULL }
   };
 
+#ifdef HAVE_WOLFSSL
+gcry_cipher_spec_t _gcry_cipher_spec_aes256 =
+  {
+    GCRY_CIPHER_AES256, {0, 1},
+    "AES256", rijndael256_names, rijndael256_oids, 16, 256,
+    sizeof (RIJNDAEL_context),
+    wc_aes_setkey, wc_do_encrypt, wc_do_decrypt,
+    NULL, NULL,
+    run_selftests
+  };
+
+#else
 gcry_cipher_spec_t _gcry_cipher_spec_aes256 =
   {
     GCRY_CIPHER_AES256, {0, 1},
@@ -2034,3 +2562,4 @@ gcry_cipher_spec_t _gcry_cipher_spec_aes256 =
     NULL, NULL,
     run_selftests
   };
+#endif /* HAVE_WOLFSSL */

@@ -29,6 +29,21 @@
 #include "bufhelp.h"
 #include "./cipher-internal.h"
 
+#undef HAVE_WOLFSSL
+
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/aes.h>
+
+/* Debug printf macro - only prints when WOLFSSL_DEBUG is defined */
+//#ifdef WOLFSSL_DEBUG
+#if 0
+#define DPRINTF(x) printf x
+#else
+#define DPRINTF(x)
+#endif
+#endif
 
 static gcry_err_code_t _gcry_cipher_gcm_setiv_zero (gcry_cipher_hd_t c);
 
@@ -1258,3 +1273,356 @@ _gcry_cipher_gcm_check_tag (gcry_cipher_hd_t c, const unsigned char *intag,
 {
   return _gcry_cipher_gcm_tag (c, (unsigned char *) intag, taglen, 1);
 }
+
+
+/* WolfSSL AES GCM Encryption */
+#ifdef HAVE_WOLFSSL
+
+/* Function will init the aes context and set the key, iv */
+/* Will not reinitialize the context if it is already initialized */
+void _wc_init_aes_gcm(gcry_cipher_hd_t c)
+{
+  int ret;
+  Aes* enc = &c->u_mode.gcm.wc_aes_gcm_enc;
+  Aes* dec = &c->u_mode.gcm.wc_aes_gcm_dec;
+
+  /* Make sure we have the key (using the correct location) */
+  byte* key = c->u_mode.gcm.key;
+  size_t keylen = c->u_mode.gcm.keySz;
+
+  /* IV handling */
+  byte* iv = c->u_mode.gcm.iv;
+  size_t ivlen = c->u_mode.gcm.ivSz;
+
+  /* AAD data */
+  byte* authIn = c->u_mode.gcm.authIn;
+  size_t authInSz = c->u_mode.gcm.authInSz;
+
+  /* Ensure we have an IV */
+  if (iv == NULL) {
+    /* allocate iv */
+    iv = (byte*)malloc(12);
+    if (iv == NULL) {
+      printf("Failed to allocate memory for iv\n");
+      return;
+    }
+    /* Set to Zero */
+    memset(iv, 0, 12);
+    ivlen = 12;
+
+    /* Update the context */
+    c->u_mode.gcm.iv = iv;
+    c->u_mode.gcm.ivSz = ivlen;
+  }
+
+  if (authIn == NULL) {
+    c->u_mode.gcm.authInSz = 0;
+  }
+
+  /* If the context is not initialized, we need to initialize it */
+  if (c->u_mode.gcm.wcAesGcmInit == 0) {
+    /* Setup the authTag to zero */
+    memset(c->u_mode.gcm.authTag, 0, 16);
+
+    /* Verify we have a key */
+    if (key == NULL || keylen == 0) {
+      printf("Key not set or has zero length\n");
+      return;
+    }
+
+    /* Initialize decrypt context */
+    wc_AesFree(dec);
+    ret = wc_AesInit(dec, NULL, INVALID_DEVID);
+    if (ret != 0) {
+      printf("wc_AesInit failed for decrypt: %d\n", ret);
+      return;
+    }
+
+    ret = wc_AesGcmDecryptInit(dec, key, keylen, iv, ivlen);
+    if (ret != 0) {
+      printf("wc_AesGcmDecryptInit failed: %d\n", ret);
+      return;
+    }
+
+    /* Initialize encrypt context */
+    wc_AesFree(enc);
+    ret = wc_AesInit(enc, NULL, INVALID_DEVID);
+    if (ret != 0) {
+      printf("wc_AesInit failed for encrypt: %d\n", ret);
+      return;
+    }
+
+    ret = wc_AesGcmEncryptInit(enc, key, keylen, iv, ivlen);
+    if (ret != 0) {
+      printf("wc_AesGcmEncryptInit failed: %d\n", ret);
+      return;
+    }
+
+    c->u_mode.gcm.wcAesGcmInit = 1;
+    c->u_mode.gcm.wcAesEncrypt = 0;
+    c->u_mode.gcm.wcAesDecrypt = 0;
+  }
+
+  return;
+}
+
+
+void
+_wc_cipher_aes_gcm_reset(gcry_cipher_hd_t c)
+{
+  /* Free IV if not NULL */
+  if (c->u_mode.gcm.iv != NULL) {
+    memset(c->u_mode.gcm.iv, 0, c->u_mode.gcm.ivSz);
+    free(c->u_mode.gcm.iv);
+    c->u_mode.gcm.iv = NULL;
+    c->u_mode.gcm.ivSz = 0;
+  }
+
+  /* Clear the authTag by setting to zero */
+  memset(c->u_mode.gcm.authTag, 0, 16);
+
+  /* Free the authIn if not NULL */
+  if (c->u_mode.gcm.authIn != NULL) {
+    memset(c->u_mode.gcm.authIn, 0, c->u_mode.gcm.authInSz);
+    free(c->u_mode.gcm.authIn);
+    c->u_mode.gcm.authIn = NULL;
+    c->u_mode.gcm.authInSz = 0;
+  }
+
+  /* Set to not initialized */
+  c->marks.finalize = 0;
+  c->u_mode.gcm.wcAesGcmInit = 0;
+
+  /* Reinitialize */
+  _wc_init_aes_gcm(c);
+
+  return;
+}
+
+gcry_err_code_t
+_wc_cipher_aes_gcm_encrypt (gcry_cipher_hd_t c,
+                   unsigned char *outbuf, size_t outbuflen,
+                   const unsigned char *inbuf, size_t inbuflen)
+{
+  //prinft*"wc_cipher_aes_gcm_encrypt*******\n");
+  int ret = 0;
+  Aes* enc = &c->u_mode.gcm.wc_aes_gcm_enc;
+  byte* authIn = c->u_mode.gcm.authIn;
+  size_t authInSz = c->u_mode.gcm.authInSz;
+
+  _wc_init_aes_gcm(c);
+
+  /* Check all parameters before calling wc_AesGcmEncrypt */
+  ret = wc_AesGcmEncryptUpdate(enc, outbuf, inbuf, inbuflen, NULL, 0);
+  if (ret != 0) {
+    printf("wc_AesGcmEncrypt failed: %d\n", ret);
+    return;
+  }
+  /* To tell last operation was encrypt */
+  c->u_mode.gcm.wcAesEncrypt = 1;
+  c->u_mode.gcm.wcAesDecrypt = 0;
+  return ret;
+}
+
+
+/* WolfSSL AES GCM Decryption */
+gcry_err_code_t
+_wc_cipher_aes_gcm_decrypt (gcry_cipher_hd_t c,
+                   unsigned char *outbuf, size_t outbuflen,
+                   const unsigned char *inbuf, size_t inbuflen)
+{
+  /* Check if the context is initialized */
+  int ret = 0;
+  Aes* dec = &c->u_mode.gcm.wc_aes_gcm_dec;
+  byte* authIn = c->u_mode.gcm.authIn;
+  unsigned int authInSz = c->u_mode.gcm.authInSz;
+
+  _wc_init_aes_gcm(c);
+
+  ret = wc_AesGcmDecryptUpdate(dec, outbuf, inbuf, inbuflen, NULL, 0);
+  if (ret != 0) {
+    printf("wc_AesGcmEncrypt failed: %d\n", ret);
+    return;
+  }
+  /* To tell last operation was decrypt */
+  c->u_mode.gcm.wcAesEncrypt = 0;
+  c->u_mode.gcm.wcAesDecrypt = 1;
+
+  return ret;
+
+}
+
+
+gcry_err_code_t
+_wc_cipher_aes_gcm_setiv (gcry_cipher_hd_t c, const byte *iv, size_t ivlen)
+{
+  int ret = 0;
+  //prinft*"wc_cipher_aes_gcm_setiv*******\n");
+  if (ivlen <= 0) {
+    return GPG_ERR_INV_LENGTH;
+  }
+  if (iv == NULL) {
+    printf("wc_cipher_aes_gcm_setiv: Invalid iv: NULL\n");
+    return GPG_ERR_INV_ARG;
+  }
+
+  /* explicitly free the iv buffer if it is not null */
+  if (c->u_mode.gcm.iv != NULL) {
+    free(c->u_mode.gcm.iv);
+    c->u_mode.gcm.iv = NULL;
+  }
+
+  c->u_mode.gcm.iv = (byte*)malloc(ivlen);
+  if (c->u_mode.gcm.iv == NULL) {
+    printf("Failed to allocate memory for iv\n");
+    return GPG_ERR_INV_STATE;
+  }
+
+  memcpy(c->u_mode.gcm.iv, iv, ivlen);
+  c->u_mode.gcm.ivSz = ivlen;
+
+  /* Reinitialize the context */
+  c->u_mode.gcm.wcAesGcmInit = 0;
+  _wc_init_aes_gcm(c);
+
+  return 0;
+}
+
+
+gcry_err_code_t
+_wc_cipher_aes_gcm_authenticate (gcry_cipher_hd_t c,
+                               const byte *aadbuf, size_t aadbuflen)
+{
+  Aes* enc = &c->u_mode.gcm.wc_aes_gcm_enc;
+  Aes* dec = &c->u_mode.gcm.wc_aes_gcm_dec;
+  int ret = 0;
+
+  if (aadbuflen == 0) {
+    return 0;
+  }
+  if (aadbuf == NULL) {
+    return 0;
+  }
+  _wc_init_aes_gcm(c);
+
+  /* Calculate new total size */
+  ret = wc_AesGcmEncryptUpdate(enc, NULL, NULL, 0, aadbuf, aadbuflen);
+  if (ret != 0) {
+    printf("wc_AesGcmEncryptUpdate failed: %d\n", ret);
+    return GPG_ERR_INV_STATE;
+  }
+  ret = wc_AesGcmDecryptUpdate(dec, NULL, NULL, 0, aadbuf, aadbuflen);
+  if (ret != 0) {
+    printf("wc_AesGcmDecryptUpdate failed: %d\n", ret);
+    return GPG_ERR_INV_STATE;
+  }
+  return 0;
+}
+
+/* Do shallow copy of the aes context */
+gcry_err_code_t
+_wc_cipher_aes_gcm_get_tag (gcry_cipher_hd_t c, unsigned char *outtag,
+                          size_t taglen)
+{
+  int ret = 0;
+  Aes encCpy;
+
+  if (!(is_tag_length_valid (taglen) || taglen >= GCRY_GCM_BLOCK_LEN)) {
+    return GPG_ERR_INV_LENGTH;
+  }
+  /* if greater then reduce down to 16 */
+  if (taglen > 16) {
+    taglen = 16;
+  }
+
+
+  if (outtag == NULL) {
+    return GPG_ERR_INV_ARG;
+  }
+  _wc_init_aes_gcm(c);
+  memcpy(&encCpy, &c->u_mode.gcm.wc_aes_gcm_enc, sizeof(Aes));
+  ret = wc_AesGcmEncryptFinal(&encCpy, outtag, taglen);
+  if (ret != 0) {
+    printf("wc_AesGcmEncryptFinal failed: %d\n", ret);
+    return GPG_ERR_INV_STATE;
+  }
+  return 0;
+}
+
+/* Do shallow copy of the aes context */
+gcry_err_code_t
+_wc_cipher_aes_gcm_check_tag (gcry_cipher_hd_t c, const unsigned char *intag,
+                            size_t taglen)
+{
+  int ret = 0;
+  Aes decCpy;
+
+  if (!(is_tag_length_valid (taglen) || taglen >= GCRY_GCM_BLOCK_LEN)) {
+    return GPG_ERR_INV_LENGTH;
+  }
+  if (taglen > 16) {
+    return GPG_ERR_INV_LENGTH;
+  }
+  if (intag == NULL) {
+    return GPG_ERR_INV_ARG;
+  }
+  _wc_init_aes_gcm(c);
+  memcpy(&decCpy, &c->u_mode.gcm.wc_aes_gcm_dec, sizeof(Aes));
+  ret = wc_AesGcmDecryptFinal(&c->u_mode.gcm.wc_aes_gcm_dec, intag, taglen);
+  if (ret != 0) {
+    printf("wc_AesGcmDecryptFinal failed: %d\n", ret);
+    return GPG_ERR_CHECKSUM;
+  }
+  return 0;
+}
+
+
+
+
+
+void
+_wc_cipher_aes_gcm_setupM (gcry_cipher_hd_t c)
+{
+  c->u_mode.gcm.ghash_fn = NULL;
+  c->u_mode.gcm.polyval_fn = NULL;
+  if (c->u_mode.gcm.ghash_fn == NULL)
+    {
+      c->u_mode.gcm.ghash_fn = ghash_internal;
+      fillM (c);
+    }
+}
+
+
+
+
+
+/* A key always needs to be set so lets do all the initialization here */
+void
+_wc_cipher_aes_gcm_setkey (gcry_cipher_hd_t c, const byte *key, size_t keylen)
+{
+  int ret = 0;
+  //prinft*"wc_cipher_aes_gcm_setkey*******\n");
+  /* Check key length */
+  if (keylen != 16 && keylen != 24 && keylen != 32) {
+    printf("wc_cipher_aes_gcm_setkey: Invalid key length\n");
+    return;
+  }
+
+  if (c->u_mode.gcm.key != NULL) {
+    free(c->u_mode.gcm.key);
+    c->u_mode.gcm.key = NULL;
+  }
+
+  c->u_mode.gcm.key = (byte*)malloc(keylen);
+  if (c->u_mode.gcm.key == NULL) {
+    printf("Failed to allocate memory for key\n");
+    return;
+  }
+
+  memcpy(c->u_mode.gcm.key, key, keylen);
+  memcpy(&c->u_mode.gcm.keySz, &keylen, sizeof(keylen));
+
+  return;
+}
+
+#endif

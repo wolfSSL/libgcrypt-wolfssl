@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"settings.h": "c",
+			"random.h": "c",
+			"cstddef": "c",
+			"logging.h": "c"
+		}
+	}
+}

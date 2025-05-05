@@ -64,6 +64,12 @@
 #include "cipher.h"         /* _gcry_sha1_hash_buffer  */
 #include "../cipher/sha1.h" /* _gcry_sha1_mixblock     */
 
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
+
 #ifndef RAND_MAX   /* For SunOS. */
 #define RAND_MAX 32767
 #endif
@@ -444,6 +450,27 @@ _gcry_rngcsprng_add_bytes (const void *buf, size_t buflen, int quality)
    not very strong, GCRY_STRONG_RANDOM is strong enough for most
    usage, GCRY_VERY_STRONG_RANDOM is good for key generation stuff but
    may be very slow.  */
+#if defined(HAVE_WOLFSSL)
+void
+_gcry_rngcsprng_randomize (void *buffer, size_t length,
+                           enum gcry_random_level level)
+{
+  WC_RNG rng;
+  (void)level;
+  int ret;
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    printf("do_randomize: wc_InitRng failed %d\n", ret);
+    return;
+  }
+  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
+  if (ret != 0) {
+    printf("do_randomize: wc_RNG_GenerateBlock failed %d\n", ret);
+    return;
+  }
+  wc_FreeRng(&rng);
+}
+#else
 void
 _gcry_rngcsprng_randomize (void *buffer, size_t length,
                            enum gcry_random_level level)
@@ -489,8 +516,7 @@ _gcry_rngcsprng_randomize (void *buffer, size_t length,
   /* Release the pool lock. */
   unlock_pool ();
 }
-
-
+#endif
 
 
 /*

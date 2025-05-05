@@ -23,6 +23,10 @@
 
 #include "types.h"  /* for byte and u32 typedefs */
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/aes.h"
+#endif
 
 #define MAXKC                   (256/32)
 #define MAXROUNDS               14
@@ -198,6 +202,14 @@ typedef struct RIJNDAEL_context_s
   byte kmo_func;
   byte kma_func;
 #endif /*USE_S390X_CRYPTO*/
+
+#ifdef HAVE_WOLFSSL
+  Aes wc_aes_enc;
+  Aes wc_aes_dec;
+  Aes wc_aes_gcm_enc;
+  Aes wc_aes_gcm_dec;
+#endif
+
   rijndael_cryptfn_t encrypt_fn;
   rijndael_cryptfn_t decrypt_fn;
   rijndael_prefetchfn_t prefetch_enc_fn;

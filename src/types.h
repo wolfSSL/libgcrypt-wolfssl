@@ -130,6 +130,7 @@
 #include <wolfssl/wolfcrypt/sha512.h>
 #include <wolfssl/wolfcrypt/sha3.h>
 #include <wolfssl/wolfcrypt/hmac.h>
+#include <wolfssl/wolfcrypt/aes.h>
 #endif
 
 typedef union
@@ -150,6 +151,8 @@ typedef union
   wc_Sha512_256 m;
   wc_Sha3 n;
   Hmac o;
+  Aes p;
+  Gmac q;
   #endif
 } PROPERLY_ALIGNED_TYPE;
 

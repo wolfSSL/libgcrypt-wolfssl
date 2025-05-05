@@ -39,6 +39,14 @@
 #include "rand-internal.h"
 #include "cipher.h"         /* For _gcry_sha1_hash_buffer().  */
 
+#if defined(HAVE_WOLFSSL)
+
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+//#include <wolfssl/wolfcrypt/types.h>
+#include "wolfssl/wolfcrypt/random.h"
+#endif
+
 /* The name of a file used to globally configure the RNG. */
 #define RANDOM_CONF_FILE "/etc/gcrypt/random.conf"
 
@@ -337,7 +345,26 @@ _gcry_random_add_bytes (const void *buf, size_t buflen, int quality)
     return gpg_err_code (_gcry_rngcsprng_add_bytes (buf, buflen, quality));
 }
 
-
+#ifdef HAVE_WOLFSSL
+static void
+do_randomize (void *buffer, size_t length, enum gcry_random_level level)
+{
+  RNG rng;
+  (void)level;
+  int ret;
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    printf("do_randomize: wc_InitRng failed %d\n", ret);
+    return;
+  }
+  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
+  if (ret != 0) {
+    printf("do_randomize: wc_RNG_GenerateBlock failed %d\n", ret);
+    return;
+  }
+  wc_FreeRng(&rng);
+}
+#else
 /* Helper function.  */
 static void
 do_randomize (void *buffer, size_t length, enum gcry_random_level level)
@@ -353,6 +380,7 @@ do_randomize (void *buffer, size_t length, enum gcry_random_level level)
   else /* default */
     _gcry_rngcsprng_randomize (buffer, length, level);
 }
+#endif
 
 /* The public function to return random data of the quality LEVEL.
    Returns a pointer to a newly allocated and randomized buffer of
@@ -457,8 +485,24 @@ _gcry_fast_random_poll (void)
     _gcry_rngcsprng_fast_poll ();
 }
 
-
-
+#ifdef HAVE_WOLFSSL
+/* Create an unpredicable nonce of LENGTH bytes in BUFFER. */
+void
+_gcry_create_nonce (void *buffer, size_t length)
+{
+  RNG rng;
+  int ret;
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    printf("failed to initialize rng\n");
+  }
+  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
+  if (ret != 0) {
+    printf("failed to generate block\n");
+  }
+  wc_FreeRng(&rng);
+}
+#else
 /* Create an unpredicable nonce of LENGTH bytes in BUFFER. */
 void
 _gcry_create_nonce (void *buffer, size_t length)
@@ -548,7 +592,7 @@ _gcry_create_nonce (void *buffer, size_t length)
     log_fatal ("failed to release the nonce buffer lock: %s\n",
                gpg_strerror (err));
 }
-
+#endif
 
 /* Run the self-tests for the RNG.  This is currently only implemented
    for the FIPS generator.  */

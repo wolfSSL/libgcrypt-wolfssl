@@ -157,6 +157,11 @@
 #include "rand-internal.h"
 #include "../cipher/bufhelp.h"
 
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
 
 
 /******************************************************************
@@ -1914,6 +1919,28 @@ _gcry_rngdrbg_add_bytes (const void *buf, size_t buflen, int quality)
 /* This function is to be used for all types of random numbers, including
  * nonces
  */
+
+#if defined(HAVE_WOLFSSL)
+void
+_gcry_rngdrbg_randomize (void *buffer, size_t length,
+		      enum gcry_random_level level)
+{
+  WC_RNG rng;
+  (void)level;
+  int ret;
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    printf("do_randomize: wc_InitRng failed %d\n", ret);
+    return;
+  }
+  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
+  if (ret != 0) {
+    printf("do_randomize: wc_RNG_GenerateBlock failed %d\n", ret);
+    return;
+  }
+  wc_FreeRng(&rng);
+}
+#else
 void
 _gcry_rngdrbg_randomize (void *buffer, size_t length,
 		      enum gcry_random_level level)
@@ -1970,7 +1997,7 @@ _gcry_rngdrbg_randomize (void *buffer, size_t length,
   return;
 
 }
-
+#endif
 /***************************************************************
  * Self-test code
  ***************************************************************/

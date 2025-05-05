@@ -28,6 +28,8 @@
 #include "g10lib.h"
 #include "cipher.h"
 
+#undef HAVE_WOLFSSL_D
+
 #if defined(HAVE_WOLFSSL)
 #include "wolfssl/options.h"
 #include "wolfssl/wolfcrypt/settings.h"
@@ -38,7 +40,7 @@
 #include "wolfssl/wolfcrypt/md5.h"
 #include "wolfssl/wolfcrypt/hmac.h"
 #include "wolfssl/wolfcrypt/hash.h"
-#endif /* HAVE_WOLFSSL */
+#endif /* HAVE_WOLFSSL_D */
 
 /* This is the list of the digest implementations included in
    libgcrypt.  */
@@ -315,7 +317,7 @@ map_algo (int algo)
 
 /* Some utility functions for wolfSSL */
 /* These functions are used to map libgcrypt hmac to wolfSSL hmac */
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL_D)
 static int
 map_algo_to_wc_algo (int algo)
 {
@@ -434,22 +436,6 @@ wc_Hmac_copy(Hmac *dst, Hmac *src, int wc_algo)
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 static int
 _gcry_wc_md_open (gcry_md_hd_t hd, int algo, unsigned int flags)
 {
@@ -490,7 +476,7 @@ _gcry_wc_md_open (gcry_md_hd_t hd, int algo, unsigned int flags)
       *(hd->wc_algo_ptr) = wc_algo;
 
       /* Allocate memory for the digest */
-      int digest_size = wc_get_digest_size(wc_algo);
+      int digest_size = WC_MAX_DIGEST_SIZE;
 
       /* Ensure we have a valid digest size */
       if (digest_size <= 0) {
@@ -955,7 +941,7 @@ _gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
     /* This allocates the memory for the handle and the context */
     rc = md_open (&hd, algo, flags);
     if (rc == 0) {
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL_D)
       int wc_rc = _gcry_wc_md_open(hd, algo, flags);
       if (wc_rc != 0) {
         rc = wc_rc;
@@ -1075,7 +1061,7 @@ md_copy (gcry_md_hd_t ahd, gcry_md_hd_t *b_hd)
   b->list = NULL;
   b->debug = NULL;
 
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL_D)
   /* Use the dedicated function for wolfSSL copy */
   int wc_result = _gcry_wc_md_copy(ahd, bhd);
   if (wc_result != 0) {
@@ -1162,7 +1148,7 @@ md_close (gcry_md_hd_t a)
 
   if (! a)
     return;
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL_D)
   /* Use dedicated function for wolfSSL cleanup */
   _gcry_wc_md_close(a);
 #endif
@@ -1217,7 +1203,7 @@ md_write (gcry_md_hd_t a, const void *inbuf, size_t inlen)
 void
 _gcry_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
 {
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL_D)
   /* Try wolfSSL implementation first */
   int wc_result = _gcry_wc_md_write(hd, inbuf, inlen);
   if (wc_result == 0) {
@@ -1525,7 +1511,7 @@ _gcry_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
 {
   gcry_err_code_t rc;
 
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL_D)
   /* Try wolfSSL implementation first */
   rc = _gcry_wc_md_setkey(hd, key, keylen);
   if (rc == 0) {
@@ -1618,7 +1604,7 @@ _gcry_md_read (gcry_md_hd_t hd, int algo)
   /* This function is expected to always return a digest, thus we
      can't return an error which we actually should do in
      non-operational state.  */
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL_D)
   /* Try wolfSSL implementation first */
   byte *digest = _gcry_wc_md_read(hd, algo);
   if (digest != NULL) {

@@ -40,7 +40,11 @@ static gcry_pk_spec_t * const pubkey_list[] =
     &_gcry_pubkey_spec_ecc,
 #endif
 #if USE_RSA
+  #ifdef HAVE_WOLFSSL
+    &_wc_pubkey_spec_rsa,
+  #else
     &_gcry_pubkey_spec_rsa,
+  #endif
 #endif
 #if USE_DSA
     &_gcry_pubkey_spec_dsa,

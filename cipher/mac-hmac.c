@@ -310,7 +310,6 @@ wc_hmac_open(gcry_mac_hd_t h)
   int secure = (h->magic == CTX_MAC_MAGIC_SECURE);
   unsigned int flags;
   int md_algo, ret;
-
   md_algo = map_mac_algo_to_md(h->spec->algo);
   h->u.hmac.md_algo = md_algo;
   flags = GCRY_MD_FLAG_HMAC;
@@ -334,6 +333,11 @@ wc_hmac_close(gcry_mac_hd_t h)
     free(h->final_digest);
     h->final_digest = NULL;
   }
+  if (h->key != NULL) {
+    free(h->key);
+    h->key = NULL;
+  }
+  h->key_len = 0;
   return;
 }
 
@@ -341,6 +345,20 @@ static gcry_err_code_t
 wc_hmac_setkey(gcry_mac_hd_t h, const unsigned char *key, size_t keylen)
 {
   int ret;
+
+  if (h->key != NULL) {
+    free(h->key);
+    h->key = NULL;
+  }
+  h->key_len = 0;
+
+  h->key = (byte*)malloc(keylen);
+  if (h->key == NULL) {
+    printf("wc_hmac_setkey failed to allocate memory\n");
+    return GPG_ERR_INV_ARG;
+  }
+  memcpy(h->key, key, keylen);
+  h->key_len = keylen;
 
   ret = wc_HmacSetKey(&h->wc_hmac, map_algo_to_wc_algo(h->u.hmac.md_algo), key, keylen);
   if (ret != 0) {
@@ -356,16 +374,22 @@ static gcry_err_code_t
 wc_hmac_reset(gcry_mac_hd_t h)
 {
   int ret;
-  wc_HmacFree(&h->wc_hmac);
 
+  wc_HmacFree(&(h->wc_hmac));
   if (h->final_digest != NULL) {
     free(h->final_digest);
     h->final_digest = NULL;
   }
 
-  ret = wc_HmacInit(&h->wc_hmac, NULL, 0);
+  ret = wc_HmacInit(&(h->wc_hmac), NULL, 0);
   if (ret != 0) {
-    printf("wc_hmac_reset failed\n");
+    printf("wc_hmac_reset failed in reset: %d\n", ret);
+    return GPG_ERR_INV_ARG;
+  }
+
+  ret = wc_HmacSetKey(&(h->wc_hmac), map_algo_to_wc_algo(h->u.hmac.md_algo), h->key, h->key_len);
+  if (ret != 0) {
+    printf("wc_hmac_reset failed in reset: %d\n", ret);
     return GPG_ERR_INV_ARG;
   }
 
@@ -391,7 +415,7 @@ wc_hmac_read(gcry_mac_hd_t h, unsigned char *outbuf, size_t *outlen)
   unsigned int dlen = _gcry_md_get_algo_dlen (h->u.hmac.md_algo);
 
   if (h->final_digest == NULL) {
-    h->final_digest = (byte*)malloc(WC_HMAC_BLOCK_SIZE  / sizeof(word32));
+    h->final_digest = (byte*)malloc(WC_MAX_DIGEST_SIZE);
     if (h->final_digest == NULL) {
       printf("wc_hmac_read failed to allocate memory\n");
       return GPG_ERR_INV_ARG;
@@ -423,7 +447,6 @@ wc_hmac_verify(gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
   int ret;
   int dlen;
   byte* digest;
-
 
   dlen = _gcry_md_get_algo_dlen (h->u.hmac.md_algo);
   digest = (byte*)malloc(dlen);
@@ -1617,29 +1640,17 @@ const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha384 = {
 };
 #endif /* HAVE_WOLFSSL */
 
-#if defined(HAVE_WOLFSSL)
-const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_256 = {
-  GCRY_MAC_HMAC_SHA512_256, {0, 1}, "HMAC_SHA512_256",
-  &wc_hmac_ops
-};
-#else
-const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_256 = {
-  GCRY_MAC_HMAC_SHA512_256, {0, 1}, "HMAC_SHA512_256",
-  &hmac_ops
-};
-#endif /* HAVE_WOLFSSL */
 
-#if defined(HAVE_WOLFSSL)
-const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_224 = {
-  GCRY_MAC_HMAC_SHA512_224, {0, 1}, "HMAC_SHA512_224",
-  &wc_hmac_ops
+const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_256 = {
+  GCRY_MAC_HMAC_SHA512_256, {0, 1}, "HMAC_SHA512_256",
+  &hmac_ops
 };
-#else
+
+
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_224 = {
   GCRY_MAC_HMAC_SHA512_224, {0, 1}, "HMAC_SHA512_224",
   &hmac_ops
 };
-#endif /* HAVE_WOLFSSL */
 #endif
 #if USE_SHA3
 #if defined(HAVE_WOLFSSL)

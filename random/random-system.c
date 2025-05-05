@@ -36,6 +36,12 @@
 #include "random.h"
 #include "rand-internal.h"
 
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
+
 /* This is the lock we use to serialize access to this RNG.  The extra
    integer variable is only used to check the locking state; that is,
    it is not meant to be thread-safe but merely as a failsafe feature
@@ -136,6 +142,26 @@ read_cb (const void *buffer, size_t length, enum random_origins origin)
 /* Fill BUFFER with LENGTH bytes of random at quality LEVEL.  The
    function either succeeds or terminates the process in case of a
    fatal error. */
+#if defined(HAVE_WOLFSSL)
+void
+get_random (void *buffer, size_t length, int level)
+{
+  WC_RNG rng;
+  (void)level;
+  int ret;
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    printf("do_randomize: wc_InitRng failed %d\n", ret);
+    return;
+  }
+  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
+  if (ret != 0) {
+    printf("do_randomize: wc_RNG_GenerateBlock failed %d\n", ret);
+    return;
+  }
+  wc_FreeRng(&rng);
+}
+#else
 static void
 get_random (void *buffer, size_t length, int level)
 {
@@ -168,7 +194,7 @@ get_random (void *buffer, size_t length, int level)
       log_fatal ("error reading random from system RNG (rc=%d)\n", rc);
     }
 }
-
+#endif
 
 
 /* --- Public Functions --- */
@@ -240,6 +266,27 @@ _gcry_rngsystem_add_bytes (const void *buf, size_t buflen, int quality)
    here mapped to GCRY_STRONG_RANDOM, GCRY_STRONG_RANDOM is strong
    enough for most usage, GCRY_VERY_STRONG_RANDOM is good for key
    generation stuff but may be very slow.  */
+#if defined(HAVE_WOLFSSL)
+void
+_gcry_rngsystem_randomize (void *buffer, size_t length,
+                           enum gcry_random_level level)
+{
+  WC_RNG rng;
+  (void)level;
+  int ret;
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    printf("do_randomize: wc_InitRng failed %d\n", ret);
+    return;
+  }
+  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
+  if (ret != 0) {
+    printf("do_randomize: wc_RNG_GenerateBlock failed %d\n", ret);
+    return;
+  }
+  wc_FreeRng(&rng);
+}
+#else
 void
 _gcry_rngsystem_randomize (void *buffer, size_t length,
                            enum gcry_random_level level)
@@ -253,3 +300,4 @@ _gcry_rngsystem_randomize (void *buffer, size_t length,
   get_random (buffer, length, level);
   unlock_rng ();
 }
+#endif

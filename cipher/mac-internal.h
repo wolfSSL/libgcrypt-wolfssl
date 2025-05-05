@@ -25,6 +25,7 @@
 
 #ifdef HAVE_WOLFSSL
 #include "wolfssl/wolfcrypt/hmac.h"
+#include "wolfssl/wolfcrypt/aes.h"
 #endif
 
 /* The data object used to hold a handle to an encryption object.  */
@@ -111,6 +112,15 @@ struct gcry_mac_handle
 #if defined(HAVE_WOLFSSL)
   Hmac wc_hmac;
   byte* final_digest;
+  byte* key;
+  size_t key_len;
+  byte* iv;
+  size_t iv_len;
+  byte* authIn;
+  size_t authIn_len;
+  byte* authTag;
+  size_t authTag_len;
+  Gmac aesGmac;
 #endif
   union {
     struct {
