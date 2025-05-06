@@ -2213,6 +2213,152 @@ _libgcrypt_to_wc_hash(int gcry_hash_algo)
   }
 }
 
+
+/* will do the digest of the data and return the digest */
+static int
+_wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, int hashType)
+{
+
+  int ret = 0;
+
+  switch (hashType) {
+    case WC_HASH_TYPE_SHA:
+    {
+      wc_Sha sha;
+      ret = wc_InitSha(&sha);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_ShaUpdate(&sha, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_ShaFinal(&sha, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA224:
+    {
+      wc_Sha224 sha224;
+      ret = wc_InitSha224(&sha224);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha224Update(&sha224, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha224Final(&sha224, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA256:
+    {
+      wc_Sha256 sha256;
+      ret = wc_InitSha256(&sha256);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha256Update(&sha256, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha256Final(&sha256, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA384:
+    {
+      wc_Sha384 sha384;
+      ret = wc_InitSha384(&sha384);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha384Update(&sha384, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha384Final(&sha384, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA512_224:
+    {
+      wc_Sha512_224 sha512_224;
+      ret = wc_InitSha512_224(&sha512_224);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_224Update(&sha512_224, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_224Final(&sha512_224, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA512_256:
+    {
+      wc_Sha512_256 sha512_256;
+      ret = wc_InitSha512_256(&sha512_256);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_256Update(&sha512_256, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_256Final(&sha512_256, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA512:
+    {
+      wc_Sha512 sha512;
+      ret = wc_InitSha512(&sha512);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512Update(&sha512, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512Final(&sha512, digest);
+      break;
+    }
+    default:
+      printf("Unsupported hash algorithm: %d\n", hashType);
+      return -1;
+  }
+  return ret;
+}
+
+
+/*
+ * Determ the MGF type for given libgcrypt hash algorithm for pss
+*/
+static int
+_libgcrypt_to_wc_mgf(int gcry_hash_algo)
+{
+  /* convert libgcrypt hash algorithm to wolfssl hash type */
+  int mgf = _libgcrypt_to_wc_hash(gcry_hash_algo);
+
+  switch (mgf)
+  {
+    case WC_HASH_TYPE_SHA:
+      return WC_MGF1SHA1;
+    case WC_HASH_TYPE_SHA224:
+      return WC_MGF1SHA224;
+    case WC_HASH_TYPE_SHA256:
+      return WC_MGF1SHA256;
+    case WC_HASH_TYPE_SHA384:
+      return WC_MGF1SHA384;
+    case WC_HASH_TYPE_SHA512:
+      return WC_MGF1SHA512;
+    case WC_HASH_TYPE_SHA512_224:
+      return WC_MGF1SHA512_224;
+    case WC_HASH_TYPE_SHA512_256:
+      return WC_MGF1SHA512_256;
+    default:
+      return WC_MGF1NONE;
+  }
+}
+
+
 /*
  * Get the hash length (in bytes) for a given libgcrypt hash algorithm
  * Returns the length in bytes or 0 on error
@@ -2268,13 +2414,11 @@ _wc_gcrypt_compare_data(byte* expectedData, size_t expectedDataLen, byte* myData
   /* the whole buffer. */
 
   if (myDataLen > expectedDataLen) {
-    //printf("myDataLen is greater than expectedDataLen\n");
     return 0;
   }
 
   /* Compare the data with offset*/
   if (memcmp(myData, expectedData + (expectedDataLen - myDataLen), myDataLen) != 0) {
-    //printf("Data mismatch\n");
     return 0;
   }
 
@@ -2313,32 +2457,13 @@ _gcryp_rsa_key_to_wolfssl_rsa_key(RSA_public_key *pk, RsaKey *wcRsaKey)
                                wcRsaKey);
 
   if (ret != 0) {
-    //printf("wc_RsaPublicKeyDecodeRaw failed: %d\n", ret);
     return ret;
   }
 
-  /* Free when done */
-  /*
-  _gcry_free(myKey_exp);
-  _gcry_free(myKey_mod);
-  */
   ret = rsa_check_verify_keysize(wc_RsaEncryptSize(wcRsaKey)*8);
   if (ret != 0) {
-    //printf("rsa_check_verify_keysize failed: %d\n", ret);
-    //printf("Key length: %zu\n", wc_RsaEncryptSize(wcRsaKey));
-    //printf("myKey_mod_len:\n");
-    //for (int i = 0; i < myKey_mod_len; i++) {
-    //  printf("%02X ", myKey_mod[i]);
-    //}
-    //printf("\n");
-    //printf("myKey_exp_len:\n");
-    //for (int i = 0; i < myKey_exp_len; i++) {
-    //  printf("%02X ", myKey_exp[i]);
-    //}
-    //printf("\n");
     return ret;
   }
-
 
   return ret;
 }
@@ -2821,6 +2946,8 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   size_t mySigLen = 0;
   byte* myData = NULL;
   size_t myDataLen = 0;
+  byte digest[WC_MAX_DIGEST_SIZE];
+  int digestLen = 0;
 
   rc = rsa_check_verify_keysize (nbits);
   if (rc)
@@ -2863,7 +2990,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Do RSA computation and compare.  */
   /* Where wolfssl will take over...  */
   /* Initialize wolfssl rsa key */
-  ret = wc_InitRsaKey(&wcRsaKey, NULL);
+  ret = wc_InitRsaKey(&wcRsaKey, 0);
   if (ret != 0) {
     rc = GPG_ERR_INV_OBJ;
     //printf("Error initializing wolfssl rsa key\n");
@@ -2873,7 +3000,6 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Pass to general function to get wolfssl rsa key */
   rc = _gcryp_rsa_key_to_wolfssl_rsa_key(&pk, &wcRsaKey);
   if (rc) {
-    //printf("Error getting wolfssl rsa key\n");
     goto leave;
   }
 
@@ -2881,21 +3007,18 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Get the signature */
   rc = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &mySig, &mySigLen, sig);
   if (rc) {
-    //printf("Error getting signature\n");
     goto leave;
   }
 
   /* Expected data so we can compare */
   rc = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &expectedData, &expectedDataLen, data);
   if (rc) {
-    //printf("Error getting expected data\n");
     goto leave;
   }
 
 
   hashValue = _libgcrypt_hash_length(ctx.hash_algo);
   if (hashValue == 0) {
-    //printf("Unsupported hash algorithm: %d\n", ctx.hash_algo);
     goto leave;
   }
 
@@ -2904,36 +3027,6 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   switch(ctx.encoding) {
     case PUBKEY_ENC_PKCS1_RAW:
     case PUBKEY_ENC_PKCS1:
-      wolf = 1;
-      printf("wolfssl used for PKCS1\n");
-      #if 0
-      myData = (byte*)malloc(expectedDataLen);
-      if (myData == NULL) {
-        //printf("Error allocating memory for myData\n");
-        goto leave;
-      }
-
-      ret = wc_RsaSSL_Verify_ex2(mySig, mySigLen, myData,
-                                    expectedDataLen, &wcRsaKey,
-                                    WC_RSA_PKCSV15_PAD,
-                                    _libgcrypt_to_wc_hash(ctx.hash_algo));
-      if (ret < 0) {
-        rc = GPG_ERR_BAD_SIGNATURE;
-        free(myData);
-        goto leave;
-      }
-
-      myDataLen = ret;
-
-      /* Then compare the data */
-      if (!(_wc_gcrypt_compare_data(expectedData, expectedDataLen, myData, myDataLen))) {
-        //printf("Data mismatch\n");
-        rc = GPG_ERR_BAD_SIGNATURE;
-        free(myData);
-        goto leave;
-      }
-      free(myData);
-      #else
       ret = wc_RsaSSL_VerifyInline(mySig, mySigLen, &myData, &wcRsaKey);
       if (ret < 0) {
         rc = GPG_ERR_BAD_SIGNATURE;
@@ -2943,43 +3036,82 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       myDataLen = ret;
 
       /* Then compare the data */
+      /* TODO: This is a temporary fix to compare the data */
+      /* We should barrow the MPI compare function from libgcrypt */
+      /* But need to first determine how to convert the buffer back to MPI */
       if (!(_wc_gcrypt_compare_data(expectedData, expectedDataLen, myData, myDataLen))) {
-        //printf("Data mismatch\n");
         rc = GPG_ERR_BAD_SIGNATURE;
         goto leave;
       }
-      #endif
       break;
-    case PUBKEY_ENC_RAW:
-    #if 0
-      wolf = 1;
-      printf("wolfssl used for RAW\n");
-      myData = (byte*)malloc(expectedDataLen);
-      if (myData == NULL) {
-        //printf("Error allocating memory for myData\n");
+    case PUBKEY_ENC_PSS:
+      digestLen = wc_HashGetDigestSize(_libgcrypt_to_wc_hash(ctx.hash_algo));
+      if (digestLen < 0) {
+        rc = GPG_ERR_INV_OBJ;
         goto leave;
       }
 
-      ret = wc_RsaSSL_Verify(mySig, mySigLen, myData, expectedDataLen, &wcRsaKey);
+      /* Create digest from the expected data */
+      ret = _wc_create_digest(expectedData, expectedDataLen, digest,
+                            digestLen, _libgcrypt_to_wc_hash(ctx.hash_algo));
+      if (ret != 0) {
+        rc = GPG_ERR_DIGEST_ALGO;
+        goto leave;
+      }
+
+      /* Verify the PSS signature */
+      ret = wc_RsaPSS_VerifyInline_ex(mySig, mySigLen, &myData,
+                                      _libgcrypt_to_wc_hash(ctx.hash_algo),
+                                      _libgcrypt_to_wc_mgf(ctx.hash_algo),
+                                      ctx.saltlen, &wcRsaKey);
       if (ret < 0) {
         rc = GPG_ERR_BAD_SIGNATURE;
-        free(myData);
         goto leave;
       }
       myDataLen = ret;
 
-      /* Then compare the data */
-      if (!(_wc_gcrypt_compare_data(expectedData, expectedDataLen, myData, myDataLen))) {
-        //printf("Data mismatch\n");
-        rc = GPG_ERR_BAD_SIGNATURE;
-        free(myData);
+      /* Check the PSS padding using explicitly calculated modulus size */
+      ret = wc_RsaPSS_CheckPadding_ex2(digest, digestLen, myData, myDataLen,
+                                      _libgcrypt_to_wc_hash(ctx.hash_algo),
+                                      ctx.saltlen, nbits, NULL);
+      if (ret != 0) {
         goto leave;
       }
-      free(myData);
+
       break;
-    #endif
+
+    case PUBKEY_ENC_RAW:
+      /* Allocate a buffer for the output */
+      myData = (byte*)XMALLOC(mySigLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (myData == NULL) {
+          rc = GPG_ERR_ENOMEM;
+          goto leave;
+      }
+
+      myDataLen = mySigLen;
+
+      /* Perform raw RSA verification using wolfSSL's direct RSA function */
+      ret = wc_RsaDirect(mySig, mySigLen, myData, &myDataLen,
+                        &wcRsaKey, RSA_PUBLIC_DECRYPT, NULL);
+      if (ret < 0) {
+          XFREE(myData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+          rc = GPG_ERR_BAD_SIGNATURE;
+          goto leave;
+      }
+
+      /* Compare the raw decrypted signature with the expected data */
+      /* Flip the expected data and my data to compare */
+      if (!_wc_gcrypt_compare_data(myData, myDataLen, expectedData, expectedDataLen)) {
+          XFREE(myData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+          rc = GPG_ERR_BAD_SIGNATURE;
+          goto leave;
+      }
+
+      /* Free the allocated buffer */
+      XFREE(myData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    break;
+   #if 0
     case PUBKEY_ENC_OAEP:
-    case PUBKEY_ENC_PSS:
     default:
       /* libgcrypt implementation */
       result = mpi_new (0);
@@ -2993,6 +3125,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       else
         rc = mpi_cmp (result, data) ? GPG_ERR_BAD_SIGNATURE : 0;
       break;
+    #endif
   }
 
 
