@@ -2843,6 +2843,26 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   gcry_sexp_t swap_info = NULL;
   int testparms = 0;
 
+
+  /* wolfSSL Variables */
+  RsaKey rsaKey;
+  RNG rng;
+  long e = 0;
+  int bits = 0;
+  byte* wc_e = NULL;
+  byte* wc_n = NULL;
+  byte* wc_d = NULL;
+  byte* wc_p = NULL;
+  byte* wc_q = NULL;
+  byte* wc_u = NULL;
+  word32 wc_e_len = 0;
+  word32 wc_n_len = 0;
+  word32 wc_d_len = 0;
+  word32 wc_p_len = 0;
+  word32 wc_q_len = 0;
+  word32 wc_u_len = 0;
+
+
   memset (&sk, 0, sizeof sk);
 
   ec = _gcry_pk_util_get_nbits (genparms, &nbits);
@@ -2852,6 +2872,23 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   ec = _gcry_pk_util_get_rsa_use_e (genparms, &evalue);
   if (ec)
     return ec;
+
+ /* Convert unsigned long to long */
+    if (evalue > LONG_MAX) {
+        /* Handle overflow - clamp to maximum */
+        e = LONG_MAX;
+    }
+    else {
+        e = (long)evalue;
+    }
+
+    /* convert unsigned int to int */
+    if (nbits > INT_MAX) {
+        bits = INT_MAX;
+    }
+    else {
+        bits = (int)nbits;
+    }
 
   /* Parse the optional flags list.  */
   l1 = sexp_find_token (genparms, "flags", 0);
@@ -2884,10 +2921,12 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
           sexp_release (deriveparms);
           return GPG_ERR_INV_SEXP;
         }
-      ec = generate_x931 (&sk, nbits, evalue, deriveparms, &swapped);
-      sexp_release (deriveparms);
-      if (!ec && swapped)
-        ec = sexp_new (&swap_info, "(misc-key-info(p-q-swapped))", 0, 1);
+    else
+        {
+          sexp_release (deriveparms);
+          return GPG_ERR_INV_SEXP;
+        }
+
     }
   else
     {
@@ -2907,16 +2946,160 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
         testparms = 1;
 
       /* Generate.  */
-      if (deriveparms || fips_mode ())
-        {
-          ec = generate_fips (&sk, nbits, evalue, deriveparms,
-                              !!(flags & PUBKEY_FLAG_TRANSIENT_KEY));
-        }
-      else
-        {
-          ec = generate_std (&sk, nbits, evalue,
-                             !!(flags & PUBKEY_FLAG_TRANSIENT_KEY));
-        }
+      /* Initialize RNG */
+      ec = wc_InitRng(&rng);
+      if (ec) {
+        return ec;
+      }
+
+      /* Initialize Key */
+      ec = wc_InitRsaKey(&rsaKey, NULL);
+      if (ec) {
+        return ec;
+      }
+
+      /* WolfSSL Key Generation */
+      ec = wc_MakeRsaKey(&rsaKey, bits, e, &rng);
+      if (ec) {
+        return ec;
+      }
+
+      /* Get all sizes */
+      wc_e_len = (word32)mp_unsigned_bin_size(&rsaKey.e);
+      wc_n_len = (word32)mp_unsigned_bin_size(&rsaKey.n);
+      wc_d_len = (word32)mp_unsigned_bin_size(&rsaKey.d);
+      wc_p_len = (word32)mp_unsigned_bin_size(&rsaKey.p);
+      wc_q_len = (word32)mp_unsigned_bin_size(&rsaKey.q);
+      wc_u_len = (word32)mp_unsigned_bin_size(&rsaKey.u);
+
+
+
+      /* Allocate memory for wolfSSL Key */
+      wc_e = (byte*)XMALLOC(wc_e_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_e == NULL) {
+        return GPG_ERR_ENOMEM;
+      }
+
+      wc_n = (byte*)XMALLOC(wc_n_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_n == NULL) {
+        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        return GPG_ERR_ENOMEM;
+      }
+
+      wc_d = (byte*)XMALLOC(wc_d_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_d == NULL) {
+        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+        return GPG_ERR_ENOMEM;
+      }
+
+      wc_p = (byte*)XMALLOC(wc_p_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_p == NULL) {
+        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
+        return GPG_ERR_ENOMEM;
+      }
+
+      wc_q = (byte*)XMALLOC(wc_q_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_q == NULL) {
+        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
+        return GPG_ERR_ENOMEM;
+      }
+
+      wc_u = (byte*)XMALLOC(wc_u_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_u == NULL) {
+        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
+        return GPG_ERR_ENOMEM;
+      }
+
+      /* Convert wolfSSL Key to libgcrypt Key */
+      ec = wc_RsaExportKey(&rsaKey,
+                            wc_e, wc_e_len,
+                            wc_n, wc_n_len,
+                            wc_d, wc_d_len,
+                            wc_p, wc_p_len,
+                            wc_q, wc_q_len);
+      if (ec) {
+        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_u, wc_u_len, DYNAMIC_TYPE_TMP_BUFFER);
+        return ec;
+      }
+
+      ec = mp_to_unsigned_bin(&rsaKey.u, wc_u);
+      if (ec) {
+        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_u, wc_u_len, DYNAMIC_TYPE_TMP_BUFFER);
+        return ec;
+      }
+
+      /* Print everything for sanity check */
+      printf("wc_e[%d]: ", wc_e_len);
+      for (int i = 0; i < wc_e_len; i++) {
+        printf("%02X ", wc_e[i]);
+      }
+      printf("\n");
+
+      printf("wc_n[%d]: ", wc_n_len);
+      for (int i = 0; i < wc_n_len; i++) {
+        printf("%02X ", wc_n[i]);
+      }
+      printf("\n");
+
+      printf("wc_d[%d]: ", wc_d_len);
+      for (int i = 0; i < wc_d_len; i++) {
+        printf("%02X ", wc_d[i]);
+      }
+      printf("\n");
+
+      printf("wc_p[%d]: ", wc_p_len);
+      for (int i = 0; i < wc_p_len; i++) {
+        printf("%02X ", wc_p[i]);
+      }
+      printf("\n");
+
+      printf("wc_q[%d]: ", wc_q_len);
+      for (int i = 0; i < wc_q_len; i++) {
+        printf("%02X ", wc_q[i]);
+      }
+      printf("\n");
+
+      printf("wc_u[%d]: ", wc_u_len);
+      for (int i = 0; i < wc_u_len; i++) {
+        printf("%02X ", wc_u[i]);
+      }
+      printf("\n");
+
+
+      /* convert to libgcrypt key */
+      _gcry_mpi_scan(&sk.e, GCRYMPI_FMT_USG, wc_e, wc_e_len, NULL);
+      _gcry_mpi_scan(&sk.n, GCRYMPI_FMT_USG, wc_n, wc_n_len, NULL);
+      _gcry_mpi_scan(&sk.d, GCRYMPI_FMT_USG, wc_d, wc_d_len, NULL);
+      _gcry_mpi_scan(&sk.p, GCRYMPI_FMT_USG, wc_p, wc_p_len, NULL);
+      _gcry_mpi_scan(&sk.q, GCRYMPI_FMT_USG, wc_q, wc_q_len, NULL);
+      _gcry_mpi_scan(&sk.u, GCRYMPI_FMT_USG, wc_u, wc_u_len, NULL);
+
+      XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_u, wc_u_len, DYNAMIC_TYPE_TMP_BUFFER);
       sexp_release (deriveparms);
     }
 
