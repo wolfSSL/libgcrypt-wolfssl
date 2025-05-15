@@ -35,7 +35,7 @@
 #include "pubkey-internal.h"
 #include "const-time.h"
 
-//#undef HAVE_WOLFSSL
+#define HAVE_WOLFSSL
 
 #ifdef HAVE_WOLFSSL
 #include <wolfssl/options.h>
@@ -2201,29 +2201,15 @@ int wc_gcrypt_RsaPrivateKeyDecodeRaw(const byte* n, word32 nSz,
         const byte* dQ, word32 dQSz, RsaKey* key)
 {
     int err = MP_OKAY;
+    /* Needed for swapping p and q if p < q */
+    int i = 0;
+    byte* p_prime = NULL;
+    byte* q_prime = NULL;
 
     if (n == NULL || nSz == 0 || e == NULL || eSz == 0
-            || d == NULL || dSz == 0 || p == NULL || pSz == 0
-            || q == NULL || qSz == 0 || key == NULL) {
+            || d == NULL || dSz == 0 || key == NULL) {
         err = -1;
     }
-
-#if defined(WOLFSSL_KEY_GEN) || defined(OPENSSL_EXTRA) || !defined(RSA_LOW_MEM)
-    if (err == MP_OKAY) {
-        if ((u == NULL || uSz == 0)
-                || (dP != NULL && dPSz == 0)
-                || (dQ != NULL && dQSz == 0)) {
-            err = -1;
-        }
-    }
-#else
-    (void)u;
-    (void)uSz;
-    (void)dP;
-    (void)dPSz;
-    (void)dQ;
-    (void)dQSz;
-#endif
 
     if (err == MP_OKAY)
         err = mp_read_unsigned_bin(&key->n, n, nSz);
@@ -2231,26 +2217,81 @@ int wc_gcrypt_RsaPrivateKeyDecodeRaw(const byte* n, word32 nSz,
         err = mp_read_unsigned_bin(&key->e, e, eSz);
     if (err == MP_OKAY)
         err = mp_read_unsigned_bin(&key->d, d, dSz);
-    if (err == MP_OKAY)
-        err = mp_read_unsigned_bin(&key->p, p, pSz);
-    if (err == MP_OKAY)
-        err = mp_read_unsigned_bin(&key->q, q, qSz);
-#if defined(WOLFSSL_KEY_GEN)
-    if (err == MP_OKAY)
-        err = mp_read_unsigned_bin(&key->u, u, uSz);
-    if (err == MP_OKAY) {
-        if (dP != NULL)
-            err = mp_read_unsigned_bin(&key->dP, dP, dPSz);
-        else
-            err = wc_gcrypt_CalcDX(&key->dP, &key->p, &key->d);
+
+    /* Check if p and q are NULL */
+    /* If they are then we assume user wants to use STD for computation of RSA*/
+    if (p == NULL || q == NULL || u == NULL) {
+        /* Zero out p, q and u along with dP and dQ */
+        if (err == MP_OKAY)
+            err = mp_set_int(&key->p, 0);
+        if (err == MP_OKAY)
+            err = mp_set_int(&key->q, 0);
+    #ifdef WOLFSSL_KEY_GEN
+        if (err == MP_OKAY)
+            err = mp_set_int(&key->u, 0);
+        if (err == MP_OKAY)
+            err = mp_set_int(&key->dP, 0);
+        if (err == MP_OKAY)
+            err = mp_set_int(&key->dQ, 0);
+    #endif
     }
-    if (err == MP_OKAY) {
-        if (dQ != NULL)
-            err = mp_read_unsigned_bin(&key->dQ, dQ, dQSz);
-        else
-            err = wc_gcrypt_CalcDX(&key->dQ, &key->q, &key->d);
+    else {
+    /* Swap p and q if p < q */
+    /* MSB is position 0 so compare starting at MSB */
+    /* is p's MSB greater than q's MSB then the p's whole number is greater */
+    /* if p's MSB is less than q's MSB then q's whole number is greater */
+    /* if p's MSB is equal to q's MSB, compare the next most significant bit */
+    /* continue until a difference is found or all bits are compared */
+        if (pSz == qSz) {
+            for (i = 0; i < pSz; i++) {
+                /* check if p > q*/
+                if (p[i] > q[i]) {
+                    p_prime = p;
+                    q_prime = q;
+                    break;
+                }
+                /* check if p < q */
+                /* then swap p and q */
+                else if (p[i] < q[i]) {
+                    p_prime = q;
+                    q_prime = p;
+                    break;
+                }
+                /* if p == q, continue */
+            }
+        }
+        else if (pSz < qSz) {
+            /* p is smaller than q, so swap p and q */
+            p_prime = q;
+            q_prime = p;
+        }
+        else {
+            /* p is smaller than q, so swap p and q */
+            p_prime = q;
+            q_prime = p;
+        }
+
+        if (err == MP_OKAY)
+            err = mp_read_unsigned_bin(&key->p, p_prime, pSz);
+        if (err == MP_OKAY)
+            err = mp_read_unsigned_bin(&key->q, q_prime, qSz);
+    #if defined(WOLFSSL_KEY_GEN)
+        if (err == MP_OKAY)
+            err = mp_read_unsigned_bin(&key->u, u, uSz);
+        if (err == MP_OKAY) {
+            if (dP != NULL)
+                err = mp_read_unsigned_bin(&key->dP, dP, dPSz);
+            else
+                err = wc_gcrypt_CalcDX(&key->dP, &key->p, &key->d);
+        }
+        if (err == MP_OKAY) {
+            if (dQ != NULL)
+                err = mp_read_unsigned_bin(&key->dQ, dQ, dQSz);
+            else
+                err = wc_gcrypt_CalcDX(&key->dQ, &key->q, &key->d);
+        }
+    #endif
     }
-#endif
 
     if (err == MP_OKAY) {
         key->type = RSA_PRIVATE;
@@ -2585,7 +2626,7 @@ _gcryp_rsa_key_to_wolfssl_rsa_key(RSA_public_key *pk, RsaKey *wcRsaKey)
 static int
 _gcryp_rsa_key_to_wolfssl_rsa_private_key(RSA_secret_key *sk, RsaKey *wcRsaKey)
 {
-  int ret;
+  int ret = 0;
 
   byte* myKey_mod_n = NULL;
   byte* myKey_exp_e = NULL;
@@ -2594,12 +2635,12 @@ _gcryp_rsa_key_to_wolfssl_rsa_private_key(RSA_secret_key *sk, RsaKey *wcRsaKey)
   byte* myKey_prime_q = NULL;
   byte* myKey_u = NULL;
 
-  size_t myKey_mod_n_len;
-  size_t myKey_exp_e_len;
-  size_t myKey_exp_d_len;
-  size_t myKey_prime_p_len;
-  size_t myKey_prime_q_len;
-  size_t myKey_u_len;
+  size_t myKey_mod_n_len = 0;
+  size_t myKey_exp_e_len = 0;
+  size_t myKey_exp_d_len = 0;
+  size_t myKey_prime_p_len = 0;
+  size_t myKey_prime_q_len = 0;
+  size_t myKey_u_len = 0;
 
 #define DEBUG_PRINT_MPI 0
 
@@ -2652,12 +2693,15 @@ for (int i = 0; i < myKey_exp_d_len; i++) {
 printf("\n");
 #endif
 /* Get prime p */
-ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &myKey_prime_p, &myKey_prime_p_len, sk->p);
-if (ret != 0) {
-  if (myKey_mod_n) _gcry_free(myKey_mod_n);
-  if (myKey_exp_e) _gcry_free(myKey_exp_e);
-  if (myKey_exp_d) _gcry_free(myKey_exp_d);
-  return ret;
+if (sk->p != NULL) {
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &myKey_prime_p,
+                                &myKey_prime_p_len, sk->p);
+    if (ret != 0) {
+        if (myKey_mod_n) _gcry_free(myKey_mod_n);
+        if (myKey_exp_e) _gcry_free(myKey_exp_e);
+        if (myKey_exp_d) _gcry_free(myKey_exp_d);
+        return ret;
+    }
 }
 
 #if DEBUG_PRINT_MPI
@@ -2670,13 +2714,16 @@ for (int i = 0; i < myKey_prime_p_len; i++) {
 printf("\n");
 #endif
 /* Get prime q */
-ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &myKey_prime_q, &myKey_prime_q_len, sk->q);
-if (ret != 0) {
-  if (myKey_mod_n) _gcry_free(myKey_mod_n);
-  if (myKey_exp_e) _gcry_free(myKey_exp_e);
-  if (myKey_exp_d) _gcry_free(myKey_exp_d);
-  if (myKey_prime_p) _gcry_free(myKey_prime_p);
-  return ret;
+if (sk->q != NULL) {
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &myKey_prime_q,
+                                &myKey_prime_q_len, sk->q);
+    if (ret != 0) {
+        if (myKey_mod_n) _gcry_free(myKey_mod_n);
+        if (myKey_exp_e) _gcry_free(myKey_exp_e);
+        if (myKey_exp_d) _gcry_free(myKey_exp_d);
+        if (myKey_prime_p) _gcry_free(myKey_prime_p);
+        return ret;
+    }
 }
 
 #if DEBUG_PRINT_MPI
@@ -2689,14 +2736,17 @@ for (int i = 0; i < myKey_prime_q_len; i++) {
 printf("\n");
 #endif
 /* Get coefficient u (inverse of p mod q) */
-ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &myKey_u, &myKey_u_len, sk->u);
-if (ret != 0) {
-  if (myKey_mod_n) _gcry_free(myKey_mod_n);
-  if (myKey_exp_e) _gcry_free(myKey_exp_e);
-  if (myKey_exp_d) _gcry_free(myKey_exp_d);
-  if (myKey_prime_p) _gcry_free(myKey_prime_p);
-  if (myKey_prime_q) _gcry_free(myKey_prime_q);
-  return ret;
+if (sk->u != NULL) {
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &myKey_u,
+                                &myKey_u_len, sk->u);
+    if (ret != 0) {
+        if (myKey_mod_n) _gcry_free(myKey_mod_n);
+        if (myKey_exp_e) _gcry_free(myKey_exp_e);
+        if (myKey_exp_d) _gcry_free(myKey_exp_d);
+        if (myKey_prime_p) _gcry_free(myKey_prime_p);
+        if (myKey_prime_q) _gcry_free(myKey_prime_q);
+        return ret;
+    }
 }
 
 #if DEBUG_PRINT_MPI
@@ -2715,8 +2765,8 @@ ret = wc_gcrypt_RsaPrivateKeyDecodeRaw(myKey_mod_n, myKey_mod_n_len,
                                         myKey_exp_e, myKey_exp_e_len,
                                         myKey_exp_d, myKey_exp_d_len,
                                         myKey_u, myKey_u_len,
-                                        myKey_prime_q, myKey_prime_q_len,
                                         myKey_prime_p, myKey_prime_p_len,
+                                        myKey_prime_q, myKey_prime_q_len,
                                         NULL, 0,
                                         NULL, 0,
                                         wcRsaKey);
@@ -2729,12 +2779,30 @@ ret = rsa_check_verify_keysize(wc_RsaEncryptSize(wcRsaKey)*8);
 
 /* Free everything when done */
 #if 1
-if (myKey_mod_n) _gcry_free(myKey_mod_n);
-if (myKey_exp_e) _gcry_free(myKey_exp_e);
-if (myKey_exp_d) _gcry_free(myKey_exp_d);
-if (myKey_prime_p) _gcry_free(myKey_prime_p);
-if (myKey_prime_q) _gcry_free(myKey_prime_q);
-if (myKey_u) _gcry_free(myKey_u);
+if (myKey_mod_n) {
+  _gcry_free(myKey_mod_n);
+}
+if (myKey_exp_e) {
+  _gcry_free(myKey_exp_e);
+}
+if (myKey_exp_d) {
+  _gcry_free(myKey_exp_d);
+}
+if (sk->p != NULL) {
+  if (myKey_prime_p) {
+    _gcry_free(myKey_prime_p);
+  }
+}
+if (sk->q != NULL) {
+  if (myKey_prime_q) {
+    _gcry_free(myKey_prime_q);
+  }
+}
+if (sk->u != NULL) {
+  if (myKey_u) {
+    _gcry_free(myKey_u);
+  }
+}
 #endif
 return ret;
 
@@ -3209,7 +3277,7 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Now pass the key to wolfssl */
   rc = _gcryp_rsa_key_to_wolfssl_rsa_private_key(&sk, &wcRsaKey);
   if (rc) {
-    printf("Error passing key to wolfssl\n");
+    printf("Error passing key to wolfssl: %d\n", rc);
     goto leave;
   }
 
@@ -3233,6 +3301,8 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   inputDataBlock = (byte*)XMALLOC(inputDataBlockLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   if (inputDataBlock == NULL) {
     rc = GPG_ERR_INV_OBJ;
+    /* Use to identify if the input data block is not allocated */
+    inputDataBlockLen = 0;
     goto leave;
   }
   XMEMSET(inputDataBlock, 0, inputDataBlockLen);
@@ -3253,6 +3323,8 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   outputSig = (byte*)XMALLOC(outputSigLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   if (outputSig == NULL) {
     rc = GPG_ERR_INV_OBJ;
+    /* Use to identify if the output signature is not allocated */
+    outputSigLen = 0;
     goto leave;
   }
   XMEMSET(outputSig, 0, outputSigLen);
@@ -3289,14 +3361,8 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       break;
 
     default:
-      sig = mpi_new (0);
-      if ((ctx.flags & PUBKEY_FLAG_NO_BLINDING))
-        secret (sig, data, &sk);
-      else
-        secret_blinded (sig, data, &sk, nbits);
-      if (DBG_CIPHER)
-        log_printmpi ("rsa_sign    res", sig);
-
+        rc = GPG_ERR_BAD_SIGNATURE;
+        goto leave;
       break;
 
   }
@@ -3341,14 +3407,14 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     wc_FreeRsaKey(&wcRsaKey);
     wc_FreeRng(&rng);
   }
-  if (inputData != NULL) {
-    //XFREE(inputData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (inputDataLen != 0) {
+    XFREE(inputData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
-  if (inputDataBlock != NULL) {
-    //XFREE(inputDataBlock, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (inputDataBlockLen != 0) {
+    XFREE(inputDataBlock, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
-  if (outputSig != NULL) {
-    //XFREE(outputSig, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (outputSigLen != 0) {
+    XFREE(outputSig, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
 
   _gcry_mpi_release (result);
@@ -3746,12 +3812,12 @@ gcry_pk_spec_t _wc_pubkey_spec_rsa =
     (GCRY_PK_USAGE_SIGN | GCRY_PK_USAGE_ENCR),
     "RSA", rsa_names,
     "ne", "nedpqu", "a", "s", "n",
-    rsa_generate,
+    wc_rsa_generate,
     rsa_check_secret_key,
     rsa_encrypt,
     rsa_decrypt,
-    wc_rsa_sign,
-    rsa_verify,
+    rsa_sign, /* wc works */
+    rsa_verify, /* wc works */
     rsa_get_nbits,
     run_selftests,
     compute_keygrip
