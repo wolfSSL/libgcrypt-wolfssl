@@ -25,6 +25,7 @@
 
 #ifdef HAVE_WOLFSSL
 #include "wolfssl/wolfcrypt/hmac.h"
+#include "wolfssl/wolfcrypt/cmac.h"
 #include "wolfssl/wolfcrypt/aes.h"
 #endif
 
@@ -120,7 +121,9 @@ struct gcry_mac_handle
   size_t authIn_len;
   byte* authTag;
   size_t authTag_len;
+  int authTagUpdated;
   Gmac aesGmac;
+  Cmac aesCmac;
 #endif
   union {
     struct {

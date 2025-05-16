@@ -28,6 +28,13 @@
 #include "cipher.h"
 #include "./mac-internal.h"
 
+#ifdef HAVE_WOLFSSL
+#include "bufhelp.h"
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/aes.h>
+#endif
+
 
 static int
 map_mac_algo_to_cipher (int mac_algo)
@@ -451,6 +458,127 @@ static gcry_mac_spec_ops_t cmac_ops = {
   cmac_selftest
 };
 
+#ifdef HAVE_WOLFSSL
+
+static void
+wc_aes_cmac_close (gcry_mac_hd_t h)
+{
+  if (h->key) {
+    free(h->key);
+    h->key = NULL;
+  }
+
+  if (h->authTag) {
+    free(h->authTag);
+    h->authTag = NULL;
+  }
+
+  wc_CmacFree(&h->aesCmac);
+
+  _gcry_cipher_close (h->u.cmac.ctx);
+  h->u.cmac.ctx = NULL;
+}
+
+static gcry_err_code_t
+wc_aes_cmac_setkey (gcry_mac_hd_t h, const unsigned char *key, size_t keylen)
+{
+  if (h->key == NULL) {
+    h->key = calloc(keylen, sizeof *h->key);
+    if (h->key == NULL) {
+      return GPG_ERR_ENOMEM;
+    }
+
+    memcpy(h->key, key, keylen);
+    h->key_len = keylen;
+  }
+  return wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL);
+}
+
+static gcry_err_code_t
+wc_aes_cmac_reset (gcry_mac_hd_t h)
+{
+  gcry_err_code_t ret;
+  ret = _gcry_cipher_reset (h->u.cmac.ctx);
+  if (ret)
+    return ret;
+
+  memset(h->authTag, 0, h->authTag_len);
+  wc_CmacFree(&h->aesCmac);
+  return wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL);
+}
+
+static gcry_err_code_t
+wc_aes_cmac_write (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
+{
+  if (h->authTag == NULL) {
+    h->authTag = calloc(WC_AES_BLOCK_SIZE, sizeof *h->authTag);
+    h->authTag_len = WC_AES_BLOCK_SIZE * (sizeof *h->authTag);
+    if (h->authTag == NULL) {
+      return GPG_ERR_ENOMEM;
+    }
+  }
+  h->authTagUpdated = 1;
+  return wc_CmacUpdate(&h->aesCmac, buf, buflen);
+}
+
+
+static gcry_err_code_t
+wc_aes_cmac_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
+{
+  if (!outbuf || *outlen == 0 || !h->authTag)
+    return GPG_ERR_INV_ARG;
+
+  if (*outlen > h->authTag_len)
+    *outlen = h->authTag_len;
+
+  if (h->authTagUpdated) {
+    wc_CmacFinalNoFree(&h->aesCmac, h->authTag, &h->authTag_len);
+    h->authTagUpdated = 0;
+  }
+  memcpy(outbuf, h->authTag, *outlen);
+  return GPG_ERR_NO_ERROR;
+}
+
+
+static gcry_err_code_t
+wc_aes_cmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
+{
+  if (!buf || buflen == 0)
+    return GPG_ERR_INV_ARG;
+
+  if (h->authTag == NULL) {
+    h->authTag = calloc(WC_AES_BLOCK_SIZE, sizeof *h->authTag);
+    h->authTag_len = WC_AES_BLOCK_SIZE * (sizeof *h->authTag);
+    if (h->authTag == NULL) {
+      return GPG_ERR_ENOMEM;
+    }
+
+  }
+
+  wc_CmacFinalNoFree(&h->aesCmac, h->authTag, &h->authTag_len);
+  h->authTagUpdated = 0;
+
+  return buf_eq_const(buf, h->authTag, buflen) ?
+    GPG_ERR_NO_ERROR : GPG_ERR_CHECKSUM;
+}
+
+
+static gcry_mac_spec_ops_t wc_aes_cmac_ops = {
+  cmac_open,
+  wc_aes_cmac_close,
+  wc_aes_cmac_setkey,
+  NULL,
+  wc_aes_cmac_reset,
+  wc_aes_cmac_write,
+  wc_aes_cmac_read,
+  wc_aes_cmac_verify,
+  cmac_get_maclen,
+  cmac_get_keylen,
+  NULL,
+  cmac_selftest
+};
+
+#endif /* HAVE_WOLFSSL */
 
 #if USE_BLOWFISH
 const gcry_mac_spec_t _gcry_mac_type_spec_cmac_blowfish = {
@@ -471,10 +599,18 @@ const gcry_mac_spec_t _gcry_mac_type_spec_cmac_cast5 = {
 };
 #endif
 #if USE_AES
+#ifdef HAVE_WOLFSSL
+const gcry_mac_spec_t _gcry_mac_type_spec_cmac_aes = {
+  GCRY_MAC_CMAC_AES, {0, 1}, "CMAC_AES",
+  &wc_aes_cmac_ops
+};
+
+#else
 const gcry_mac_spec_t _gcry_mac_type_spec_cmac_aes = {
   GCRY_MAC_CMAC_AES, {0, 1}, "CMAC_AES",
   &cmac_ops
 };
+#endif
 #endif
 #if USE_TWOFISH
 const gcry_mac_spec_t _gcry_mac_type_spec_cmac_twofish = {
