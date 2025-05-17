@@ -3393,13 +3393,58 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Allocate MPI for the plaintext.  */
   plain = mpi_snew (nbits);
 
-  /* We use blinding by default to mitigate timing attacks which can
-     be practically mounted over the network as shown by Brumley and
-     Boney in 2003.  */
-  if ((ctx.flags & PUBKEY_FLAG_NO_BLINDING))
-    secret (plain, data, &sk);
-  else
-    secret_blinded (plain, data, &sk, nbits);
+
+  /* wolfSSL takes over here */
+  ret = wc_InitRsaKey(&wcRsaKey, NULL);
+  if (ret != 0) {
+    rc = GPG_ERR_INV_OBJ;
+    goto leave;
+  }
+  wolf = 1;
+
+  /* Pass to general function to get wolfssl rsa key */
+  rc = _gcryp_rsa_key_to_wolfssl_rsa_private_key(&sk, &wcRsaKey);
+  if (rc) {
+    goto leave;
+  }
+
+  rc = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &inputData, &inputDataLen, data);
+  if (rc) {
+    goto leave;
+  }
+
+
+  /* Allocate memory for plain data */
+  plainData = (byte*)XMALLOC(nbits/8, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (plainData == NULL) {
+    rc = GPG_ERR_ENOMEM;
+    goto leave;
+  }
+  plainDataLen = (nbits/8);
+  XMEMSET(plainData, 0, plainDataLen);
+
+  inputDataBlock = (byte*)XMALLOC(nbits/8, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (inputDataBlock == NULL) {
+    rc = GPG_ERR_ENOMEM;
+    goto leave;
+  }
+  inputDataBlockLen = (nbits/8);
+  XMEMSET(inputDataBlock, 0, inputDataBlockLen);
+
+  /* Copy the input data to the input data block */
+  /* Copy so that data is right aligned */
+  memcpy(inputDataBlock + (inputDataBlockLen - inputDataLen), inputData, inputDataLen);
+
+  /* Decrypt the data */
+  ret = wc_RsaDirect(inputDataBlock, inputDataBlockLen, plainData, &plainDataLen, &wcRsaKey, RSA_PRIVATE_DECRYPT, NULL);
+  if (ret != (nbits/8)) {
+    rc = GPG_ERR_INV_OBJ;
+    goto leave;
+  }
+
+  /* Convert the output plain data to mpi */
+  _gcry_mpi_scan(&plain, GCRYMPI_FMT_USG, plainData, plainDataLen, NULL);
+
 
   if (DBG_CIPHER)
     log_printmpi ("rsa_decrypt  res", plain);
@@ -3443,6 +3488,18 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     }
 
  leave:
+
+  if (wolf) {
+    wc_FreeRsaKey(&wcRsaKey);
+  }
+  if (inputDataLen != 0) {
+    XFREE(inputData, inputDataLen, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (inputDataBlockLen != 0) {
+    XFREE(inputDataBlock, inputDataBlockLen, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+
+
   xfree (unpad);
   _gcry_mpi_release (plain);
   _gcry_mpi_release (sk.n);
@@ -3459,256 +3516,6 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   return rc;
 }
 
-static gcry_err_code_t
-wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
-{
-  gpg_err_code_t rc;
-  struct pk_encoding_ctx ctx;
-  gcry_mpi_t data = NULL;
-  RSA_secret_key sk = {NULL, NULL, NULL, NULL, NULL, NULL};
-  RSA_public_key pk;
-  gcry_mpi_t sig = NULL;
-  gcry_mpi_t result = NULL;
-  unsigned int nbits = rsa_get_nbits (keyparms);
-  gcry_mpi_t myMpiSig = NULL;
-
-  /* wolfssl variables */
-
-  /* local return for wolfssl functions */
-  int ret = 0;
-  int wolf = 0;
-
-  /* RNG and RSA structs */
-  WC_RNG rng;
-  RsaKey wcRsaKey;
-
-  /* data buffers for wolfssl */
-  byte* inputData = NULL;
-  size_t inputDataLen = 0;
-
-  /* block of data aligned with key size */
-  byte* inputDataBlock = NULL;
-  size_t inputDataBlockLen = 0;
-
-  /* output signature */
-  byte* outputSig = NULL;
-  size_t outputSigLen = 0;
-
-  rc = rsa_check_keysize (nbits);
-  if (rc)
-    return rc;
-
-  _gcry_pk_util_init_encoding_ctx (&ctx, PUBKEY_OP_SIGN, nbits);
-
-  /* Extract the data.  */
-  rc = _gcry_pk_util_data_to_mpi (s_data, &data, &ctx);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    log_printmpi ("rsa_sign   data", data);
-  if (mpi_is_opaque (data))
-    {
-      rc = GPG_ERR_INV_DATA;
-      goto leave;
-    }
-
-  /* Extract the key.  */
-  rc = sexp_extract_param (keyparms, NULL, "nedp?q?u?",
-                           &sk.n, &sk.e, &sk.d, &sk.p, &sk.q, &sk.u,
-                           NULL);
-  if (rc)
-    goto leave;
-  if (DBG_CIPHER)
-    {
-      log_printmpi ("rsa_sign      n", sk.n);
-      log_printmpi ("rsa_sign      e", sk.e);
-      if (!fips_mode ())
-        {
-          log_printmpi ("rsa_sign      d", sk.d);
-          log_printmpi ("rsa_sign      p", sk.p);
-          log_printmpi ("rsa_sign      q", sk.q);
-          log_printmpi ("rsa_sign      u", sk.u);
-        }
-    }
-
-  /* Do RSA computation.  */
-
-  /* wolfSSL takes over here */
-
-  /* Initialize wolfssl rng */
-  ret = wc_InitRng(&rng);
-  if (ret != 0) {
-    rc = GPG_ERR_INV_OBJ;
-    printf("Error initializing wolfssl rng\n");
-    goto leave;
-  }
-
-  /* Initialize wolfssl rsa key */
-  ret = wc_InitRsaKey(&wcRsaKey, 0);
-  if (ret != 0) {
-    rc = GPG_ERR_INV_OBJ;
-    wc_FreeRng(&rng);
-    printf("Error initializing wolfssl rsa key\n");
-    goto leave;
-  }
-
-  /* Now pass the key to wolfssl */
-  rc = _gcryp_rsa_key_to_wolfssl_rsa_private_key(&sk, &wcRsaKey);
-  if (rc) {
-    printf("Error passing key to wolfssl: %d\n", rc);
-    goto leave;
-  }
-
-  wolf = 1;
-
-  /* Expected data so we can compare */
-  rc = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &inputData, &inputDataLen, data);
-  if (rc) {
-    goto leave;
-  }
-
-  #ifdef GCRY_WC_RSA_DEBUG
-  printf("Input data[%d]:\n", inputDataLen);
-  for (int i = 0; i < inputDataLen; i++) {
-    printf("%02X ", inputData[i]);
-  }
-  printf("\n");
-  #endif
-
-  inputDataBlockLen = (nbits/8);
-  inputDataBlock = (byte*)XMALLOC(inputDataBlockLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  if (inputDataBlock == NULL) {
-    rc = GPG_ERR_INV_OBJ;
-    /* Use to identify if the input data block is not allocated */
-    inputDataBlockLen = 0;
-    goto leave;
-  }
-  XMEMSET(inputDataBlock, 0, inputDataBlockLen);
-
-  /* Copy the input data to the block and account for mp conversion */
-  XMEMCPY(inputDataBlock+(inputDataBlockLen-inputDataLen), inputData, inputDataLen);
-
-  #ifdef GCRY_WC_RSA_DEBUG
-  printf("Input data block[%d]:\n", inputDataBlockLen);
-  for (int i = 0; i < inputDataBlockLen; i++) {
-    printf("%02X ", inputDataBlock[i]);
-  }
-  printf("\n");
-  #endif
-
-  /* output signature */
-  outputSigLen = (nbits/8);
-  outputSig = (byte*)XMALLOC(outputSigLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  if (outputSig == NULL) {
-    rc = GPG_ERR_INV_OBJ;
-    /* Use to identify if the output signature is not allocated */
-    outputSigLen = 0;
-    goto leave;
-  }
-  XMEMSET(outputSig, 0, outputSigLen);
-
-  /* set mpi for sig */
-  sig = mpi_new (0);
-
-  switch(ctx.encoding) {
-    case PUBKEY_ENC_PKCS1:
-    case PUBKEY_ENC_PKCS1_RAW:
-    case PUBKEY_ENC_RAW:
-    case PUBKEY_ENC_PSS:
-    case PUBKEY_ENC_OAEP:
-      /* Comes prepadded and encoded/hashed */
-      ret = wc_RsaDirect(inputDataBlock, inputDataBlockLen,
-                          outputSig, &outputSigLen,
-                          &wcRsaKey, RSA_PRIVATE_ENCRYPT,
-                          &rng);
-      if (ret < 0) {
-        rc = GPG_ERR_BAD_SIGNATURE;
-        goto leave;
-      }
-      #ifdef GCRY_WC_RSA_DEBUG
-      printf("Output signature[%d]:\n", outputSigLen);
-      for (int i = 0; i < outputSigLen; i++) {
-        printf("%02X ", outputSig[i]);
-      }
-      printf("\n");
-      #endif
-
-      /* Convert the output signature to mpi */
-      _gcry_mpi_scan(&sig, GCRYMPI_FMT_USG, outputSig, outputSigLen, NULL);
-
-      break;
-
-    default:
-        rc = GPG_ERR_BAD_SIGNATURE;
-        goto leave;
-      break;
-
-  }
-    #ifdef GCRY_WC_RSA_DEBUG
-      log_printmpi ("rsa_sign    res", sig);
-    #endif
-
-      /* Check that the created signature is good.  This detects a failure
-        of the CRT algorithm  (Lenstra's attack on RSA's use of the CRT).  */
-      result = mpi_new (0);
-      pk.n = sk.n;
-      pk.e = sk.e;
-      public (result, sig, &pk);
-      if (mpi_cmp (result, data))
-        {
-          rc = GPG_ERR_BAD_SIGNATURE;
-          goto leave;
-        }
-
-      /* Convert the result.  */
-      if ((ctx.flags & PUBKEY_FLAG_FIXEDLEN))
-        {
-          /* We need to make sure to return the correct length to avoid
-            problems with missing leading zeroes.  */
-          unsigned char *em;
-          size_t emlen = (mpi_get_nbits (sk.n)+7)/8;
-
-          rc = _gcry_mpi_to_octet_string (&em, NULL, sig, emlen);
-          if (!rc)
-            {
-              rc = sexp_build (r_sig, NULL, "(sig-val(rsa(s%b)))", (int)emlen, em);
-              xfree (em);
-            }
-        }
-      else
-        rc = sexp_build (r_sig, NULL, "(sig-val(rsa(s%M)))", sig);
-
-
-
- leave:
-  if (wolf == 1) {
-    wc_FreeRsaKey(&wcRsaKey);
-    wc_FreeRng(&rng);
-  }
-  if (inputDataLen != 0) {
-    XFREE(inputData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  }
-  if (inputDataBlockLen != 0) {
-    XFREE(inputDataBlock, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  }
-  if (outputSigLen != 0) {
-    XFREE(outputSig, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  }
-
-  _gcry_mpi_release (result);
-  _gcry_mpi_release (sig);
-  _gcry_mpi_release (sk.n);
-  _gcry_mpi_release (sk.e);
-  _gcry_mpi_release (sk.d);
-  _gcry_mpi_release (sk.p);
-  _gcry_mpi_release (sk.q);
-  _gcry_mpi_release (sk.u);
-  _gcry_mpi_release (data);
-  _gcry_pk_util_free_encoding_ctx (&ctx);
-  if (DBG_CIPHER)
-    log_debug ("rsa_sign      => %s\n", gpg_strerror (rc));
-  return rc;
-}
 
 static gcry_err_code_t
 wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
@@ -3933,6 +3740,251 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   if (DBG_CIPHER)
     log_debug ("rsa_verify    => %s\n", rc?gpg_strerror (rc):"Good");
 
+  return rc;
+}
+
+
+static gcry_err_code_t
+wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
+{
+  gpg_err_code_t rc;
+  struct pk_encoding_ctx ctx;
+  gcry_mpi_t data = NULL;
+  RSA_secret_key sk = {NULL, NULL, NULL, NULL, NULL, NULL};
+  RSA_public_key pk;
+  gcry_mpi_t sig = NULL;
+  gcry_mpi_t result = NULL;
+  unsigned int nbits = rsa_get_nbits (keyparms);
+  gcry_mpi_t myMpiSig = NULL;
+
+  /* wolfssl variables */
+
+  /* local return for wolfssl functions */
+  int ret = 0;
+  int wolf = 0;
+
+  /* RNG and RSA structs */
+  WC_RNG rng;
+  RsaKey wcRsaKey;
+
+  /* data buffers for wolfssl */
+  byte* inputData = NULL;
+  size_t inputDataLen = 0;
+
+  /* block of data aligned with key size */
+  byte* inputDataBlock = NULL;
+  size_t inputDataBlockLen = 0;
+
+  /* output signature */
+  byte* outputSig = NULL;
+  size_t outputSigLen = 0;
+
+  rc = rsa_check_keysize (nbits);
+  if (rc)
+    return rc;
+
+  _gcry_pk_util_init_encoding_ctx (&ctx, PUBKEY_OP_SIGN, nbits);
+
+  /* Extract the data.  */
+  rc = _gcry_pk_util_data_to_mpi (s_data, &data, &ctx);
+  if (rc)
+    goto leave;
+  if (DBG_CIPHER)
+    log_printmpi ("rsa_sign   data", data);
+  if (mpi_is_opaque (data))
+    {
+      rc = GPG_ERR_INV_DATA;
+      goto leave;
+    }
+
+  /* Extract the key.  */
+  rc = sexp_extract_param (keyparms, NULL, "nedp?q?u?",
+                           &sk.n, &sk.e, &sk.d, &sk.p, &sk.q, &sk.u,
+                           NULL);
+  if (rc)
+    goto leave;
+  if (DBG_CIPHER)
+    {
+      log_printmpi ("rsa_sign      n", sk.n);
+      log_printmpi ("rsa_sign      e", sk.e);
+      if (!fips_mode ())
+        {
+          log_printmpi ("rsa_sign      d", sk.d);
+          log_printmpi ("rsa_sign      p", sk.p);
+          log_printmpi ("rsa_sign      q", sk.q);
+          log_printmpi ("rsa_sign      u", sk.u);
+        }
+    }
+
+  /* Do RSA computation.  */
+
+  /* wolfSSL takes over here */
+
+  /* Initialize wolfssl rng */
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    rc = GPG_ERR_INV_OBJ;
+    printf("Error initializing wolfssl rng\n");
+    goto leave;
+  }
+
+  /* Initialize wolfssl rsa key */
+  ret = wc_InitRsaKey(&wcRsaKey, 0);
+  if (ret != 0) {
+    rc = GPG_ERR_INV_OBJ;
+    wc_FreeRng(&rng);
+    printf("Error initializing wolfssl rsa key\n");
+    goto leave;
+  }
+
+  /* Now pass the key to wolfssl */
+  rc = _gcryp_rsa_key_to_wolfssl_rsa_private_key(&sk, &wcRsaKey);
+  if (rc) {
+    printf("Error passing key to wolfssl: %d\n", rc);
+    goto leave;
+  }
+
+  wolf = 1;
+
+  /* Expected data so we can compare */
+  rc = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &inputData, &inputDataLen, data);
+  if (rc) {
+    goto leave;
+  }
+
+  #ifdef GCRY_WC_RSA_DEBUG
+  printf("Input data[%d]:\n", inputDataLen);
+  for (int i = 0; i < inputDataLen; i++) {
+    printf("%02X ", inputData[i]);
+  }
+  printf("\n");
+  #endif
+
+  inputDataBlockLen = (nbits/8);
+  inputDataBlock = (byte*)XMALLOC(inputDataBlockLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (inputDataBlock == NULL) {
+    rc = GPG_ERR_INV_OBJ;
+    /* Use to identify if the input data block is not allocated */
+    inputDataBlockLen = 0;
+    goto leave;
+  }
+  XMEMSET(inputDataBlock, 0, inputDataBlockLen);
+
+  /* Copy the input data to the block and account for mp conversion */
+  XMEMCPY(inputDataBlock+(inputDataBlockLen-inputDataLen), inputData, inputDataLen);
+
+  #ifdef GCRY_WC_RSA_DEBUG
+  printf("Input data block[%d]:\n", inputDataBlockLen);
+  for (int i = 0; i < inputDataBlockLen; i++) {
+    printf("%02X ", inputDataBlock[i]);
+  }
+  printf("\n");
+  #endif
+
+  /* output signature */
+  outputSigLen = (nbits/8);
+  outputSig = (byte*)XMALLOC(outputSigLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (outputSig == NULL) {
+    rc = GPG_ERR_INV_OBJ;
+    /* Use to identify if the output signature is not allocated */
+    outputSigLen = 0;
+    goto leave;
+  }
+  XMEMSET(outputSig, 0, outputSigLen);
+
+  /* set mpi for sig */
+  sig = mpi_new (0);
+
+  switch(ctx.encoding) {
+    case PUBKEY_ENC_PKCS1:
+    case PUBKEY_ENC_PKCS1_RAW:
+    case PUBKEY_ENC_RAW:
+    case PUBKEY_ENC_PSS:
+    case PUBKEY_ENC_OAEP:
+      /* Comes prepadded and encoded/hashed */
+      ret = wc_RsaDirect(inputDataBlock, inputDataBlockLen,
+                          outputSig, &outputSigLen,
+                          &wcRsaKey, RSA_PRIVATE_ENCRYPT,
+                          &rng);
+      if (ret < 0) {
+        rc = GPG_ERR_BAD_SIGNATURE;
+        goto leave;
+      }
+      #ifdef GCRY_WC_RSA_DEBUG
+      printf("Output signature[%d]:\n", outputSigLen);
+      for (int i = 0; i < outputSigLen; i++) {
+        printf("%02X ", outputSig[i]);
+      }
+      printf("\n");
+      #endif
+
+      /* Convert the output signature to mpi */
+      _gcry_mpi_scan(&sig, GCRYMPI_FMT_USG, outputSig, outputSigLen, NULL);
+
+      break;
+
+    default:
+        rc = GPG_ERR_BAD_SIGNATURE;
+        goto leave;
+      break;
+
+  }
+    #ifdef GCRY_WC_RSA_DEBUG
+      log_printmpi ("rsa_sign    res", sig);
+    #endif
+
+      /* Convert the result.  */
+      if ((ctx.flags & PUBKEY_FLAG_FIXEDLEN))
+        {
+          /* We need to make sure to return the correct length to avoid
+            problems with missing leading zeroes.  */
+          unsigned char *em;
+          size_t emlen = (mpi_get_nbits (sk.n)+7)/8;
+
+          rc = _gcry_mpi_to_octet_string (&em, NULL, sig, emlen);
+          if (!rc)
+            {
+              rc = sexp_build (r_sig, NULL, "(sig-val(rsa(s%b)))", (int)emlen, em);
+              xfree (em);
+            }
+        }
+      else
+        rc = sexp_build (r_sig, NULL, "(sig-val(rsa(s%M)))", sig);
+
+  rc = wc_rsa_verify (*r_sig, s_data, keyparms);
+  if (rc) {
+    rc = GPG_ERR_BAD_SIGNATURE;
+  }
+
+
+
+ leave:
+  if (wolf == 1) {
+    wc_FreeRsaKey(&wcRsaKey);
+    wc_FreeRng(&rng);
+  }
+  if (inputDataLen != 0) {
+    XFREE(inputData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (inputDataBlockLen != 0) {
+    XFREE(inputDataBlock, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (outputSigLen != 0) {
+    XFREE(outputSig, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+
+  _gcry_mpi_release (result);
+  _gcry_mpi_release (sig);
+  _gcry_mpi_release (sk.n);
+  _gcry_mpi_release (sk.e);
+  _gcry_mpi_release (sk.d);
+  _gcry_mpi_release (sk.p);
+  _gcry_mpi_release (sk.q);
+  _gcry_mpi_release (sk.u);
+  _gcry_mpi_release (data);
+  _gcry_pk_util_free_encoding_ctx (&ctx);
+  if (DBG_CIPHER)
+    log_debug ("rsa_sign      => %s\n", gpg_strerror (rc));
   return rc;
 }
 
