@@ -3022,11 +3022,11 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
       /* Convert wolfSSL Key to libgcrypt Key */
       ec = wc_RsaExportKey(&rsaKey,
-                            wc_e, wc_e_len,
-                            wc_n, wc_n_len,
-                            wc_d, wc_d_len,
-                            wc_p, wc_p_len,
-                            wc_q, wc_q_len);
+                            wc_e, &wc_e_len,
+                            wc_n, &wc_n_len,
+                            wc_d, &wc_d_len,
+                            wc_p, &wc_p_len,
+                            wc_q, &wc_q_len);
       if (ec) {
         XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
         XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
@@ -3048,50 +3048,12 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
         return ec;
       }
 
-      /* Print everything for sanity check */
-      printf("wc_e[%d]: ", wc_e_len);
-      for (int i = 0; i < wc_e_len; i++) {
-        printf("%02X ", wc_e[i]);
-      }
-      printf("\n");
-
-      printf("wc_n[%d]: ", wc_n_len);
-      for (int i = 0; i < wc_n_len; i++) {
-        printf("%02X ", wc_n[i]);
-      }
-      printf("\n");
-
-      printf("wc_d[%d]: ", wc_d_len);
-      for (int i = 0; i < wc_d_len; i++) {
-        printf("%02X ", wc_d[i]);
-      }
-      printf("\n");
-
-      printf("wc_p[%d]: ", wc_p_len);
-      for (int i = 0; i < wc_p_len; i++) {
-        printf("%02X ", wc_p[i]);
-      }
-      printf("\n");
-
-      printf("wc_q[%d]: ", wc_q_len);
-      for (int i = 0; i < wc_q_len; i++) {
-        printf("%02X ", wc_q[i]);
-      }
-      printf("\n");
-
-      printf("wc_u[%d]: ", wc_u_len);
-      for (int i = 0; i < wc_u_len; i++) {
-        printf("%02X ", wc_u[i]);
-      }
-      printf("\n");
-
-
       /* convert to libgcrypt key */
       _gcry_mpi_scan(&sk.e, GCRYMPI_FMT_USG, wc_e, wc_e_len, NULL);
       _gcry_mpi_scan(&sk.n, GCRYMPI_FMT_USG, wc_n, wc_n_len, NULL);
       _gcry_mpi_scan(&sk.d, GCRYMPI_FMT_USG, wc_d, wc_d_len, NULL);
-      _gcry_mpi_scan(&sk.p, GCRYMPI_FMT_USG, wc_p, wc_p_len, NULL);
-      _gcry_mpi_scan(&sk.q, GCRYMPI_FMT_USG, wc_q, wc_q_len, NULL);
+      _gcry_mpi_scan(&sk.p, GCRYMPI_FMT_USG, wc_q, wc_q_len, NULL); /* libgcrypt puts q into p */
+      _gcry_mpi_scan(&sk.q, GCRYMPI_FMT_USG, wc_p, wc_p_len, NULL); /* libgcrypt puts p into q */
       _gcry_mpi_scan(&sk.u, GCRYMPI_FMT_USG, wc_u, wc_u_len, NULL);
 
       XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
@@ -3643,6 +3605,11 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   int digestLen = 0;
   unsigned int hashValue = 0;
 
+  int isRaw = 1; /* Assume raw data for pss */
+  unsigned char *hash_value = NULL;
+  size_t hash_len = 0;
+  gcry_sexp_t hash_param = NULL;
+
 
   rc = rsa_check_verify_keysize (nbits);
   if (rc)
@@ -3720,25 +3687,10 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
   /* wolfssl rsa verify */
   switch(ctx.encoding) {
-    case PUBKEY_ENC_PKCS1_RAW:
-    case PUBKEY_ENC_PKCS1:
-      ret = wc_RsaSSL_VerifyInline(mySig, mySigLen, &myData, &wcRsaKey);
-      if (ret < 0) {
-        rc = GPG_ERR_BAD_SIGNATURE;
-        goto leave;
-      }
-
-      myDataLen = ret;
-
       /* Then compare the data */
       /* TODO: This is a temporary fix to compare the data */
       /* We should barrow the MPI compare function from libgcrypt */
       /* But need to first determine how to convert the buffer back to MPI */
-      if (!(_wc_gcrypt_compare_data(expectedData, expectedDataLen, myData, myDataLen))) {
-        rc = GPG_ERR_BAD_SIGNATURE;
-        goto leave;
-      }
-      break;
     case PUBKEY_ENC_PSS:
       digestLen = wc_HashGetDigestSize(_libgcrypt_to_wc_hash(ctx.hash_algo));
       if (digestLen < 0) {
@@ -3746,12 +3698,38 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
         goto leave;
       }
 
-      /* Create digest from the expected data */
-      ret = _wc_create_digest(expectedData, expectedDataLen, digest,
-                            digestLen, _libgcrypt_to_wc_hash(ctx.hash_algo));
-      if (ret != 0) {
-        rc = GPG_ERR_DIGEST_ALGO;
-        goto leave;
+      /* Check if the data is already hashed */
+      /* check for a hash parameter in the data */
+      /* If it is, then compare the digest to the expected data */
+      /* If it is not, then create a digest from the expected data */
+      if (expectedDataLen == digestLen) {
+        hash_param = sexp_find_token(s_data, "hash", 0);
+      }
+      else {
+        isRaw = 1;
+      }
+
+      if (hash_param) {
+        /* Data is coming as a hash */
+        hash_value = sexp_nth_data(hash_param, 2, &hash_len);
+
+        if (hash_value && hash_len == digestLen) {
+          if (memcmp(expectedData, hash_value, digestLen) == 0) {
+            memcpy(digest, hash_value, digestLen);
+            isRaw = 0;
+          }
+        }
+        sexp_release(hash_param);
+      }
+
+      if (isRaw) {
+        /* Create digest from the expected data */
+        ret = _wc_create_digest(expectedData, expectedDataLen, digest,
+                              digestLen, _libgcrypt_to_wc_hash(ctx.hash_algo));
+        if (ret != 0) {
+          rc = GPG_ERR_DIGEST_ALGO;
+          goto leave;
+        }
       }
 
       /* Verify the PSS signature */
@@ -3765,16 +3743,19 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       }
       myDataLen = ret;
 
-      /* Check the PSS padding using explicitly calculated modulus size */
-      ret = wc_RsaPSS_CheckPadding_ex2(digest, digestLen, myData, myDataLen,
+      ret = wc_RsaPSS_CheckPadding_ex(digest, digestLen, myData, myDataLen,
                                       _libgcrypt_to_wc_hash(ctx.hash_algo),
-                                      ctx.saltlen, nbits, NULL);
-      if (ret != 0) {
+                                      ctx.saltlen, nbits);
+      if (ret < 0) {
+        rc = GPG_ERR_BAD_SIGNATURE;
         goto leave;
       }
 
+      rc = 0; /* Success */
       break;
-
+    /* These cases can just use a direct public decrypt */
+    case PUBKEY_ENC_PKCS1_RAW:
+    case PUBKEY_ENC_PKCS1:
     case PUBKEY_ENC_RAW:
       /* Allocate a buffer for the output */
       myData = (byte*)XMALLOC(mySigLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -3794,33 +3775,13 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
           goto leave;
       }
 
-      /* Compare the raw decrypted signature with the expected data */
-      /* Flip the expected data and my data to compare */
-      if (!_wc_gcrypt_compare_data(myData, myDataLen, expectedData, expectedDataLen)) {
-          XFREE(myData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-          rc = GPG_ERR_BAD_SIGNATURE;
-          goto leave;
-      }
+      result = mpi_new (0);
+      _gcry_mpi_scan(&result, GCRYMPI_FMT_USG, myData, myDataLen, NULL);
+      rc = mpi_cmp (result, data) ? GPG_ERR_BAD_SIGNATURE : 0;
 
       /* Free the allocated buffer */
       XFREE(myData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     break;
-   #if 0
-    case PUBKEY_ENC_OAEP:
-    default:
-      /* libgcrypt implementation */
-      result = mpi_new (0);
-      public (result, sig, &pk);
-      if (DBG_CIPHER)
-        log_printmpi ("rsa_verify  cmp", result);
-      /* Borrow the compares from libgcrypt */
-      /* So we can return the correct error code */
-      if (ctx.verify_cmp)
-        rc = ctx.verify_cmp (&ctx, result);
-      else
-        rc = mpi_cmp (result, data) ? GPG_ERR_BAD_SIGNATURE : 0;
-      break;
-    #endif
   }
 
 
@@ -3995,12 +3956,12 @@ gcry_pk_spec_t _wc_pubkey_spec_rsa =
     (GCRY_PK_USAGE_SIGN | GCRY_PK_USAGE_ENCR),
     "RSA", rsa_names,
     "ne", "nedpqu", "a", "s", "n",
-    wc_rsa_generate,
-    rsa_check_secret_key,
+    wc_rsa_generate, /* wc works */
+    wc_rsa_check_secret_key,
     rsa_encrypt,
     rsa_decrypt,
-    rsa_sign, /* wc works */
-    rsa_verify, /* wc works */
+    wc_rsa_sign, /* wc works */
+    wc_rsa_verify, /* wc works */
     rsa_get_nbits,
     run_selftests,
     compute_keygrip
