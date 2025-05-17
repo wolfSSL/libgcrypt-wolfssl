@@ -3103,6 +3103,12 @@ wc_rsa_check_secret_key (gcry_sexp_t keyparms)
   gcry_err_code_t rc;
   RSA_secret_key sk = {NULL, NULL, NULL, NULL, NULL, NULL};
 
+  /* wolfssl variables */
+  int ret = 0;
+  int wolf = 0;
+  WC_RNG rng;
+  RsaKey wcRsaKey;
+
   /* To check the key we need the optional parameters. */
   rc = sexp_extract_param (keyparms, NULL, "nedpqu",
                            &sk.n, &sk.e, &sk.d, &sk.p, &sk.q, &sk.u,
@@ -3110,10 +3116,47 @@ wc_rsa_check_secret_key (gcry_sexp_t keyparms)
   if (rc)
     goto leave;
 
-  if (!check_secret_key (&sk))
+  /* wolfSSL takes over here */
+
+  /* Initialize wolfssl rng */
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
     rc = GPG_ERR_BAD_SECKEY;
+    printf("Error initializing wolfssl rng\n");
+    goto leave;
+  }
+
+  /* Initialize wolfssl rsa key */
+  ret = wc_InitRsaKey(&wcRsaKey, NULL);
+  if (ret != 0) {
+    rc = GPG_ERR_BAD_SECKEY;
+    wc_FreeRng(&rng);
+    printf("Error initializing wolfssl rsa key\n");
+    goto leave;
+  }
+
+  wolf = 1;
+
+  /* Now pass the key to wolfssl */
+  rc = _gcryp_rsa_key_to_wolfssl_rsa_private_key(&sk, &wcRsaKey);
+  if (rc) {
+    rc = GPG_ERR_BAD_SECKEY;
+    goto leave;
+  }
+
+  /* Now we check the key with wolfSSL */
+  ret = wc_CheckRsaKey(&wcRsaKey);
+  if (ret != 0) {
+    rc = GPG_ERR_BAD_SECKEY;
+  }
 
  leave:
+
+  if (wolf) {
+    wc_FreeRsaKey(&wcRsaKey);
+    wc_FreeRng(&rng);
+  }
+
   _gcry_mpi_release (sk.n);
   _gcry_mpi_release (sk.e);
   _gcry_mpi_release (sk.d);
@@ -3134,6 +3177,20 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   RSA_public_key pk = {NULL, NULL};
   gcry_mpi_t ciph = NULL;
   unsigned int nbits = rsa_get_nbits (keyparms);
+
+  /* wolfssl variables */
+  int ret = 0;
+  int wolf = 0;
+  RsaKey wcRsaKey;
+
+  byte* inputData = NULL;
+  word32 inputDataLen = 0;
+
+  byte* inputDataBlock = NULL;
+  word32 inputDataBlockLen = 0;
+
+  byte* cipherData = NULL;
+  word32 cipherDataLen = 0;
 
   rc = rsa_check_keysize (nbits);
   if (rc)
@@ -3165,7 +3222,58 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
   /* Do RSA computation and build result.  */
   ciph = mpi_new (0);
-  public (ciph, data, &pk);
+
+  /* wolfSSL takes over here */
+
+  ret = wc_InitRsaKey(&wcRsaKey, NULL);
+  if (ret != 0) {
+    rc = GPG_ERR_INV_OBJ;
+    goto leave;
+  }
+  wolf = 1;
+
+  /* Pass to general function to get wolfssl rsa key */
+  rc = _gcryp_rsa_key_to_wolfssl_rsa_key(&pk, &wcRsaKey);
+  if (rc) {
+    goto leave;
+  }
+
+  rc = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &inputData, &inputDataLen, data);
+  if (rc) {
+    goto leave;
+  }
+
+  /* Allocate memory for cipher data */
+  cipherData = (byte*)XMALLOC(nbits/8, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (cipherData == NULL) {
+    rc = GPG_ERR_ENOMEM;
+    goto leave;
+  }
+  cipherDataLen = (nbits/8);
+  XMEMSET(cipherData, 0, cipherDataLen);
+
+  inputDataBlock = (byte*)XMALLOC(nbits/8, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  if (inputDataBlock == NULL) {
+    rc = GPG_ERR_ENOMEM;
+    goto leave;
+  }
+  inputDataBlockLen = (nbits/8);
+  XMEMSET(inputDataBlock, 0, inputDataBlockLen);
+
+  /* Copy the input data to the input data block */
+  /* Copy so that data is right aligned */
+  memcpy(inputDataBlock + (inputDataBlockLen - inputDataLen), inputData, inputDataLen);
+
+  /* Encrypt the data */
+  ret = wc_RsaDirect(inputDataBlock, inputDataBlockLen, cipherData, &cipherDataLen, &wcRsaKey, RSA_PUBLIC_ENCRYPT, NULL);
+  if (ret != (nbits/8)) {
+    rc = GPG_ERR_INV_OBJ;
+    goto leave;
+  }
+
+  /* Convert the output signature to mpi */
+  _gcry_mpi_scan(&ciph, GCRYMPI_FMT_USG, cipherData, cipherDataLen, NULL);
+
   if (DBG_CIPHER)
     log_mpidump ("rsa_encrypt  res", ciph);
   if ((ctx.flags & PUBKEY_FLAG_FIXEDLEN))
@@ -3186,6 +3294,17 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     rc = sexp_build (r_ciph, NULL, "(enc-val(rsa(a%m)))", ciph);
 
  leave:
+
+  if (wolf) {
+    wc_FreeRsaKey(&wcRsaKey);
+  }
+  if (cipherDataLen != 0) {
+    XFREE(cipherData, cipherDataLen, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (inputDataBlockLen != 0) {
+    XFREE(inputDataBlock, inputDataBlockLen, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+
   _gcry_mpi_release (ciph);
   _gcry_mpi_release (pk.n);
   _gcry_mpi_release (pk.e);
@@ -3210,6 +3329,20 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   unsigned int nbits = rsa_get_nbits (keyparms);
   gcry_sexp_t result = NULL;
   gcry_sexp_t dummy = NULL;
+
+  /* wolfssl variables */
+  int ret = 0;
+  int wolf = 0;
+  RsaKey wcRsaKey;
+
+  byte* inputData = NULL;
+  word32 inputDataLen = 0;
+
+  byte* inputDataBlock = NULL;
+  word32 inputDataBlockLen = 0;
+
+  byte* plainData = NULL;
+  word32 plainDataLen = 0;
 
   rc = rsa_check_keysize (nbits);
   if (rc)
@@ -3958,8 +4091,8 @@ gcry_pk_spec_t _wc_pubkey_spec_rsa =
     "ne", "nedpqu", "a", "s", "n",
     wc_rsa_generate, /* wc works */
     wc_rsa_check_secret_key,
-    rsa_encrypt,
-    rsa_decrypt,
+    wc_rsa_encrypt,
+    wc_rsa_decrypt,
     wc_rsa_sign, /* wc works */
     wc_rsa_verify, /* wc works */
     rsa_get_nbits,
