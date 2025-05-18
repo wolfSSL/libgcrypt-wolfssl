@@ -30,6 +30,22 @@
 #include "pubkey-internal.h"
 
 
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/dsa.h>
+#include <wolfssl/wolfcrypt/kdf.h>
+#include <wolfssl/wolfcrypt/pwdbased.h>
+#include <wolfssl/wolfcrypt/sha.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/sha512.h>
+#include <wolfssl/wolfcrypt/sha3.h>
+#include <wolfssl/wolfcrypt/signature.h>
+#include <wolfssl/wolfcrypt/integer.h>
+#endif
+
 typedef struct
 {
   gcry_mpi_t p;	    /* prime */
@@ -1246,6 +1262,362 @@ dsa_get_nbits (gcry_sexp_t parms)
 }
 
 
+
+#ifdef HAVE_WOLFSSL
+static gcry_err_code_t
+wc_dsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
+{
+  gpg_err_code_t rc;
+  unsigned int nbits;
+  gcry_sexp_t domainsexp;
+  DSA_secret_key sk;
+  gcry_sexp_t l1;
+  unsigned int qbits = 0;
+  gcry_sexp_t deriveparms = NULL;
+  gcry_sexp_t seedinfo = NULL;
+  gcry_sexp_t misc_info = NULL;
+  int flags = 0;
+  dsa_domain_t domain;
+  gcry_mpi_t *factors = NULL;
+
+  /* wolfSSL Variables */
+  DsaKey dsaKey;
+  int ret;
+  WC_RNG rng;
+  wc_InitRng(&rng);
+  byte* wc_p = NULL;	    /* prime */
+  byte* wc_q = NULL;	    /* group order */
+  byte* wc_g = NULL;	    /* group generator */
+  byte* wc_y = NULL;	    /* g^x mod p */
+  byte* wc_x = NULL;	    /* secret exponent */
+
+  word32 wc_p_len = 0;
+  word32 wc_q_len = 0;
+  word32 wc_g_len = 0;
+  word32 wc_y_len = 0;
+  word32 wc_x_len = 0;
+
+  memset (&sk, 0, sizeof sk);
+  memset (&domain, 0, sizeof domain);
+
+  rc = _gcry_pk_util_get_nbits (genparms, &nbits);
+  if (rc)
+    return rc;
+
+  /* Parse the optional flags list.  */
+  l1 = sexp_find_token (genparms, "flags", 0);
+  if (l1)
+    {
+      rc = _gcry_pk_util_parse_flaglist (l1, &flags, NULL);
+      sexp_release (l1);
+      if (rc)
+        return rc;\
+    }
+
+  /* Parse the optional qbits element.  */
+  l1 = sexp_find_token (genparms, "qbits", 0);
+  if (l1)
+    {
+      char buf[50];
+      const char *s;
+      size_t n;
+
+      s = sexp_nth_data (l1, 1, &n);
+      if (!s || n >= DIM (buf) - 1 )
+        {
+          sexp_release (l1);
+          return GPG_ERR_INV_OBJ; /* No value or value too large.  */
+        }
+      memcpy (buf, s, n);
+      buf[n] = 0;
+      qbits = (unsigned int)strtoul (buf, NULL, 0);
+      sexp_release (l1);
+    }
+
+  /* Parse the optional transient-key flag.  */
+  if (!(flags & PUBKEY_FLAG_TRANSIENT_KEY))
+    {
+      l1 = sexp_find_token (genparms, "transient-key", 0);
+      if (l1)
+        {
+          flags |= PUBKEY_FLAG_TRANSIENT_KEY;
+          sexp_release (l1);
+        }
+    }
+
+  /* Get the optional derive parameters.  */
+  deriveparms = sexp_find_token (genparms, "derive-parms", 0);
+
+  /* Parse the optional "use-fips186" flags.  */
+  if (!(flags & PUBKEY_FLAG_USE_FIPS186))
+    {
+      l1 = sexp_find_token (genparms, "use-fips186", 0);
+      if (l1)
+        {
+          flags |= PUBKEY_FLAG_USE_FIPS186;
+          sexp_release (l1);
+        }
+    }
+  if (!(flags & PUBKEY_FLAG_USE_FIPS186_2))
+    {
+      l1 = sexp_find_token (genparms, "use-fips186-2", 0);
+      if (l1)
+        {
+          flags |= PUBKEY_FLAG_USE_FIPS186_2;
+          sexp_release (l1);
+        }
+    }
+
+  /* Check whether domain parameters are given.  */
+  domainsexp = sexp_find_token (genparms, "domain", 0);
+  if (domainsexp)
+    {
+      /* DERIVEPARMS can't be used together with domain parameters.
+         NBITS abnd QBITS may not be specified because there values
+         are derived from the domain parameters.  */
+      if (deriveparms || qbits || nbits)
+        {
+          sexp_release (domainsexp);
+          sexp_release (deriveparms);
+          return GPG_ERR_INV_VALUE;
+        }
+
+      /* Put all domain parameters into the domain object.  */
+      l1 = sexp_find_token (domainsexp, "p", 0);
+      domain.p = sexp_nth_mpi (l1, 1, GCRYMPI_FMT_USG);
+      sexp_release (l1);
+      l1 = sexp_find_token (domainsexp, "q", 0);
+      domain.q = sexp_nth_mpi (l1, 1, GCRYMPI_FMT_USG);
+      sexp_release (l1);
+      l1 = sexp_find_token (domainsexp, "g", 0);
+      domain.g = sexp_nth_mpi (l1, 1, GCRYMPI_FMT_USG);
+      sexp_release (l1);
+      sexp_release (domainsexp);
+
+      /* Check that all domain parameters are available.  */
+      if (!domain.p || !domain.q || !domain.g)
+        {
+          _gcry_mpi_release (domain.p);
+          _gcry_mpi_release (domain.q);
+          _gcry_mpi_release (domain.g);
+          sexp_release (deriveparms);
+          return GPG_ERR_MISSING_VALUE;
+        }
+
+      /* Get NBITS and QBITS from the domain parameters.  */
+      nbits = mpi_get_nbits (domain.p);
+      qbits = mpi_get_nbits (domain.q);
+    }
+
+
+  ret = wc_InitRng(&rng);
+  if (ret != 0) {
+    return GPG_ERR_INV_OBJ;
+  }
+
+  ret = wc_InitDsaKey(&dsaKey);
+  if (ret != 0) {
+    return GPG_ERR_INV_OBJ;
+  }
+
+
+  ret = wc_MakeDsaParameters(&rng, nbits, &dsaKey);
+  if (ret != 0) {
+    return GPG_ERR_INV_OBJ;
+  }
+
+
+  ret = wc_MakeDsaKey(&rng, &dsaKey);
+  if (ret != 0) {
+    return GPG_ERR_INV_OBJ;
+  }
+
+
+  /* Allocate memory for the parameters */
+  wc_p_len = (word32)mp_unsigned_bin_size(&dsaKey.p);
+  wc_q_len = (word32)mp_unsigned_bin_size(&dsaKey.q);
+  wc_g_len = (word32)mp_unsigned_bin_size(&dsaKey.g);
+  wc_y_len = (word32)mp_unsigned_bin_size(&dsaKey.y);
+  wc_x_len = (word32)mp_unsigned_bin_size(&dsaKey.x);
+
+
+  wc_p = (byte*)XMALLOC(wc_p_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  wc_q = (byte*)XMALLOC(wc_q_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  wc_g = (byte*)XMALLOC(wc_g_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  wc_y = (byte*)XMALLOC(wc_y_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  wc_x = (byte*)XMALLOC(wc_x_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+
+
+  /* export the parameters */
+  ret = wc_DsaExportParamsRaw(&dsaKey, &wc_p, &wc_p_len, &wc_q, &wc_q_len, &wc_g, &wc_g_len);
+  if (ret != 0) {
+    if (wc_p_len > 0) {
+      XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_q_len > 0) {
+      XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_g_len > 0) {
+      XFREE(wc_g, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_y_len > 0) {
+      XFREE(wc_y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_x_len > 0) {
+      XFREE(wc_x, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    return GPG_ERR_INV_OBJ;
+  }
+
+  /* export the key */
+  ret = wc_DsaExportKeyRaw(&dsaKey, &wc_y, &wc_y_len, &wc_x, &wc_x_len);
+  if (ret != 0) {
+    if (wc_p_len > 0) {
+      XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_q_len > 0) {
+      XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_g_len > 0) {
+      XFREE(wc_g, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_y_len > 0) {
+      XFREE(wc_y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (wc_x_len > 0) {
+      XFREE(wc_x, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    return GPG_ERR_INV_OBJ;
+  }
+
+  /* convert to libgcrypt mpi */
+  _gcry_mpi_scan(&sk.p, GCRYMPI_FMT_USG, wc_p, wc_p_len, NULL);
+  _gcry_mpi_scan(&sk.q, GCRYMPI_FMT_USG, wc_q, wc_q_len, NULL);
+  _gcry_mpi_scan(&sk.g, GCRYMPI_FMT_USG, wc_g, wc_g_len, NULL);
+  _gcry_mpi_scan(&sk.y, GCRYMPI_FMT_USG, wc_y, wc_y_len, NULL);
+  _gcry_mpi_scan(&sk.x, GCRYMPI_FMT_USG, wc_x, wc_x_len, NULL);
+
+
+  if (wc_p_len > 0) {
+    XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (wc_q_len > 0) {
+    XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (wc_g_len > 0) {
+    XFREE(wc_g, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (wc_y_len > 0) {
+    XFREE(wc_y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  if (wc_x_len > 0) {
+    XFREE(wc_x, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+
+  wc_FreeDsaKey(&dsaKey);
+  wc_FreeRng(&rng);
+
+  if (!rc)
+    {
+      /* Put the factors into MISC_INFO.  Note that the factors are
+         not confidential thus we can store them in standard memory.  */
+      int nfactors, i, j;
+      char *p;
+      char *format = NULL;
+      void **arg_list = NULL;
+
+      for (nfactors=0; factors && factors[nfactors]; nfactors++)
+        ;
+      /* Allocate space for the format string:
+         "(misc-key-info%S(pm1-factors%m))"
+         with one "%m" for each factor and construct it.  */
+      format = xtrymalloc (50 + 2*nfactors);
+      if (!format)
+        rc = gpg_err_code_from_syserror ();
+      else
+        {
+          p = stpcpy (format, "(misc-key-info");
+          if (seedinfo)
+            p = stpcpy (p, "%S");
+          if (nfactors)
+            {
+              p = stpcpy (p, "(pm1-factors");
+              for (i=0; i < nfactors; i++)
+                p = stpcpy (p, "%m");
+              p = stpcpy (p, ")");
+            }
+          p = stpcpy (p, ")");
+
+          /* Allocate space for the list of factors plus one for the
+             seedinfo s-exp plus an extra NULL entry for safety and
+             fill it with the factors.  */
+          arg_list = xtrycalloc (nfactors+1+1, sizeof *arg_list);
+          if (!arg_list)
+            rc = gpg_err_code_from_syserror ();
+          else
+            {
+              i = 0;
+              if (seedinfo)
+                arg_list[i++] = &seedinfo;
+              for (j=0; j < nfactors; j++)
+                arg_list[i++] = factors + j;
+              arg_list[i] = NULL;
+
+              rc = sexp_build_array (&misc_info, NULL, format, arg_list);
+            }
+        }
+
+      xfree (arg_list);
+      xfree (format);
+    }
+
+  if (!rc)
+    rc = sexp_build (r_skey, NULL,
+                     "(key-data"
+                     " (public-key"
+                     "  (dsa(p%m)(q%m)(g%m)(y%m)))"
+                     " (private-key"
+                     "  (dsa(p%m)(q%m)(g%m)(y%m)(x%m)))"
+                     " %S)",
+                     sk.p, sk.q, sk.g, sk.y,
+                     sk.p, sk.q, sk.g, sk.y, sk.x,
+                     misc_info);
+
+
+  _gcry_mpi_release (sk.p);
+  _gcry_mpi_release (sk.q);
+  _gcry_mpi_release (sk.g);
+  _gcry_mpi_release (sk.y);
+  _gcry_mpi_release (sk.x);
+
+  _gcry_mpi_release (domain.p);
+  _gcry_mpi_release (domain.q);
+  _gcry_mpi_release (domain.g);
+
+  sexp_release (seedinfo);
+  sexp_release (misc_info);
+  sexp_release (deriveparms);
+  if (factors)
+    {
+      gcry_mpi_t *mp;
+      for (mp = factors; *mp; mp++)
+        mpi_free (*mp);
+      xfree (factors);
+    }
+  return rc;
+}
+#endif
+
+
+
+
+
+
+
+
+
+
+
 
 /*
      Self-test section.
@@ -1439,6 +1811,23 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
 
 
 
+#ifdef HAVE_WOLFSSL
+gcry_pk_spec_t _gcry_pubkey_spec_dsa =
+  {
+    GCRY_PK_DSA, { 0, 0 },
+    GCRY_PK_USAGE_SIGN,
+    "DSA", dsa_names,
+    "pqgy", "pqgyx", "", "rs", "pqgy",
+    wc_dsa_generate,
+    dsa_check_secret_key,
+    NULL,
+    NULL,
+    dsa_sign,
+    dsa_verify,
+    dsa_get_nbits,
+    run_selftests
+  };
+#else
 gcry_pk_spec_t _gcry_pubkey_spec_dsa =
   {
     GCRY_PK_DSA, { 0, 0 },
@@ -1454,3 +1843,4 @@ gcry_pk_spec_t _gcry_pubkey_spec_dsa =
     dsa_get_nbits,
     run_selftests
   };
+#endif
