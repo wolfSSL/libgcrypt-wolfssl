@@ -2458,7 +2458,177 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
 
 
+static gcry_err_code_t
+wc_ecc_check_secret_key (gcry_sexp_t keyparms)
+{
+  gcry_err_code_t rc;
+  int flags = 0;
+  mpi_ec_t ec = NULL;
 
+  /* wolfSSL declarations */
+  int ret = 0;
+  int wolf = 0;
+  ecc_key wc_key;
+  byte *wc_QX = NULL;
+  byte *wc_QY = NULL;
+  byte *wc_D = NULL;
+  byte *wc_QX_rightAligned = NULL;
+  byte *wc_QY_rightAligned = NULL;
+  byte *wc_D_rightAligned = NULL;
+
+
+  word32 wc_D_len = 0;
+  word32 wc_QX_len = 0;
+  word32 wc_QY_len = 0;
+  word32 wc_D_rightAligned_len = 0;
+  word32 wc_QX_rightAligned_len = 0;
+  word32 wc_QY_rightAligned_len = 0;
+
+  ecc_curve_id wc_curve_id = ECC_CURVE_INVALID; /* no curve id */
+
+  /*
+   * Extract the key.
+   */
+
+  rc = _gcry_mpi_ec_internal_new (&ec, &flags, "ecc_testkey", keyparms, NULL);
+  if (rc)
+    goto leave;
+  if (!ec->p || !ec->a || !ec->b || !ec->G || !ec->n || !ec->Q || !ec->d)
+    {
+      rc = GPG_ERR_NO_OBJ;
+      goto leave;
+    }
+
+    /* Get Curve ID */
+  wc_curve_id = wc_name_to_curve_id(ec->name);
+  if (wc_curve_id != ECC_CURVE_INVALID) {
+    wolf = 1;
+    /* Init ECC key */
+    ret = wc_ecc_init(&wc_key);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      goto leave;
+    }
+
+    /* Allocate memory for the key */
+    wc_D_len = (word32)wc_ecc_get_curve_size_from_id(wc_curve_id);
+    wc_QX_len = wc_D_len;
+    wc_QY_len = wc_D_len;
+    wc_D_rightAligned_len = wc_D_len;
+    wc_QX_rightAligned_len = wc_D_len;
+    wc_QY_rightAligned_len = wc_D_len;
+
+    wc_D_rightAligned = (byte *)XMALLOC(wc_D_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_D_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      goto leave;
+    }
+    XMEMSET(wc_D_rightAligned, 0, wc_D_rightAligned_len);
+
+    wc_QX_rightAligned = (byte *)XMALLOC(wc_QX_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_QX_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    XMEMSET(wc_QX_rightAligned, 0, wc_QX_rightAligned_len);
+
+    wc_QY_rightAligned = (byte *)XMALLOC(wc_QY_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_QY_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    XMEMSET(wc_QY_rightAligned, 0, wc_QY_rightAligned_len);
+
+    /* Get Curve Parameters from libgcrypt */
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_D,
+                                &wc_D_len, ec->d);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_QX,
+                                &wc_QX_len, ec->Q->x);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_QY,
+                                &wc_QY_len, ec->Q->y);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    /* Right align the key */
+    /* libgcrypt wont extend to full length, so we need to do it manually */
+    memcpy(wc_D_rightAligned + (wc_D_rightAligned_len - wc_D_len), wc_D, wc_D_len);
+    memcpy(wc_QX_rightAligned + (wc_QX_rightAligned_len - wc_QX_len), wc_QX, wc_QX_len);
+    memcpy(wc_QY_rightAligned + (wc_QY_rightAligned_len - wc_QY_len), wc_QY, wc_QY_len);
+
+
+    /* Import the key into wolfSSL */
+    ret = wc_ecc_import_unsigned(&wc_key, wc_QX_rightAligned,
+                                    wc_QY_rightAligned, wc_D_rightAligned,
+                                    wc_curve_id);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    /* Check the key */
+    ret = wc_ecc_check_key(&wc_key);
+    if (ret != 0) {
+      rc = GPG_ERR_BAD_SECKEY;
+    }
+    else {
+      rc = 0;
+    }
+
+    /* Free the key */
+    wc_ecc_free(&wc_key);
+    XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  else {
+    if (check_secret_key (ec, flags)) {
+      rc = GPG_ERR_BAD_SECKEY;
+    }
+  }
+
+ leave:
+  /* For some reason this causes a segfault when wolfssl`s chech is used */
+  if (wolf != 1) {
+    _gcry_mpi_ec_free (ec);
+  }
+  if (DBG_CIPHER)
+    log_debug ("ecc_testkey    => %s\n", gpg_strerror (rc));
+  return rc;
+}
 
 
 
@@ -2919,7 +3089,7 @@ gcry_pk_spec_t _gcry_pubkey_spec_ecc =
     "ECC", ecc_names,
     "pabgnhq", "pabgnhqd", "se", "rs", "pabgnhq",
     wc_ecc_generate,
-    ecc_check_secret_key,
+    wc_ecc_check_secret_key,
     ecc_encrypt_raw,
     ecc_decrypt_raw,
     ecc_sign,
