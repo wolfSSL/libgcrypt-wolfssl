@@ -2982,41 +2982,41 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
       wc_n = (byte*)XMALLOC(wc_n_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       if (wc_n == NULL) {
-        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         return GPG_ERR_ENOMEM;
       }
 
       wc_d = (byte*)XMALLOC(wc_d_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       if (wc_d == NULL) {
-        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         return GPG_ERR_ENOMEM;
       }
 
       wc_p = (byte*)XMALLOC(wc_p_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       if (wc_p == NULL) {
-        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         return GPG_ERR_ENOMEM;
       }
 
       wc_q = (byte*)XMALLOC(wc_q_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       if (wc_q == NULL) {
-        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         return GPG_ERR_ENOMEM;
       }
 
       wc_u = (byte*)XMALLOC(wc_u_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       if (wc_u == NULL) {
-        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         return GPG_ERR_ENOMEM;
       }
 
@@ -3028,23 +3028,23 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
                             wc_p, &wc_p_len,
                             wc_q, &wc_q_len);
       if (ec) {
-        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_u, wc_u_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_u, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         return ec;
       }
 
       ec = mp_to_unsigned_bin(&rsaKey.u, wc_u);
       if (ec) {
-        XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_u, wc_u_len, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_d, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_u, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         return ec;
       }
 
@@ -3056,12 +3056,12 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
       _gcry_mpi_scan(&sk.q, GCRYMPI_FMT_USG, wc_p, wc_p_len, NULL); /* libgcrypt puts p into q */
       _gcry_mpi_scan(&sk.u, GCRYMPI_FMT_USG, wc_u, wc_u_len, NULL);
 
-      XFREE(wc_e, wc_e_len, DYNAMIC_TYPE_TMP_BUFFER);
-      XFREE(wc_n, wc_n_len, DYNAMIC_TYPE_TMP_BUFFER);
-      XFREE(wc_d, wc_d_len, DYNAMIC_TYPE_TMP_BUFFER);
-      XFREE(wc_p, wc_p_len, DYNAMIC_TYPE_TMP_BUFFER);
-      XFREE(wc_q, wc_q_len, DYNAMIC_TYPE_TMP_BUFFER);
-      XFREE(wc_u, wc_u_len, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_d, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_u, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       sexp_release (deriveparms);
     }
 
@@ -3299,10 +3299,10 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     wc_FreeRsaKey(&wcRsaKey);
   }
   if (cipherDataLen != 0) {
-    XFREE(cipherData, cipherDataLen, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(cipherData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
   if (inputDataBlockLen != 0) {
-    XFREE(inputDataBlock, inputDataBlockLen, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(inputDataBlock, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
 
   _gcry_mpi_release (ciph);
@@ -3493,10 +3493,10 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     wc_FreeRsaKey(&wcRsaKey);
   }
   if (inputDataLen != 0) {
-    XFREE(inputData, inputDataLen, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(inputData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
   if (inputDataBlockLen != 0) {
-    XFREE(inputDataBlock, inputDataBlockLen, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(inputDataBlock, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
 
 
