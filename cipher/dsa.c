@@ -35,7 +35,7 @@
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/rsa.h>
-#include <wolfssl/wolfcrypt/dsa.h>
+#include <wolfssl/wolfcrypt/dh.h>
 #include <wolfssl/wolfcrypt/kdf.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/sha.h>
@@ -254,6 +254,7 @@ generate (DSA_secret_key *sk, unsigned int nbits, unsigned int qbits,
   unsigned char *rndbuf;
   gcry_random_level_t random_level;
 
+  printf("generate DSA\n");
   if (qbits)
     ; /* Caller supplied qbits.  Use this value.  */
   else if ( nbits >= 512 && nbits <= 1024 )
@@ -1281,7 +1282,7 @@ wc_dsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   gcry_mpi_t *factors = NULL;
 
   /* wolfSSL Variables */
-  DsaKey dsaKey;
+  DhKey dsaKey;
   int ret;
   WC_RNG rng;
   wc_InitRng(&rng);
@@ -1409,25 +1410,29 @@ wc_dsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
       qbits = mpi_get_nbits (domain.q);
     }
 
-
+  printf("wc_dsa_generate\n");
   ret = wc_InitRng(&rng);
   if (ret != 0) {
     return GPG_ERR_INV_OBJ;
   }
 
-  ret = wc_InitDsaKey(&dsaKey);
+  ret = wc_InitDhKey(&dsaKey);
   if (ret != 0) {
     return GPG_ERR_INV_OBJ;
   }
 
 
-  ret = wc_MakeDsaParameters(&rng, nbits, &dsaKey);
+  ret = wc_DhGenerateParams(&rng, nbits, &dsaKey);
   if (ret != 0) {
     return GPG_ERR_INV_OBJ;
   }
 
+  wc_y_len = nbits/8;
+  wc_x_len = nbits/8;
+  wc_y = (byte*)XMALLOC(wc_y_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  wc_x = (byte*)XMALLOC(wc_x_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
-  ret = wc_MakeDsaKey(&rng, &dsaKey);
+  ret = wc_DhGenerateKeyPair(&dsaKey, &rng, wc_y, &wc_y_len, wc_x, &wc_x_len);
   if (ret != 0) {
     return GPG_ERR_INV_OBJ;
   }
@@ -1437,40 +1442,15 @@ wc_dsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   wc_p_len = (word32)mp_unsigned_bin_size(&dsaKey.p);
   wc_q_len = (word32)mp_unsigned_bin_size(&dsaKey.q);
   wc_g_len = (word32)mp_unsigned_bin_size(&dsaKey.g);
-  wc_y_len = (word32)mp_unsigned_bin_size(&dsaKey.y);
-  wc_x_len = (word32)mp_unsigned_bin_size(&dsaKey.x);
 
 
   wc_p = (byte*)XMALLOC(wc_p_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   wc_q = (byte*)XMALLOC(wc_q_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   wc_g = (byte*)XMALLOC(wc_g_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  wc_y = (byte*)XMALLOC(wc_y_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  wc_x = (byte*)XMALLOC(wc_x_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
 
   /* export the parameters */
-  ret = wc_DsaExportParamsRaw(&dsaKey, &wc_p, &wc_p_len, &wc_q, &wc_q_len, &wc_g, &wc_g_len);
-  if (ret != 0) {
-    if (wc_p_len > 0) {
-      XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    }
-    if (wc_q_len > 0) {
-      XFREE(wc_q, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    }
-    if (wc_g_len > 0) {
-      XFREE(wc_g, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    }
-    if (wc_y_len > 0) {
-      XFREE(wc_y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    }
-    if (wc_x_len > 0) {
-      XFREE(wc_x, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    }
-    return GPG_ERR_INV_OBJ;
-  }
-
-  /* export the key */
-  ret = wc_DsaExportKeyRaw(&dsaKey, &wc_y, &wc_y_len, &wc_x, &wc_x_len);
+  ret = wc_DhExportParamsRaw(&dsaKey, wc_p, &wc_p_len, wc_q, &wc_q_len, wc_g, &wc_g_len);
   if (ret != 0) {
     if (wc_p_len > 0) {
       XFREE(wc_p, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -1514,7 +1494,7 @@ wc_dsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
     XFREE(wc_x, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
 
-  wc_FreeDsaKey(&dsaKey);
+  wc_FreeDhKey(&dsaKey);
   wc_FreeRng(&rng);
 
   if (!rc)
