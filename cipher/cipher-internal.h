@@ -134,6 +134,23 @@
 #endif
 #endif /* GCM_USE_PPC_VPMSUM */
 
+typedef struct wc_ccm_context {
+    unsigned char *databuf;
+    size_t databuf_len;
+    size_t databuf_cap;
+
+    unsigned char *cryptbuf;
+    size_t cryptbuf_len;
+    size_t cryptbuf_cap;
+
+    unsigned char *aadbuf;
+    size_t aadbuf_len;
+    size_t aadbuf_cap;
+
+    unsigned char authtag[16];
+    size_t authtag_len;
+} wc_ccm_context_t;
+
 typedef unsigned int (*ghash_fn_t) (gcry_cipher_hd_t c, byte *result,
                                     const byte *buf, size_t nblocks);
 
@@ -305,6 +322,9 @@ struct gcry_cipher_handle
       unsigned int nonce:1; /* Set to 1 if nonce has been set.  */
       unsigned int lengths:1; /* Set to 1 if CCM length parameters has been
                                  processed.  */
+      #ifdef HAVE_WOLFSSL
+      wc_ccm_context_t wc_ccm;
+      #endif
     } ccm;
 
     /* Mode specific storage for Poly1305 mode. */
@@ -593,6 +613,36 @@ gcry_err_code_t _gcry_cipher_ccm_get_tag
 gcry_err_code_t _gcry_cipher_ccm_check_tag
 /*           */ (gcry_cipher_hd_t c,
                  const unsigned char *intag, size_t taglen);
+#ifdef HAVE_WOLFSSL
+gcry_err_code_t _wc_cipher_aes_ccm_close
+/*           */ (gcry_cipher_hd_t c);
+gcry_err_code_t _wc_cipher_aes_ccm_reset
+/*           */ (gcry_cipher_hd_t c);
+gcry_err_code_t _wc_cipher_aes_ccm_setkey
+/*           */ (gcry_cipher_hd_t c,
+                 byte *key, size_t keylen);
+gcry_err_code_t _wc_cipher_aes_ccm_encrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, size_t outbuflen,
+                 const unsigned char *inbuf, size_t inbuflen);
+gcry_err_code_t _wc_cipher_aes_ccm_decrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, size_t outbuflen,
+                 const unsigned char *inbuf, size_t inbuflen);
+gcry_err_code_t _wc_cipher_aes_ccm_set_nonce
+/*           */ (gcry_cipher_hd_t c, const unsigned char *nonce,
+                 size_t noncelen);
+gcry_err_code_t _wc_cipher_aes_ccm_authenticate
+/*           */ (gcry_cipher_hd_t c, const unsigned char *abuf, size_t abuflen);
+gcry_err_code_t _wc_cipher_aes_ccm_set_lengths
+/*           */ (gcry_cipher_hd_t c, u64 encryptedlen, u64 aadlen, u64 taglen);
+gcry_err_code_t _wc_cipher_aes_ccm_get_tag
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outtag, size_t taglen);
+gcry_err_code_t _wc_cipher_aes_ccm_check_tag
+/*           */ (gcry_cipher_hd_t c,
+                 const unsigned char *intag, size_t taglen);
+#endif
 
 
 /*-- cipher-cmac.c --*/
