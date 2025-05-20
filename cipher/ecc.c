@@ -1960,7 +1960,7 @@ wc_check_is_nist_curve(const char *curve_name) {
 }
 
 
-static enum ecc_curve_id
+static int
 wc_name_to_curve_id(const char *curve_name)
 {
     if (curve_name == NULL)
@@ -1970,35 +1970,35 @@ wc_name_to_curve_id(const char *curve_name)
     if (strcmp(curve_name, "NIST P-192") == 0 ||
         strcmp(curve_name, "secp192r1") == 0 ||
         strcmp(curve_name, "nistp192") == 0) {
-      printf("wc_name_to_curve_id: NIST P-192\n");
+      // printf("wc_name_to_curve_id: NIST P-192\n");
       return ECC_SECP192R1;
     }
 
     if (strcmp(curve_name, "NIST P-224") == 0 ||
         strcmp(curve_name, "secp224r1") == 0 ||
         strcmp(curve_name, "nistp224") == 0) {
-      printf("wc_name_to_curve_id: NIST P-224\n");
+      // printf("wc_name_to_curve_id: NIST P-224\n");
       return ECC_SECP224R1;
     }
 
     if (strcmp(curve_name, "NIST P-256") == 0 ||
         strcmp(curve_name, "secp256r1") == 0 ||
         strcmp(curve_name, "nistp256") == 0) {
-      printf("wc_name_to_curve_id: NIST P-256\n");
+      // printf("wc_name_to_curve_id: NIST P-256\n");
       return ECC_SECP256R1;
     }
 
     if (strcmp(curve_name, "NIST P-384") == 0 ||
         strcmp(curve_name, "secp384r1") == 0 ||
         strcmp(curve_name, "nistp384") == 0) {
-      printf("wc_name_to_curve_id: NIST P-384\n");
+      // printf("wc_name_to_curve_id: NIST P-384\n");
       return ECC_SECP384R1;
     }
 
     if (strcmp(curve_name, "NIST P-521") == 0 ||
         strcmp(curve_name, "secp521r1") == 0 ||
         strcmp(curve_name, "nistp521") == 0) {
-      printf("wc_name_to_curve_id: NIST P-521\n");
+      // printf("wc_name_to_curve_id: NIST P-521\n");
       return ECC_SECP521R1;
     }
 

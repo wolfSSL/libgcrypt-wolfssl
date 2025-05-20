@@ -32,6 +32,21 @@
 #include "pubkey-internal.h"
 #include "ecc-common.h"
 
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/dsa.h>
+#include <wolfssl/wolfcrypt/kdf.h>
+#include <wolfssl/wolfcrypt/pwdbased.h>
+#include <wolfssl/wolfcrypt/sha.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/sha512.h>
+#include <wolfssl/wolfcrypt/sha3.h>
+#include <wolfssl/wolfcrypt/signature.h>
+#include <wolfssl/wolfcrypt/integer.h>
+#endif
 
 /* Compute an ECDSA signature.
  * Return the signature struct (r,s) from the message hash.  The caller
@@ -308,6 +323,60 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
 
 #else
 /* wolfSSL implementation */
+
+/* wolfSSL helper files */
+
+
+static int
+wc_name_to_curve_id(const char *curve_name)
+{
+    if (curve_name == NULL)
+        return ECC_CURVE_INVALID;
+
+    /* NIST curves - check for different naming conventions */
+    if (strcmp(curve_name, "NIST P-192") == 0 ||
+        strcmp(curve_name, "secp192r1") == 0 ||
+        strcmp(curve_name, "nistp192") == 0) {
+      printf("wc_name_to_curve_id: NIST P-192\n");
+      return ECC_SECP192R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-224") == 0 ||
+        strcmp(curve_name, "secp224r1") == 0 ||
+        strcmp(curve_name, "nistp224") == 0) {
+      printf("wc_name_to_curve_id: NIST P-224\n");
+      return ECC_SECP224R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-256") == 0 ||
+        strcmp(curve_name, "secp256r1") == 0 ||
+        strcmp(curve_name, "nistp256") == 0) {
+      printf("wc_name_to_curve_id: NIST P-256\n");
+      return ECC_SECP256R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-384") == 0 ||
+        strcmp(curve_name, "secp384r1") == 0 ||
+        strcmp(curve_name, "nistp384") == 0) {
+      printf("wc_name_to_curve_id: NIST P-384\n");
+      return ECC_SECP384R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-521") == 0 ||
+        strcmp(curve_name, "secp521r1") == 0 ||
+        strcmp(curve_name, "nistp521") == 0) {
+      printf("wc_name_to_curve_id: NIST P-521\n");
+      return ECC_SECP521R1;
+    }
+
+    return ECC_CURVE_INVALID;
+}
+
+
+
+
+/* Copy original function name from libgcrypt */
+/* As code is called from libgcrypt and not switchable function pointers */
 gpg_err_code_t
 _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
                       gcry_mpi_t r, gcry_mpi_t s,
@@ -323,6 +392,50 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
   gcry_mpi_t b;                /* Random number needed for blinding.  */
   gcry_mpi_t bi;               /* multiplicative inverse of B.        */
   gcry_mpi_t hash_computed_internally = NULL;
+
+  /* wolfSSL declarations */
+  int ret;
+  ecc_key wc_key;
+  WC_RNG rng;
+  int wolf = 0;
+  ecc_curve_id wc_curve_id = ECC_CURVE_INVALID; /* no curve id */
+
+  byte *wc_QX = NULL;
+  byte *wc_QY = NULL;
+  byte *wc_D = NULL;
+  byte *wc_QX_rightAligned = NULL;
+  byte *wc_QY_rightAligned = NULL;
+  byte *wc_D_rightAligned = NULL;
+  byte *wc_r = NULL;
+  byte *wc_s = NULL;
+  byte *wc_k = NULL;
+
+  word32 wc_D_len = 0;
+  word32 wc_QX_len = 0;
+  word32 wc_QY_len = 0;
+  word32 wc_D_rightAligned_len = 0;
+  word32 wc_QX_rightAligned_len = 0;
+  word32 wc_QY_rightAligned_len = 0;
+  word32 wc_r_len = 0;
+  word32 wc_s_len = 0;
+  word32 wc_k_len = 0;
+
+
+  mp_int wc_r_mpi;
+  mp_int wc_s_mpi;
+
+  /* wc_hash */
+  /* will grab from libgcrypt */
+  byte* wc_hash = NULL;
+  word32 wc_hash_len = 0;
+
+  /* Signature from wolfSSL */
+  byte* wc_signature = NULL;
+  word32 wc_signature_len = 0;
+
+  wc_curve_id = wc_name_to_curve_id(ec->name);
+
+
 
   if (DBG_CIPHER)
     log_mpidump ("ecdsa sign hash  ", input );
@@ -340,6 +453,190 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
   /* Convert the INPUT into an MPI if needed.  */
   rc = _gcry_dsa_normalize_hash (input, &hash, qbits);
 
+  if (wc_curve_id != ECC_CURVE_INVALID) {
+    wolf = 1;
+    ret = wc_InitRng(&rng);
+    if (ret != 0) {
+      printf("wc_InitRng failed\n");
+      goto leave;
+    }
+
+    ret = wc_ecc_init(&wc_key);
+    if (ret != 0) {
+      printf("wc_ecc_init failed\n");
+      wc_FreeRng(&rng);
+      goto leave;
+    }
+
+
+    /* Allocate memory for the key */
+    wc_D_len = (word32)wc_ecc_get_curve_size_from_id(wc_curve_id);
+    wc_QX_len = wc_D_len;
+    wc_QY_len = wc_D_len;
+    wc_D_rightAligned_len = wc_D_len;
+    wc_QX_rightAligned_len = wc_D_len;
+    wc_QY_rightAligned_len = wc_D_len;
+
+    wc_D_rightAligned = (byte *)XMALLOC(wc_D_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_D_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      wc_FreeRng(&rng);
+      goto leave;
+    }
+    XMEMSET(wc_D_rightAligned, 0, wc_D_rightAligned_len);
+
+    wc_QX_rightAligned = (byte *)XMALLOC(wc_QX_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_QX_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      wc_FreeRng(&rng);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    XMEMSET(wc_QX_rightAligned, 0, wc_QX_rightAligned_len);
+
+    wc_QY_rightAligned = (byte *)XMALLOC(wc_QY_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_QY_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      wc_FreeRng(&rng);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    XMEMSET(wc_QY_rightAligned, 0, wc_QY_rightAligned_len);
+
+    /* Get Curve Parameters from libgcrypt */
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_D,
+                                &wc_D_len, ec->d);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      wc_FreeRng(&rng);
+      goto leave;
+    }
+
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_QX,
+                                &wc_QX_len, ec->Q->x);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_QY,
+                                &wc_QY_len, ec->Q->y);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      wc_FreeRng(&rng);
+      goto leave;
+    }
+
+    if (k_supplied) {
+        ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_k,
+                                    &wc_k_len, &k_supplied);
+        if (ret != 0) {
+        rc = GPG_ERR_BROKEN_PUBKEY;
+        wc_ecc_free(&wc_key);
+        XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        wc_FreeRng(&rng);
+        goto leave;
+        }
+    }
+
+    /* Right align the key */
+    /* libgcrypt wont extend to full length, so we need to do it manually */
+    memcpy(wc_D_rightAligned + (wc_D_rightAligned_len - wc_D_len), wc_D, wc_D_len);
+    memcpy(wc_QX_rightAligned + (wc_QX_rightAligned_len - wc_QX_len), wc_QX, wc_QX_len);
+    memcpy(wc_QY_rightAligned + (wc_QY_rightAligned_len - wc_QY_len), wc_QY, wc_QY_len);
+
+
+    /* Import the key into wolfSSL */
+    ret = wc_ecc_import_unsigned(&wc_key, wc_QX_rightAligned,
+                                    wc_QY_rightAligned, wc_D_rightAligned,
+                                    wc_curve_id);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    /* Do not need these anymore */
+    XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+
+    if (k_supplied) {
+      ret = wc_ecc_sign_set_k(wc_k, wc_k_len, &wc_key);
+      if (ret != 0) {
+        rc = GPG_ERR_BROKEN_PUBKEY;
+        wc_ecc_free(&wc_key);
+        goto leave;
+      }
+    }
+
+    /* Get the hash */
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_hash,
+                                &wc_hash_len, hash);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      goto leave;
+    }
+
+    /* Generate the signature */
+    /* Now that the key is imported, we can use the wolfSSL functions */
+    ret = wc_ecc_sign_hash_ex(wc_hash, wc_hash_len,
+                            &rng, &wc_key,
+                            &wc_r_mpi, &wc_s_mpi);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      goto leave;
+    }
+
+    /* convert r and s to libgcrypt mpi */
+    wc_r_len = (word32)mp_unsigned_bin_size(&wc_r_mpi);
+    wc_s_len = (word32)mp_unsigned_bin_size(&wc_s_mpi);
+
+    /* allocate memory for r and s */
+    wc_r = (byte *)XMALLOC(wc_r_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_r == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      goto leave;
+    }
+    wc_s = (byte *)XMALLOC(wc_s_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_s == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_r, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    /* convert r and s to libgcrypt mpi */
+    _gcry_mpi_scan(&r, GCRYMPI_FMT_USG, wc_r, wc_r_len, NULL);
+    _gcry_mpi_scan(&s, GCRYMPI_FMT_USG, wc_s, wc_s_len, NULL);
+
+  }
+  else {
+  printf("wc_curve_id is invalid defaultint to libgcrypt code path\n");
   if (rc)
     {
       mpi_free (hash_computed_internally);
@@ -454,17 +751,20 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
       log_mpidump ("ecdsa sign result r ", r);
       log_mpidump ("ecdsa sign result s ", s);
     }
+  }
 
  leave:
-  mpi_free (b);
-  mpi_free (bi);
-  point_free (&I);
-  mpi_free (x);
-  mpi_free (k_1);
-  mpi_free (sum);
-  mpi_free (dr);
-  if (!k_supplied)
-    mpi_free (k);
+  if (wolf != 1) {
+    mpi_free (b);
+    mpi_free (bi);
+    point_free (&I);
+    mpi_free (x);
+    mpi_free (k_1);
+    mpi_free (sum);
+    mpi_free (dr);
+    if (!k_supplied)
+        mpi_free (k);
+  }
 
   if (hash != input)
     mpi_free (hash);
