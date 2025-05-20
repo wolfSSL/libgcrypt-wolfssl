@@ -40,20 +40,13 @@
 #ifdef HAVE_WOLFSSL
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/rsa.h>
-#include <wolfssl/wolfcrypt/dsa.h>
-#include <wolfssl/wolfcrypt/kdf.h>
-#include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/sha.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/sha512.h>
 #include <wolfssl/wolfcrypt/sha3.h>
-#include <wolfssl/wolfcrypt/signature.h>
 #include <wolfssl/wolfcrypt/integer.h>
 
-#define GCRY_WC_RSA_DEBUG
-#undef GCRY_WC_RSA_DEBUG
 #endif
 
 
