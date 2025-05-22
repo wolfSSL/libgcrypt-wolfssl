@@ -417,3 +417,326 @@ _gcry_cipher_ccm_decrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
     _gcry_burn_stack (burn + sizeof(void *) * 5);
   return err;
 }
+
+#ifdef HAVE_WOLFSSL
+#include "rijndael-internal.h"
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_close(gcry_cipher_hd_t c)
+{
+  Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
+  Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+
+  if (wc_c->databuf != NULL)
+      free(wc_c->databuf);
+
+  if (wc_c->cryptbuf != NULL)
+      free(wc_c->cryptbuf);
+
+  if (wc_c->aadbuf != NULL)
+      free(wc_c->aadbuf);
+
+  wc_AesFree(aesCcmEnc);
+  wc_AesFree(aesCcmDec);
+}
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_reset(gcry_cipher_hd_t c)
+{
+  int ret;
+  Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
+  Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
+  unsigned int marks_key, marks_allow_weak_key;
+  byte key[aesCcmEnc->keylen];
+  size_t keylen = aesCcmEnc->keylen;
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+  wc_ccm_context_t save_wc_c = c->u_mode.ccm.wc_ccm;
+
+  memcpy(key, aesCcmEnc->key, keylen);
+  marks_key = c->marks.key;
+  marks_allow_weak_key = c->marks.allow_weak_key;
+
+  memset (&c->marks, 0, sizeof c->marks);
+  memset (&c->u_mode.ccm, 0, sizeof c->u_mode.ccm);
+  memset (c->u_iv.iv, 0, c->spec->blocksize);
+  memset (c->lastiv, 0, c->spec->blocksize);
+  memset (c->u_ctr.ctr, 0, c->spec->blocksize);
+  c->unused = 0;
+
+  memcpy(wc_c, &save_wc_c, sizeof *wc_c);
+
+  c->marks.key = marks_key;
+  c->marks.allow_weak_key = marks_allow_weak_key;
+
+  return GPG_ERR_NO_ERROR;
+}
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_setkey(gcry_cipher_hd_t c, byte *key, size_t keylen)
+{
+  int ret;
+  Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
+
+  /* The main aes setkey function in rijndael.c sets the decryption context
+   * key with AES_DECRYPTION. For CCM the decryption key needs to be set
+   * with AES_ENCRYPTION.
+   */
+  ret = wc_AesSetKey(aesCcmDec, key, keylen, NULL, AES_ENCRYPTION);
+  if (ret != 0) {
+    printf("wc_AesSetKey failed\n");
+    return GPG_ERR_INV_VALUE;
+  }
+  return GPG_ERR_NO_ERROR;
+}
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_set_nonce (gcry_cipher_hd_t c, const unsigned char *nonce,
+                              size_t noncelen)
+{
+  int ret;
+  unsigned int marks_key;
+  size_t L = 15 - noncelen;
+  Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
+  Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+  wc_ccm_context_t save_wc_c = c->u_mode.ccm.wc_ccm;
+  if (!nonce)
+    return GPG_ERR_INV_ARG;
+  /* Length field must be 2, 3, ..., or 8. */
+  if (L < 2 || L > 8)
+    return GPG_ERR_INV_LENGTH;
+
+  if (wc_c->databuf != NULL)
+      free(wc_c->databuf);
+
+  if (wc_c->cryptbuf != NULL)
+      free(wc_c->cryptbuf);
+
+  if (wc_c->aadbuf != NULL)
+      free(wc_c->aadbuf);
+
+  marks_key = c->marks.key;
+  memset (&c->u_mode, 0, sizeof(c->u_mode));
+  memset (&c->marks, 0, sizeof(c->marks));
+  memset (&c->u_iv, 0, sizeof(c->u_iv));
+  memset (&c->u_ctr, 0, sizeof(c->u_ctr));
+  memset (c->lastiv, 0, sizeof(c->lastiv));
+  c->unused = 0;
+  c->marks.key = marks_key;
+  memcpy(wc_c->authtag, save_wc_c.authtag, save_wc_c.authtag_len);
+  wc_c->authtag_len = save_wc_c.authtag_len;
+
+  ret = wc_AesCcmSetNonce(aesCcmEnc, nonce, noncelen);
+  if (ret != 0)
+      return GPG_ERR_INV_ARG;
+
+  ret = wc_AesCcmSetNonce(aesCcmDec, nonce, noncelen);
+  if (ret != 0)
+      return GPG_ERR_INV_ARG;
+
+   c->u_mode.ccm.nonce = 1;
+   return GPG_ERR_NO_ERROR;
+}
+
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_set_lengths (gcry_cipher_hd_t c, u64 encryptlen, u64 aadlen,
+                              u64 taglen)
+{
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+  u64 M = taglen;
+  u64 M_;
+
+  M_ = (M - 2) / 2;
+
+  /* Authentication field must be 4, 6, 8, 10, 12, 14 or 16. */
+  if ((M_ * 2 + 2) != M || M < 4 || M > 16)
+    return GPG_ERR_INV_LENGTH;
+  if (!c->u_mode.ccm.nonce || c->marks.tag)
+    return GPG_ERR_INV_STATE;
+  if (c->u_mode.ccm.lengths)
+    return GPG_ERR_INV_STATE;
+
+  c->u_mode.ccm.authlen = taglen;
+  c->u_mode.ccm.encryptlen = encryptlen;
+  c->u_mode.ccm.aadlen = aadlen;
+  wc_c->authtag_len = taglen;
+
+  wc_c->databuf = calloc(encryptlen, sizeof *wc_c->databuf);
+  wc_c->databuf_cap = encryptlen;
+  wc_c->databuf_len = 0;
+
+  wc_c->cryptbuf = calloc(encryptlen, sizeof *wc_c->cryptbuf);
+  wc_c->cryptbuf_cap = encryptlen;
+  wc_c->cryptbuf_len = 0;
+
+  wc_c->aadbuf = calloc(aadlen, sizeof *wc_c->aadbuf);
+  wc_c->aadbuf_cap = aadlen;
+  wc_c->aadbuf_len = 0;
+
+  c->u_mode.ccm.lengths = 1;
+
+  return GPG_ERR_NO_ERROR;
+}
+
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_authenticate (gcry_cipher_hd_t c, const unsigned char *abuf,
+                               size_t abuflen)
+{
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+
+  if (abuflen > 0 && !abuf)
+    return GPG_ERR_INV_ARG;
+  if (!c->u_mode.ccm.nonce || !c->u_mode.ccm.lengths || c->marks.tag)
+    return GPG_ERR_INV_STATE;
+  if (abuflen > c->u_mode.ccm.aadlen ||
+      abuflen + wc_c->aadbuf_len > wc_c->aadbuf_cap)
+    return GPG_ERR_INV_LENGTH;
+
+  memcpy(&wc_c->aadbuf[wc_c->aadbuf_len], abuf, abuflen);
+  c->u_mode.ccm.aadlen -= abuflen;
+  wc_c->aadbuf_len += abuflen;
+
+  return GPG_ERR_NO_ERROR;
+}
+
+
+static gcry_err_code_t
+_wc_cipher_aes_ccm_tag (gcry_cipher_hd_t c, unsigned char *outbuf,
+		      size_t outbuflen, int check)
+{
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+
+  if (!outbuf || outbuflen == 0)
+    return GPG_ERR_INV_ARG;
+  /* Tag length must be same as initial authlen.  */
+  if (c->u_mode.ccm.authlen != outbuflen ||
+      wc_c->authtag_len != outbuflen)
+    return GPG_ERR_INV_LENGTH;
+  if (!c->u_mode.ccm.nonce || !c->u_mode.ccm.lengths || c->u_mode.ccm.aadlen > 0)
+    return GPG_ERR_INV_STATE;
+  /* Initial encrypt length must match with length of actual data processed.  */
+  if (c->u_mode.ccm.encryptlen > 0)
+    return GPG_ERR_UNFINISHED;
+
+  if (!c->marks.tag)
+    {
+      c->marks.tag = 1;
+    }
+
+  if (!check)
+    {
+      memcpy (outbuf, wc_c->authtag, outbuflen);
+      return GPG_ERR_NO_ERROR;
+    }
+  else
+    {
+      return buf_eq_const(outbuf, wc_c->authtag, outbuflen) ?
+             GPG_ERR_NO_ERROR : GPG_ERR_CHECKSUM;
+    }
+}
+
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_get_tag (gcry_cipher_hd_t c, unsigned char *outtag,
+			  size_t taglen)
+{
+  return _wc_cipher_aes_ccm_tag (c, outtag, taglen, 0);
+}
+
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_check_tag (gcry_cipher_hd_t c, const unsigned char *intag,
+			    size_t taglen)
+{
+  return _wc_cipher_aes_ccm_tag (c, (unsigned char *)intag, taglen, 1);
+}
+
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_encrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
+                          size_t outbuflen, const unsigned char *inbuf,
+                          size_t inbuflen)
+{
+  int ret;
+  Aes *aesCcm = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+  unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
+  size_t newdatastart;
+
+  if (outbuflen < inbuflen)
+    return GPG_ERR_BUFFER_TOO_SHORT;
+  if (!c->u_mode.ccm.nonce || c->marks.tag || !c->u_mode.ccm.lengths ||
+      c->u_mode.ccm.aadlen > 0)
+    return GPG_ERR_INV_STATE;
+  if (inbuflen > c->u_mode.ccm.encryptlen)
+    return GPG_ERR_INV_LENGTH;
+
+  memcpy(&wc_c->databuf[wc_c->databuf_len], inbuf, inbuflen);
+  newdatastart = wc_c->databuf_len;
+  wc_c->databuf_len += inbuflen;
+
+  ret = wc_AesCcmEncrypt(aesCcm, wc_c->cryptbuf,
+                         wc_c->databuf, wc_c->databuf_len,
+                         aesCcm->reg, aesCcm->nonceSz,
+                         wc_c->authtag, wc_c->authtag_len,
+                         aadbuf, wc_c->aadbuf_len);
+  if (ret != 0)
+    return GPG_ERR_INV_ARG;
+
+  c->u_mode.ccm.encryptlen -= inbuflen;
+  memcpy(outbuf, &wc_c->cryptbuf[newdatastart], inbuflen);
+  return GPG_ERR_NO_ERROR;
+}
+
+gcry_err_code_t
+_wc_cipher_aes_ccm_decrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
+                          size_t outbuflen, const unsigned char *inbuf,
+                          size_t inbuflen)
+{
+  int ret;
+  Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
+  Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
+  wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
+  unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
+  size_t newdatastart;
+
+  if (outbuflen < inbuflen)
+    return GPG_ERR_BUFFER_TOO_SHORT;
+  if (!c->u_mode.ccm.nonce || c->marks.tag || !c->u_mode.ccm.lengths ||
+      c->u_mode.ccm.aadlen > 0)
+    return GPG_ERR_INV_STATE;
+  if (inbuflen > c->u_mode.ccm.encryptlen)
+    return GPG_ERR_INV_LENGTH;
+
+  memcpy(&wc_c->databuf[wc_c->databuf_len], inbuf, inbuflen);
+
+  newdatastart = wc_c->databuf_len;
+  wc_c->databuf_len += inbuflen;
+
+  ret = wc_AesCcmDecrypt(aesCcmDec, wc_c->cryptbuf,
+                         wc_c->databuf, wc_c->databuf_len,
+                         aesCcmDec->reg, aesCcmDec->nonceSz,
+                         wc_c->authtag, wc_c->authtag_len,
+                         aadbuf, wc_c->aadbuf_len);
+
+  /* Ignore authentication error from decrypt */
+  if (ret == -181) {
+      /* Get the authtag by encrypting the plaintext again */
+      ret = wc_AesCcmEncrypt(aesCcmEnc, wc_c->databuf,
+                             wc_c->cryptbuf, wc_c->databuf_len,
+                             aesCcmEnc->reg, aesCcmEnc->nonceSz,
+                             wc_c->authtag, wc_c->authtag_len,
+                             aadbuf, wc_c->aadbuf_len);
+  }
+  if (ret != 0)
+    return GPG_ERR_INV_ARG;
+
+  c->u_mode.ccm.encryptlen -= inbuflen;
+  memcpy(outbuf, &wc_c->cryptbuf[newdatastart], inbuflen);
+
+  return GPG_ERR_NO_ERROR;
+}
+#endif
