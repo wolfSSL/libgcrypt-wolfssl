@@ -372,6 +372,216 @@ wc_name_to_curve_id(const char *curve_name)
     return ECC_CURVE_INVALID;
 }
 
+/*
+ * Convert libgcrypt hash algorithm ID to WolfSSL hash type
+ * Returns the WolfSSL hash type or WC_HASH_TYPE_NONE on error
+ */
+static int
+_libgcrypt_to_wc_hash(int gcry_hash_algo)
+{
+  switch (gcry_hash_algo)
+  {
+    case GCRY_MD_MD5:             /* 1 */
+      return WC_HASH_TYPE_MD5;
+
+    case GCRY_MD_SHA1:            /* 2 */
+      return WC_HASH_TYPE_SHA;
+
+    case GCRY_MD_SHA224:          /* 11 */
+      return WC_HASH_TYPE_SHA224;
+
+    case GCRY_MD_SHA256:          /* 8 */
+      return WC_HASH_TYPE_SHA256;
+
+    case GCRY_MD_SHA384:          /* 9 */
+      return WC_HASH_TYPE_SHA384;
+
+    case GCRY_MD_SHA512:          /* 10 */
+      return WC_HASH_TYPE_SHA512;
+
+    case GCRY_MD_SHA3_224:        /* 312 */
+      return WC_HASH_TYPE_SHA3_224;
+
+    case GCRY_MD_SHA3_256:        /* 313 */
+      return WC_HASH_TYPE_SHA3_256;
+
+    case GCRY_MD_SHA3_384:        /* 314 */
+      return WC_HASH_TYPE_SHA3_384;
+
+    case GCRY_MD_SHA3_512:        /* 315 */
+      return WC_HASH_TYPE_SHA3_512;
+
+    case GCRY_MD_SHA512_224:      /* 328 */
+      return WC_HASH_TYPE_SHA512_224;
+
+    case GCRY_MD_SHA512_256:      /* 327 */
+      return WC_HASH_TYPE_SHA512_256;
+
+    default:
+      //printf("Unsupported hash algorithm: %d\n", gcry_hash_algo);
+      return WC_HASH_TYPE_NONE;
+  }
+}
+
+
+/* will do the digest of the data and return the digest */
+static int
+_wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, int hashType)
+{
+
+  int ret = 0;
+
+  switch (hashType) {
+    case WC_HASH_TYPE_SHA:
+    {
+      wc_Sha sha;
+      ret = wc_InitSha(&sha);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_ShaUpdate(&sha, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_ShaFinal(&sha, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA224:
+    {
+      wc_Sha224 sha224;
+      ret = wc_InitSha224(&sha224);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha224Update(&sha224, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha224Final(&sha224, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA256:
+    {
+      wc_Sha256 sha256;
+      ret = wc_InitSha256(&sha256);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha256Update(&sha256, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha256Final(&sha256, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA384:
+    {
+      wc_Sha384 sha384;
+      ret = wc_InitSha384(&sha384);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha384Update(&sha384, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha384Final(&sha384, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA512_224:
+    {
+      wc_Sha512_224 sha512_224;
+      ret = wc_InitSha512_224(&sha512_224);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_224Update(&sha512_224, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_224Final(&sha512_224, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA512_256:
+    {
+      wc_Sha512_256 sha512_256;
+      ret = wc_InitSha512_256(&sha512_256);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_256Update(&sha512_256, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512_256Final(&sha512_256, digest);
+      break;
+    }
+    case WC_HASH_TYPE_SHA512:
+    {
+      wc_Sha512 sha512;
+      ret = wc_InitSha512(&sha512);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512Update(&sha512, data, dataLen);
+      if (ret != 0) {
+        return ret;
+      }
+      ret = wc_Sha512Final(&sha512, digest);
+      break;
+    }
+    default:
+      printf("Unsupported hash algorithm: %d\n", hashType);
+      return -1;
+  }
+  return ret;
+}
+
+
+
+/*
+ * Get the hash length (in bytes) for a given libgcrypt hash algorithm
+ * Returns the length in bytes or 0 on error
+ */
+static int
+_libgcrypt_hash_length(int gcry_hash_algo)
+{
+  /* Return appropriate hash length in bytes */
+  switch (gcry_hash_algo)
+  {
+    case GCRY_MD_MD2:             /* 5 */
+    case GCRY_MD_MD4:             /* 301 */
+    case GCRY_MD_MD5:             /* 1 */
+    case GCRY_MD_SHAKE128:        /* 316 */
+      return 16;                  /* 128 bits = 16 bytes */
+
+    case GCRY_MD_SHA1:            /* 2 */
+      return 20;                  /* 160 bits = 20 bytes */
+
+    case GCRY_MD_SHA224:          /* 11 */
+    case GCRY_MD_SHA512_224:      /* 328 */
+    case GCRY_MD_SHA3_224:        /* 312 */
+      return 28;                  /* 224 bits = 28 bytes */
+
+    case GCRY_MD_SHA256:          /* 8 */
+    case GCRY_MD_SHA512_256:      /* 327 */
+    case GCRY_MD_SHA3_256:        /* 313 */
+    case GCRY_MD_SHAKE256:        /* 317 */
+      return 32;                  /* 256 bits = 32 bytes */
+
+    case GCRY_MD_SHA384:          /* 9 */
+    case GCRY_MD_SHA3_384:        /* 314 */
+      return 48;                  /* 384 bits = 48 bytes */
+
+    case GCRY_MD_SHA512:          /* 10 */
+    case GCRY_MD_SHA3_512:        /* 315 */
+      return 64;                  /* 512 bits = 64 bytes */
+
+    default:
+      //printf("Unsupported hash algorithm: %d\n", gcry_hash_algo);
+      return 0;
+  }
+}
 
 
 
@@ -455,11 +665,14 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 
   /* Convert the INPUT into an MPI if needed.  */
   rc = _gcry_dsa_normalize_hash (input, &hash, qbits);
-#if 0
-  if (wc_curve_id != ECC_CURVE_INVALID) {
-#else
-  if (0) {
-#endif
+
+  if (rc)
+    {
+      mpi_free (hash_computed_internally);
+      return rc;
+    }
+
+  if (wc_curve_id != ECC_CURVE_INVALID && !(flags & PUBKEY_FLAG_RAW_FLAG)) {
     wolf = 1;
     ret = wc_InitRng(&rng);
     if (ret != 0) {
@@ -552,12 +765,10 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     /* Eventually wolfssl code will handle this */
     k = NULL;
     if (k_supplied) {
-      printf("k_supplied is not NULL\n");
       k = k_supplied;
     }
     else
     {
-      printf("k_supplied is NULL\n");
       mpi_free (k);
       k = NULL;
       if ((flags & PUBKEY_FLAG_RFC6979) && hashalgo)
@@ -592,62 +803,32 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
         k = _gcry_dsa_gen_k (ec->n, GCRY_STRONG_RANDOM);
       }
     }
-
-
     /* LIBGCRYPT CODE -- END: */
 
-    if (k == NULL) {
-      printf("k is still NULL\n");
-      wc_k = k_is_null;
-      wc_k_len = sizeof(k_is_null);
-    }
-    else {
-      ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_k,
+  if (k != NULL) {
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_k,
                                     &wc_k_len, k);
-      if (ret != 0) {
-        rc = GPG_ERR_BROKEN_PUBKEY;
-        wc_ecc_free(&wc_key);
-        wc_FreeRng(&rng);
-        XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        goto leave;
-      }
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      wc_FreeRng(&rng);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
     }
-
+  }
     /* Right align the key */
     /* libgcrypt wont extend to full length, so we need to do it manually */
     memcpy(wc_D_rightAligned + (wc_D_rightAligned_len - wc_D_len), wc_D, wc_D_len);
     memcpy(wc_QX_rightAligned + (wc_QX_rightAligned_len - wc_QX_len), wc_QX, wc_QX_len);
     memcpy(wc_QY_rightAligned + (wc_QY_rightAligned_len - wc_QY_len), wc_QY, wc_QY_len);
 
-
-    log_mpidump ("ecdsa sign from libgcrypt X ", ec->Q->x);
-    log_mpidump ("ecdsa sign from libgcrypt Y ", ec->Q->y);
-    log_mpidump ("ecdsa sign from libgcrypt D ", ec->d);
-
-    printf("wc_QX_rightAligned[%d]:\n", wc_QX_rightAligned_len);
-    for (int i = 0; i < wc_QX_rightAligned_len; i++) {
-      printf("%02X ", wc_QX_rightAligned[i]);
-    }
-    printf("\n");
-    printf("wc_QY_rightAligned[%d]:\n", wc_QY_rightAligned_len);
-    for (int i = 0; i < wc_QY_rightAligned_len; i++) {
-      printf("%02X ", wc_QY_rightAligned[i]);
-    }
-    printf("\n");
-    printf("wc_D_rightAligned[%d]:\n", wc_D_rightAligned_len);
-    for (int i = 0; i < wc_D_rightAligned_len; i++) {
-      printf("%02X ", wc_D_rightAligned[i]);
-    }
-    printf("\n");
-
     /* Import the key into wolfSSL */
     ret = wc_ecc_import_unsigned(&wc_key, wc_QX_rightAligned,
                                     wc_QY_rightAligned, wc_D_rightAligned,
                                     wc_curve_id);
     if (ret != 0) {
-      printf("wc_ecc_import_raw_ex failed\n");
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
@@ -663,22 +844,15 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
-    log_mpidump ("ecdsa sign from libgcrypt k ", k_supplied);
-    printf("wc_k_len[%d]:\n", wc_k_len);
-    for (int i = 0; i < wc_k_len; i++) {
-      printf("%02X ", wc_k[i]);
-    }
-    printf("\n");
+  if (k != NULL) {
     ret = wc_ecc_sign_set_k(wc_k, wc_k_len, &wc_key);
     if (ret != 0) {
-      printf("wc_ecc_sign_set_k failed\n");
       rc = GPG_ERR_BROKEN_PUBKEY;
-      XFREE(wc_k, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
       goto leave;
     }
-
+  }
     /* Get the hash */
     ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_hash,
                                 &wc_hash_len, hash);
@@ -689,17 +863,8 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
       goto leave;
     }
 
-    log_mpidump ("input from libgcrypt ", hash);
-
-    printf("input[%d]:\n", wc_hash_len);
-    for (int i = 0; i < wc_hash_len; i++) {
-      printf("%02X ", wc_hash[i]);
-    }
-    printf("\n");
-
     ret = mp_init(&wc_r_mpi);
     if (ret != 0) {
-      printf("mp_init failed for r\n");
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
@@ -708,15 +873,11 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 
     ret = mp_init(&wc_s_mpi);
     if (ret != 0) {
-      printf("mp_init failed for s\n");
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
       goto leave;
     }
-
-
-
 
     /* Generate the signature */
     /* Now that the key is imported, we can use the wolfSSL functions */
@@ -740,7 +901,6 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
                                 wc_hash, wc_hash_len,
                                 &is_valid_signature, &wc_key);
     if (is_valid_signature == 0) { /* false */
-      printf("wc_ecc_verify_hash_ex failed\n");
       printf("is_valid_signature: %d\n", is_valid_signature);
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
@@ -758,7 +918,6 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     /* allocate memory for r and s */
     wc_r = (byte *)XMALLOC(wc_r_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     if (wc_r == NULL) {
-      printf("wc_r == NULL\n");
       rc = GPG_ERR_ENOMEM;
       wc_ecc_free(&wc_key);
       mp_clear(&wc_r_mpi);
@@ -767,7 +926,6 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     }
     wc_s = (byte *)XMALLOC(wc_s_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     if (wc_s == NULL) {
-      printf("wc_s == NULL\n");
       rc = GPG_ERR_ENOMEM;
       wc_ecc_free(&wc_key);
       XFREE(wc_r, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -779,7 +937,6 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 
     ret = mp_to_unsigned_bin(&wc_r_mpi, wc_r);
     if (ret != 0) {
-      printf("mp_to_unsigned_bin failed for r\n");
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       XFREE(wc_r, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -791,7 +948,6 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 
     ret = mp_to_unsigned_bin(&wc_s_mpi, wc_s);
     if (ret != 0) {
-      printf("mp_to_unsigned_bin failed for s\n");
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       XFREE(wc_r, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -804,20 +960,6 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     /* convert r and s to libgcrypt mpi */
     _gcry_mpi_scan(&r, GCRYMPI_FMT_USG, wc_r, wc_r_len, NULL);
     _gcry_mpi_scan(&s, GCRYMPI_FMT_USG, wc_s, wc_s_len, NULL);
-
-    log_mpidump ("ecdsa sign result r ", r);
-    log_mpidump ("ecdsa sign result s ", s);
-
-    printf("r[%d]:\n", wc_r_len);
-    for (int i = 0; i < wc_r_len; i++) {
-      printf("%02X ", wc_r[i]);
-    }
-    printf("\n");
-    printf("s[%d]:\n", wc_s_len);
-    for (int i = 0; i < wc_s_len; i++) {
-      printf("%02X ", wc_s[i]);
-    }
-    printf("\n");
 
     XFREE(wc_r, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     XFREE(wc_s, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -974,6 +1116,9 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   gcry_mpi_t hash;
   unsigned int nbits;
   gcry_mpi_t hash_computed_internally = NULL;
+  gcry_mpi_t h, h1, h2, x;
+  mpi_point_struct Q, Q1, Q2;
+
 
   /* wolfSSL declarations */
   int ret;
@@ -987,6 +1132,8 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   byte *wc_QY_rightAligned = NULL;
   byte *wc_r = NULL;
   byte *wc_s = NULL;
+  byte *wc_r_rightAligned = NULL;
+  byte *wc_s_rightAligned = NULL;
 
   word32 wc_QX_len = 0;
   word32 wc_QY_len = 0;
@@ -994,6 +1141,8 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   word32 wc_QY_rightAligned_len = 0;
   word32 wc_r_len = 0;
   word32 wc_s_len = 0;
+  word32 wc_r_rightAligned_len = 0;
+  word32 wc_s_rightAligned_len = 0;
 
   mp_int wc_r_mpi;
   mp_int wc_s_mpi;
@@ -1034,7 +1183,8 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
       return err;
     }
 
-  if (wc_curve_id != ECC_CURVE_INVALID) {
+  /* Some raw messages have issues with wolfSSL, so we use libgcrypt's native implementation */
+  if (wc_curve_id != ECC_CURVE_INVALID && !(flags & PUBKEY_FLAG_RAW_FLAG)) {
     wolf = 1;
     ret = wc_ecc_init(&wc_key);
     if (ret != 0) {
@@ -1047,6 +1197,8 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
     wc_QY_len = wc_QX_len;
     wc_QX_rightAligned_len = wc_QX_len;
     wc_QY_rightAligned_len = wc_QX_len;
+    wc_r_rightAligned_len = wc_QX_len;
+    wc_s_rightAligned_len = wc_QX_len;
 
     wc_QX_rightAligned = (byte *)XMALLOC(wc_QX_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     if (wc_QX_rightAligned == NULL) {
@@ -1128,6 +1280,15 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
       goto leave;
     }
 
+    ret = wc_ecc_set_curve(&wc_key, wc_QX_rightAligned_len, wc_curve_id);
+    if (ret != 0) {
+      err = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
     /* Initialize the MP integers for r and s */
     ret = mp_init(&wc_r_mpi);
     if (ret != 0) {
@@ -1148,32 +1309,75 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
       goto leave;
     }
 
-    /* Convert r and s to MP integers */
-    ret = mp_read_unsigned_bin(&wc_r_mpi, wc_r, wc_r_len);
-    if (ret != 0) {
-      err = GPG_ERR_INTERNAL;
-      wc_ecc_free(&wc_key);
-      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-      goto leave;
-    }
-
-    ret = mp_read_unsigned_bin(&wc_s_mpi, wc_s, wc_s_len);
-    if (ret != 0) {
-      err = GPG_ERR_INTERNAL;
+    wc_r_rightAligned = (byte *)XMALLOC(wc_r_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_r_rightAligned == NULL) {
+      err = GPG_ERR_ENOMEM;
       wc_ecc_free(&wc_key);
       mp_clear(&wc_r_mpi);
       XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       goto leave;
     }
+    XMEMSET(wc_r_rightAligned, 0, wc_r_rightAligned_len);
+
+    wc_s_rightAligned = (byte *)XMALLOC(wc_s_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_s_rightAligned == NULL) {
+      err = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      mp_clear(&wc_r_mpi);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_r_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    XMEMSET(wc_s_rightAligned, 0, wc_s_rightAligned_len);
+
+    /* Right align the signature values */
+    memcpy(wc_r_rightAligned + (wc_r_rightAligned_len - wc_r_len), wc_r, wc_r_len);
+    memcpy(wc_s_rightAligned + (wc_s_rightAligned_len - wc_s_len), wc_s, wc_s_len);
+
+    /* Convert r and s to MP integers */
+    ret = mp_read_unsigned_bin(&wc_r_mpi, wc_r_rightAligned, wc_r_rightAligned_len);
+    if (ret != 0) {
+      err = GPG_ERR_INTERNAL;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_r_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_s_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    ret = mp_read_unsigned_bin(&wc_s_mpi, wc_s_rightAligned, wc_s_rightAligned_len);
+    if (ret != 0) {
+      err = GPG_ERR_INTERNAL;
+      wc_ecc_free(&wc_key);
+      mp_clear(&wc_r_mpi);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_r_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_s_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    XFREE(wc_r_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(wc_s_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
     /* Verify the signature using wolfSSL */
     ret = wc_ecc_verify_hash_ex(&wc_r_mpi, &wc_s_mpi,
                               wc_hash, wc_hash_len,
                               &is_valid_signature, &wc_key);
-    if (is_valid_signature != 1) {
+    if (ret == 0 && is_valid_signature == 0) {
       err = GPG_ERR_BAD_SIGNATURE;
+      wc_ecc_free(&wc_key);
+      mp_clear(&wc_r_mpi);
+      mp_clear(&wc_s_mpi);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    else if (ret != 0) {
+      err = GPG_ERR_INTERNAL;
       wc_ecc_free(&wc_key);
       mp_clear(&wc_r_mpi);
       mp_clear(&wc_s_mpi);
@@ -1189,9 +1393,6 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   }
   else {
     /* Use libgcrypt's native implementation for verify if wolfSSL can't handle this curve */
-    gcry_mpi_t h, h1, h2, x;
-    mpi_point_struct Q, Q1, Q2;
-
     h  = mpi_alloc (0);
     h1 = mpi_alloc (0);
     h2 = mpi_alloc (0);
