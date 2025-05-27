@@ -686,6 +686,7 @@ _wc_cipher_aes_ccm_encrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
   if (ret != 0)
     return GPG_ERR_INV_ARG;
 
+  wc_c->cryptbuf_len += inbuflen;
   c->u_mode.ccm.encryptlen -= inbuflen;
   memcpy(outbuf, &wc_c->cryptbuf[newdatastart], inbuflen);
   return GPG_ERR_NO_ERROR;

@@ -134,6 +134,7 @@
 #endif
 #endif /* GCM_USE_PPC_VPMSUM */
 
+#ifdef HAVE_WOLFSSL
 typedef struct wc_ccm_context {
     unsigned char *databuf;
     size_t databuf_len;
@@ -151,6 +152,26 @@ typedef struct wc_ccm_context {
     size_t authtag_len;
 } wc_ccm_context_t;
 
+typedef struct wc_gcm_context {
+    unsigned char *iv;
+    size_t iv_len;
+
+    unsigned char *databuf;
+    size_t databuf_len;
+    size_t databuf_cap;
+
+    unsigned char *cryptbuf;
+    size_t cryptbuf_len;
+    size_t cryptbuf_cap;
+
+    unsigned char *aadbuf;
+    size_t aadbuf_len;
+    size_t aadbuf_cap;
+
+    unsigned char authtag[16];
+} wc_gcm_context_t;
+
+#endif
 typedef unsigned int (*ghash_fn_t) (gcry_cipher_hd_t c, byte *result,
                                     const byte *buf, size_t nblocks);
 
@@ -382,23 +403,7 @@ struct gcry_cipher_handle
 
       /* wolfSSL AES GCM context */
       #ifdef HAVE_WOLFSSL
-      Aes wc_aes_gcm_enc;
-      Aes wc_aes_gcm_dec;
-
-      byte* key;
-      unsigned int keySz;
-
-      byte* iv;
-      unsigned int ivSz;
-
-      byte* authIn;
-      unsigned int authInSz;
-
-      byte authTag[16];
-      unsigned int authTagSz;
-      unsigned int wcAesGcmInit:1;
-      unsigned int wcAesEncrypt:1;
-      unsigned int wcAesDecrypt:1;
+      wc_gcm_context_t wc_gcm;
       #endif
 
       /* GHASH multiplier from key.  */
@@ -683,6 +688,18 @@ gcry_err_code_t _gcry_cipher_eax_setkey
 
 /*-- cipher-gcm.c --*/
 #ifdef HAVE_WOLFSSL
+gcry_err_code_t _wc_cipher_aes_gcm_close
+/*           */   (gcry_cipher_hd_t c);
+gcry_err_code_t _wc_cipher_aes_gcm_reset
+/*           */   (gcry_cipher_hd_t c);
+gcry_err_code_t _wc_cipher_aes_gcm_setkey
+/*           */   (gcry_cipher_hd_t c, const byte *key, size_t keylen);
+gcry_err_code_t _wc_cipher_aes_gcm_setiv
+/*           */   (gcry_cipher_hd_t c,
+                   const unsigned char *iv, size_t ivlen);
+gcry_err_code_t _wc_cipher_aes_gcm_authenticate
+/*           */   (gcry_cipher_hd_t c,
+                   const unsigned char *aadbuf, size_t aadbuflen);
 gcry_err_code_t _wc_cipher_aes_gcm_encrypt
 /*           */   (gcry_cipher_hd_t c,
                    unsigned char *outbuf, size_t outbuflen,
@@ -694,20 +711,12 @@ gcry_err_code_t _wc_cipher_aes_gcm_decrypt
 gcry_err_code_t _wc_cipher_aes_gcm_setiv
 /*           */   (gcry_cipher_hd_t c,
                    const unsigned char *iv, size_t ivlen);
-gcry_err_code_t _wc_cipher_aes_gcm_authenticate
-/*           */   (gcry_cipher_hd_t c,
-                   const unsigned char *aadbuf, size_t aadbuflen);
 gcry_err_code_t _wc_cipher_aes_gcm_get_tag
 /*           */   (gcry_cipher_hd_t c,
                    unsigned char *outtag, size_t taglen);
 gcry_err_code_t _wc_cipher_aes_gcm_check_tag
 /*           */   (gcry_cipher_hd_t c,
                    const unsigned char *intag, size_t taglen);
-void _wc_cipher_aes_gcm_setkey
-/*           */   (gcry_cipher_hd_t c, const byte *key, size_t keylen);
-void _wc_cipher_aes_gcm_setupM
-/*           */   (gcry_cipher_hd_t c);
-void _wc_cipher_aes_gcm_reset(gcry_cipher_hd_t c);
 #endif
 
 gcry_err_code_t _gcry_cipher_gcm_encrypt
