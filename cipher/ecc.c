@@ -1966,6 +1966,7 @@ wc_name_to_curve_id(const char *curve_name)
     if (curve_name == NULL)
         return ECC_CURVE_INVALID;
 
+    /* No P-192 for wolfcrypt fips */
     /* NIST curves - check for different naming conventions */
     if (strcmp(curve_name, "NIST P-192") == 0 ||
         strcmp(curve_name, "secp192r1") == 0 ||
@@ -2002,6 +2003,8 @@ wc_name_to_curve_id(const char *curve_name)
       return ECC_SECP521R1;
     }
 
+
+    /* Other curves not supported */
     #if 0
     /* Other SECP curves */
     if (strcmp(curve_name, "secp112r1") == 0)
@@ -2122,7 +2125,8 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
     wc_curve_id = wc_name_to_curve_id(ec->name);
 
     /* Get curve identifier from the curve parameters if present */
-    if (wc_curve_id != ECC_CURVE_INVALID) {
+    /* Cannot generate P-192 keys with wolfSSL FIPS */
+    if (wc_curve_id != ECC_CURVE_INVALID && wc_curve_id != ECC_SECP192R1) {
       /* Init RNG */
       ret =  wc_InitRng(&rng);
       if (ret != 0) {
