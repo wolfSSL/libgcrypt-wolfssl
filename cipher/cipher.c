@@ -740,26 +740,13 @@ _gcry_cipher_close (gcry_cipher_hd_t h)
   /* do this only for AESGCM mode */
   if (h->mode == GCRY_CIPHER_MODE_GCM) {
     switch (h->spec->algo) {
+      #ifdef HAVE_WOLFSSL
       case GCRY_CIPHER_AES:
       case GCRY_CIPHER_AES192:
       case GCRY_CIPHER_AES256:
-        /* explicitly free the authIn buffer */
-        if (h->u_mode.gcm.authIn != NULL) {
-          free(h->u_mode.gcm.authIn);
-          h->u_mode.gcm.authIn = NULL;
-        }
-
-        /* explicitly free the iv buffer */
-        if (h->u_mode.gcm.iv != NULL) {
-          free(h->u_mode.gcm.iv);
-          h->u_mode.gcm.iv = NULL;
-        }
-
-        if (h->u_mode.gcm.key != NULL) {
-          free(h->u_mode.gcm.key);
-          h->u_mode.gcm.key = NULL;
-        }
+        _wc_cipher_aes_gcm_close(h);
         break;
+      #endif
       default:
         break;
     }
