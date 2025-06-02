@@ -2240,53 +2240,11 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
         rc = GPG_ERR_BROKEN_PUBKEY;
         goto leave;
       }
-      #if 0
-      ret = mp_read_unsigned_bin(wc_key.pubkey.x, wc_X, wc_X_len);
-      if (ret != 0) {
-        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_D, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QX, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QY, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        rc = GPG_ERR_BROKEN_PUBKEY;
-        goto leave;
-      }
-
-      ret = mp_read_unsigned_bin(wc_key.pubkey.y, wc_Y, wc_Y_len);
-      if (ret != 0) {
-        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_D, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QX, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QY, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        rc = GPG_ERR_BROKEN_PUBKEY;
-        goto leave;
-      }
-
-      ret = mp_read_unsigned_bin(wc_key.pubkey.z, wc_Z, wc_Z_len);
-      if (ret != 0) {
-        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_D, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QX, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        XFREE(wc_QY, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        rc = GPG_ERR_BROKEN_PUBKEY;
-        goto leave;
-      }
-      #endif
 
       /* Convert to libgcrypt format */
       _gcry_mpi_scan(&ec->d, GCRYMPI_FMT_USG, wc_D, wc_D_len, NULL);
       _gcry_mpi_scan(&Qx, GCRYMPI_FMT_USG, wc_QX, wc_QX_len, NULL);
       _gcry_mpi_scan(&Qy, GCRYMPI_FMT_USG, wc_QY, wc_QY_len, NULL);
-      #if 0
-      _gcry_mpi_scan(&ec->Q->x, GCRYMPI_FMT_USG, wc_X, wc_X_len, NULL);
-      _gcry_mpi_scan(&ec->Q->y, GCRYMPI_FMT_USG, wc_Y, wc_Y_len, NULL);
-      _gcry_mpi_scan(&ec->Q->z, GCRYMPI_FMT_USG, wc_Z, wc_Z_len, NULL);
-      #endif
 
       /* Free the temporary buffers */
       XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);

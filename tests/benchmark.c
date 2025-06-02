@@ -1610,7 +1610,6 @@ ecc_bench (int iterations, int print_header)
       fflush (stdout);
 
       if (p_size == 521) {
-        printf("521 bit key\n");
         x = gcry_mpi_new (512);
         gcry_mpi_randomize (x, 512, GCRY_WEAK_RANDOM);
       }
