@@ -1609,8 +1609,14 @@ ecc_bench (int iterations, int print_header)
       printf ("     %s", elapsed_time (1));
       fflush (stdout);
 
-      x = gcry_mpi_new (p_size);
-      gcry_mpi_randomize (x, p_size, GCRY_WEAK_RANDOM);
+      if (p_size == 521) {
+        x = gcry_mpi_new (512);
+        gcry_mpi_randomize (x, 512, GCRY_WEAK_RANDOM);
+      }
+      else {
+        x = gcry_mpi_new (p_size);
+        gcry_mpi_randomize (x, p_size, GCRY_WEAK_RANDOM);
+      }
       if (is_ed25519)
         err = gcry_sexp_build (&data, NULL,
                                "(data (flags eddsa)(hash-algo sha512)"

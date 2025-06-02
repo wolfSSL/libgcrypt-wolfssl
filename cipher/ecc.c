@@ -62,6 +62,23 @@
 #include "ecc-common.h"
 
 
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/dsa.h>
+#include <wolfssl/wolfcrypt/kdf.h>
+#include <wolfssl/wolfcrypt/pwdbased.h>
+#include <wolfssl/wolfcrypt/sha.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/sha512.h>
+#include <wolfssl/wolfcrypt/sha3.h>
+#include <wolfssl/wolfcrypt/signature.h>
+#include <wolfssl/wolfcrypt/integer.h>
+#endif
+
+
 static const char *ecc_names[] =
   {
     "ecc",
@@ -1922,6 +1939,671 @@ _gcry_pk_ecc_get_sexp (gcry_sexp_t *r_sexp, int mode, mpi_ec_t ec)
 }
 
 
+#ifdef HAVE_WOLFSSL
+
+
+static int
+wc_check_is_nist_curve(const char *curve_name) {
+
+  if (curve_name == NULL) {
+    return 0; /* False */
+  }
+
+  if (strncmp(curve_name, "NIST P-", 7) == 0 ||
+      strncmp(curve_name, "nistp", 5) == 0 ||
+      strncmp(curve_name, "secp256r1", 9) == 0 ||
+      strncmp(curve_name, "secp384r1", 9) == 0 ||
+      strncmp(curve_name, "secp521r1", 9) == 0) {
+      return 1; /* True */
+    }
+  return 0; /* False */
+}
+
+
+static int
+wc_name_to_curve_id(const char *curve_name)
+{
+    if (curve_name == NULL)
+        return ECC_CURVE_INVALID;
+
+    /* No P-192 for wolfcrypt fips */
+    /* NIST curves - check for different naming conventions */
+    if (strcmp(curve_name, "NIST P-192") == 0 ||
+        strcmp(curve_name, "secp192r1") == 0 ||
+        strcmp(curve_name, "nistp192") == 0) {
+      // printf("wc_name_to_curve_id: NIST P-192\n");
+      return ECC_SECP192R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-224") == 0 ||
+        strcmp(curve_name, "secp224r1") == 0 ||
+        strcmp(curve_name, "nistp224") == 0) {
+      // printf("wc_name_to_curve_id: NIST P-224\n");
+      return ECC_SECP224R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-256") == 0 ||
+        strcmp(curve_name, "secp256r1") == 0 ||
+        strcmp(curve_name, "nistp256") == 0) {
+      // printf("wc_name_to_curve_id: NIST P-256\n");
+      return ECC_SECP256R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-384") == 0 ||
+        strcmp(curve_name, "secp384r1") == 0 ||
+        strcmp(curve_name, "nistp384") == 0) {
+      // printf("wc_name_to_curve_id: NIST P-384\n");
+      return ECC_SECP384R1;
+    }
+
+    if (strcmp(curve_name, "NIST P-521") == 0 ||
+        strcmp(curve_name, "secp521r1") == 0 ||
+        strcmp(curve_name, "nistp521") == 0) {
+      // printf("wc_name_to_curve_id: NIST P-521\n");
+      return ECC_SECP521R1;
+    }
+
+
+    /* Other curves not supported */
+    #if 0
+    /* Other SECP curves */
+    if (strcmp(curve_name, "secp112r1") == 0)
+        return ECC_SECP112R1;
+    if (strcmp(curve_name, "secp112r2") == 0)
+        return ECC_SECP112R2;
+    if (strcmp(curve_name, "secp128r1") == 0)
+        return ECC_SECP128R1;
+    if (strcmp(curve_name, "secp128r2") == 0)
+        return ECC_SECP128R2;
+    if (strcmp(curve_name, "secp160r1") == 0)
+        return ECC_SECP160R1;
+    if (strcmp(curve_name, "secp160r2") == 0)
+        return ECC_SECP160R2;
+    #endif
+
+    #if 0
+    /* Koblitz curves */
+    if (strcmp(curve_name, "secp160k1") == 0)
+        return ECC_SECP160K1;
+    if (strcmp(curve_name, "secp192k1") == 0)
+        return ECC_SECP192K1;
+    if (strcmp(curve_name, "secp224k1") == 0)
+        return ECC_SECP224K1;
+    if (strcmp(curve_name, "secp256k1") == 0)
+        return ECC_SECP256K1;
+    #endif
+
+    #if 0
+    /* Brainpool curves */
+    if (strcmp(curve_name, "brainpoolP160r1") == 0)
+        return ECC_BRAINPOOLP160R1;
+    if (strcmp(curve_name, "brainpoolP192r1") == 0)
+        return ECC_BRAINPOOLP192R1;
+    if (strcmp(curve_name, "brainpoolP224r1") == 0)
+        return ECC_BRAINPOOLP224R1;
+    if (strcmp(curve_name, "brainpoolP256r1") == 0)
+        return ECC_BRAINPOOLP256R1;
+    if (strcmp(curve_name, "brainpoolP320r1") == 0)
+        return ECC_BRAINPOOLP320R1;
+    if (strcmp(curve_name, "brainpoolP384r1") == 0)
+        return ECC_BRAINPOOLP384R1;
+    if (strcmp(curve_name, "brainpoolP512r1") == 0)
+        return ECC_BRAINPOOLP512R1;
+    #endif
+
+
+    #if 0
+    /* SM2 */
+    if (strcmp(curve_name, "SM2P256V1") == 0)
+        return ECC_SM2P256V1;
+    #endif
+
+    #if 0
+    /* Other prime curves */
+    if (strcmp(curve_name, "prime192v2") == 0)
+        return ECC_PRIME192V2;
+    if (strcmp(curve_name, "prime192v3") == 0)
+        return ECC_PRIME192V3;
+    if (strcmp(curve_name, "prime239v1") == 0)
+        return ECC_PRIME239V1;
+    if (strcmp(curve_name, "prime239v2") == 0)
+        return ECC_PRIME239V2;
+    if (strcmp(curve_name, "prime239v3") == 0)
+        return ECC_PRIME239V3;
+    #endif
+
+    return ECC_CURVE_INVALID;
+}
+
+static gcry_err_code_t
+wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
+{
+  gpg_err_code_t rc;
+  gcry_mpi_t Gx = NULL;
+  gcry_mpi_t Gy = NULL;
+  gcry_mpi_t Qx = NULL;
+  gcry_mpi_t Qy = NULL;
+  mpi_ec_t ec = NULL;
+  gcry_sexp_t curve_info = NULL;
+  gcry_sexp_t curve_flags = NULL;
+  gcry_mpi_t base = NULL;
+  gcry_mpi_t public = NULL;
+  int flags = 0;
+
+  /* wolfSSL declarations */
+  int ret;
+  ecc_key wc_key;
+  WC_RNG rng;
+  byte *wc_X = NULL;
+  byte *wc_Y = NULL;
+  byte *wc_Z = NULL;
+  byte *wc_QX = NULL;
+  byte *wc_QY = NULL;
+  byte *wc_D = NULL;
+
+  word32 wc_X_len = 0;
+  word32 wc_Y_len = 0;
+  word32 wc_Z_len = 0;
+  word32 wc_D_len = 0;
+  word32 wc_QX_len = 0;
+  word32 wc_QY_len = 0;
+
+  ecc_curve_id wc_curve_id = ECC_CURVE_INVALID; /* no curve id */
+
+  rc = _gcry_mpi_ec_internal_new (&ec, &flags, "ecgen curve", genparms, NULL);
+  if (rc)
+    goto leave;
+
+  if ((flags & PUBKEY_FLAG_EDDSA)
+      || (ec->model == MPI_EC_EDWARDS && ec->dialect == ECC_DIALECT_SAFECURVE))
+    rc = _gcry_ecc_eddsa_genkey (ec, flags);
+  else if (ec->model == MPI_EC_MONTGOMERY)
+    rc = nist_generate_key (ec, flags, &Qx, NULL);
+  else {
+
+    /* Get Curve ID */
+    wc_curve_id = wc_name_to_curve_id(ec->name);
+
+    /* Get curve identifier from the curve parameters if present */
+    /* Cannot generate P-192 keys with wolfSSL FIPS */
+    if (wc_curve_id != ECC_CURVE_INVALID && wc_curve_id != ECC_SECP192R1) {
+      /* Init RNG */
+      ret =  wc_InitRng(&rng);
+      if (ret != 0) {
+        rc = GPG_ERR_BROKEN_PUBKEY;
+        goto leave;
+      }
+
+      /* Init ECC key */
+      ret = wc_ecc_init(&wc_key);
+      if (ret != 0) {
+        rc = GPG_ERR_BROKEN_PUBKEY;
+        wc_FreeRng(&rng);
+        goto leave;
+      }
+
+      /* Now wolfSSL will generate the key */
+      ret = wc_ecc_make_key_ex(&rng, wc_ecc_get_curve_size_from_id(wc_curve_id),
+                                &wc_key, wc_curve_id);
+      if (ret != 0) {
+        rc = GPG_ERR_BROKEN_PUBKEY;
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        goto leave;
+      }
+
+      /* After generation allocate memory for the public key */
+      wc_X_len = (word32)mp_unsigned_bin_size(wc_key.pubkey.x);
+      wc_Y_len = (word32)mp_unsigned_bin_size(wc_key.pubkey.y);
+      wc_Z_len = (word32)mp_unsigned_bin_size(wc_key.pubkey.z);
+      wc_D_len = (word32)wc_ecc_get_curve_size_from_id(wc_curve_id);
+      wc_QX_len = wc_D_len;
+      wc_QY_len = wc_D_len;
+
+
+      wc_X = (byte *)XMALLOC(wc_X_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_X == NULL) {
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+      }
+
+      wc_Y = (byte *)XMALLOC(wc_Y_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_Y == NULL) {
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+      }
+
+      wc_Z = (byte *)XMALLOC(wc_Z_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_Z == NULL) {
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+      }
+
+      wc_D = (byte *)XMALLOC(wc_D_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_D == NULL) {
+        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+      }
+
+      wc_QX = (byte *)XMALLOC(wc_QX_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_QX == NULL) {
+        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_D, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+      }
+
+      wc_QY = (byte *)XMALLOC(wc_QY_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      if (wc_QY == NULL) {
+        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_D, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_QX, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        rc = GPG_ERR_ENOMEM;
+        goto leave;
+      }
+
+
+      /* Export the whole key */
+      ret = wc_ecc_export_private_raw(&wc_key, wc_QX, &wc_QX_len, wc_QY, &wc_QY_len, wc_D, &wc_D_len);
+      if (ret != 0) {
+        XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_D, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_QX, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        XFREE(wc_QY, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        wc_FreeRng(&rng);
+        wc_ecc_free(&wc_key);
+        printf("wc_ecc_export_private_raw failed: %d\n", ret);
+        rc = GPG_ERR_BROKEN_PUBKEY;
+        goto leave;
+      }
+
+      /* Convert to libgcrypt format */
+      _gcry_mpi_scan(&ec->d, GCRYMPI_FMT_USG, wc_D, wc_D_len, NULL);
+      _gcry_mpi_scan(&Qx, GCRYMPI_FMT_USG, wc_QX, wc_QX_len, NULL);
+      _gcry_mpi_scan(&Qy, GCRYMPI_FMT_USG, wc_QY, wc_QY_len, NULL);
+
+      /* Free the temporary buffers */
+      XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_Z, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_D, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+
+
+      /* Free the RNG */
+      wc_FreeRng(&rng);
+
+      /* Free the ECC key */
+      wc_ecc_free(&wc_key);
+
+    }
+    else {
+      /* Non-NIST curve */
+      rc = nist_generate_key (ec, flags, &Qx, &Qy);
+    }
+  }
+  if (rc)
+    goto leave;
+
+
+
+  /* Copy data to the result.  */
+  Gx = mpi_new (0);
+  Gy = mpi_new (0);
+  if (ec->model != MPI_EC_MONTGOMERY)
+    {
+      /* ECDSA: Get base point coordinates - needed for Weierstrass curves with ECDSA */
+      if (_gcry_mpi_ec_get_affine (Gx, Gy, ec->G, ec))
+        log_fatal ("ecgen: Failed to get affine coordinates for %s\n", "G");
+      base = _gcry_ecc_ec2os (Gx, Gy, ec->p); /* ECDSA: Create serialized base point */
+    }
+  if (((ec->dialect == ECC_DIALECT_SAFECURVE && ec->model == MPI_EC_EDWARDS)
+       || ec->dialect == ECC_DIALECT_ED25519 || ec->model == MPI_EC_MONTGOMERY)
+      && !(flags & PUBKEY_FLAG_NOCOMP))
+    {
+      unsigned char *encpk;
+      unsigned int encpklen;
+
+      if (ec->model == MPI_EC_MONTGOMERY)
+        rc = _gcry_ecc_mont_encodepoint (Qx, ec->nbits,
+                                         ec->dialect != ECC_DIALECT_SAFECURVE,
+                                         &encpk, &encpklen);
+      else
+        /* (Gx and Gy are used as scratch variables)  */
+        rc = _gcry_ecc_eddsa_encodepoint (ec->Q, ec, Gx, Gy,
+                                          (ec->dialect != ECC_DIALECT_SAFECURVE
+                                           && !!(flags & PUBKEY_FLAG_COMP)),
+                                          &encpk, &encpklen);
+      if (rc)
+        goto leave;
+      public = mpi_new (0);
+      mpi_set_opaque (public, encpk, encpklen*8);
+    }
+  else
+    {
+      if (!Qx)
+        {
+          /* This is the case for a key from _gcry_ecc_eddsa_generate
+             with no compression.  */
+          Qx = mpi_new (0);
+          Qy = mpi_new (0);
+          if (_gcry_mpi_ec_get_affine (Qx, Qy, ec->Q, ec))
+            log_fatal ("ecgen: Failed to get affine coordinates for %s\n", "Q");
+        }
+      /* ECDSA: Create serialized public key point in standard format for Weierstrass curves */
+      public = _gcry_ecc_ec2os (Qx, Qy, ec->p);
+    }
+  if (ec->name)
+    {
+      rc = sexp_build (&curve_info, NULL, "(curve %s)", ec->name);
+      if (rc)
+        goto leave;
+    }
+
+  if ((flags & PUBKEY_FLAG_PARAM) || (flags & PUBKEY_FLAG_EDDSA)
+      || (flags & PUBKEY_FLAG_DJB_TWEAK))
+    {
+      rc = sexp_build
+        (&curve_flags, NULL,
+         ((flags & PUBKEY_FLAG_PARAM) && (flags & PUBKEY_FLAG_EDDSA))?
+         "(flags param eddsa)" :
+         ((flags & PUBKEY_FLAG_PARAM) && (flags & PUBKEY_FLAG_DJB_TWEAK))?
+         "(flags param djb-tweak)" :
+         ((flags & PUBKEY_FLAG_PARAM))?
+         "(flags param)" : ((flags & PUBKEY_FLAG_EDDSA))?
+         "(flags eddsa)" : "(flags djb-tweak)" );
+      if (rc)
+        goto leave;
+    }
+    /* Note: ECDSA keys don't get any special flags set - they're the default */
+
+  if ((flags & PUBKEY_FLAG_PARAM) && ec->name)
+    rc = sexp_build (r_skey, NULL,
+                     "(key-data"
+                     " (public-key"
+                     "  (ecc%S%S(p%m)(a%m)(b%m)(g%m)(n%m)(h%u)(q%m)))"
+                     " (private-key"
+                     "  (ecc%S%S(p%m)(a%m)(b%m)(g%m)(n%m)(h%u)(q%m)(d%m)))"
+                     " )",
+                     curve_info, curve_flags,
+                     ec->p, ec->a, ec->b, base, ec->n, ec->h, public,
+                     curve_info, curve_flags,
+                     ec->p, ec->a, ec->b, base, ec->n, ec->h, public,
+                     ec->d);
+  else
+    /* ECDSA: Standard key format output when no special flags are set */
+    rc = sexp_build (r_skey, NULL,
+                     "(key-data"
+                     " (public-key"
+                     "  (ecc%S%S(q%m)))"
+                     " (private-key"
+                     "  (ecc%S%S(q%m)(d%m)))"
+                     " )",
+                     curve_info, curve_flags,
+                     public,
+                     curve_info, curve_flags,
+                     public, ec->d);
+  if (rc)
+    goto leave;
+
+  if (DBG_CIPHER)
+    {
+      log_printmpi ("ecgen result  p", ec->p);
+      log_printmpi ("ecgen result  a", ec->a);
+      log_printmpi ("ecgen result  b", ec->b);
+      log_printmpi ("ecgen result  G", base);
+      log_printmpi ("ecgen result  n", ec->n);
+      log_debug    ("ecgen result  h:+%02x\n", ec->h);
+      log_printmpi ("ecgen result  Q", public);
+      log_printmpi ("ecgen result  d", ec->d);
+      if ((flags & PUBKEY_FLAG_EDDSA))
+        log_debug ("ecgen result  using Ed25519+EdDSA\n");
+      /* ECDSA: No special debug output since it's the default case */
+    }
+
+  if (fips_mode ())
+    {
+      int result;
+
+      if (ec->model == MPI_EC_EDWARDS)
+        result = test_keys_eddsa_fips (*r_skey);
+      else
+        /* ECDSA: Test key using FIPS-compliant ECDSA test */
+        result = test_keys_fips (*r_skey);
+      if (result)
+        {
+          sexp_release (*r_skey);
+          *r_skey = NULL;
+          fips_signal_error ("self-test after key generation failed");
+          rc = GPG_ERR_SELFTEST_FAILED;
+        }
+    }
+
+ leave:
+  mpi_free (public);
+  mpi_free (base);
+  mpi_free (Gx);
+  mpi_free (Gy);
+  mpi_free (Qx);
+  mpi_free (Qy);
+  _gcry_mpi_ec_free (ec);
+  sexp_release (curve_flags);
+  sexp_release (curve_info);
+  return rc;
+}
+
+
+
+
+static gcry_err_code_t
+wc_ecc_check_secret_key (gcry_sexp_t keyparms)
+{
+  gcry_err_code_t rc;
+  int flags = 0;
+  mpi_ec_t ec = NULL;
+
+  /* wolfSSL declarations */
+  int ret = 0;
+  int wolf = 0;
+  ecc_key wc_key;
+  byte *wc_QX = NULL;
+  byte *wc_QY = NULL;
+  byte *wc_D = NULL;
+  byte *wc_QX_rightAligned = NULL;
+  byte *wc_QY_rightAligned = NULL;
+  byte *wc_D_rightAligned = NULL;
+
+
+  word32 wc_D_len = 0;
+  word32 wc_QX_len = 0;
+  word32 wc_QY_len = 0;
+  word32 wc_D_rightAligned_len = 0;
+  word32 wc_QX_rightAligned_len = 0;
+  word32 wc_QY_rightAligned_len = 0;
+
+  ecc_curve_id wc_curve_id = ECC_CURVE_INVALID; /* no curve id */
+
+  /*
+   * Extract the key.
+   */
+
+  rc = _gcry_mpi_ec_internal_new (&ec, &flags, "ecc_testkey", keyparms, NULL);
+  if (rc)
+    goto leave;
+  if (!ec->p || !ec->a || !ec->b || !ec->G || !ec->n || !ec->Q || !ec->d)
+    {
+      rc = GPG_ERR_NO_OBJ;
+      goto leave;
+    }
+
+    /* Get Curve ID */
+  wc_curve_id = wc_name_to_curve_id(ec->name);
+  if (wc_curve_id != ECC_CURVE_INVALID) {
+    wolf = 1;
+    /* Init ECC key */
+    ret = wc_ecc_init(&wc_key);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      goto leave;
+    }
+
+    /* Allocate memory for the key */
+    wc_D_len = (word32)wc_ecc_get_curve_size_from_id(wc_curve_id);
+    wc_QX_len = wc_D_len;
+    wc_QY_len = wc_D_len;
+    wc_D_rightAligned_len = wc_D_len;
+    wc_QX_rightAligned_len = wc_D_len;
+    wc_QY_rightAligned_len = wc_D_len;
+
+    wc_D_rightAligned = (byte *)XMALLOC(wc_D_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_D_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      goto leave;
+    }
+    XMEMSET(wc_D_rightAligned, 0, wc_D_rightAligned_len);
+
+    wc_QX_rightAligned = (byte *)XMALLOC(wc_QX_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_QX_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    XMEMSET(wc_QX_rightAligned, 0, wc_QX_rightAligned_len);
+
+    wc_QY_rightAligned = (byte *)XMALLOC(wc_QY_rightAligned_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (wc_QY_rightAligned == NULL) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+    XMEMSET(wc_QY_rightAligned, 0, wc_QY_rightAligned_len);
+
+    /* Get Curve Parameters from libgcrypt */
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_D,
+                                &wc_D_len, ec->d);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_QX,
+                                &wc_QX_len, ec->Q->x);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, &wc_QY,
+                                &wc_QY_len, ec->Q->y);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    /* Right align the key */
+    /* libgcrypt wont extend to full length, so we need to do it manually */
+    memcpy(wc_D_rightAligned + (wc_D_rightAligned_len - wc_D_len), wc_D, wc_D_len);
+    memcpy(wc_QX_rightAligned + (wc_QX_rightAligned_len - wc_QX_len), wc_QX, wc_QX_len);
+    memcpy(wc_QY_rightAligned + (wc_QY_rightAligned_len - wc_QY_len), wc_QY, wc_QY_len);
+
+
+    /* Import the key into wolfSSL */
+    ret = wc_ecc_import_unsigned(&wc_key, wc_QX_rightAligned,
+                                    wc_QY_rightAligned, wc_D_rightAligned,
+                                    wc_curve_id);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+      goto leave;
+    }
+
+    /* Check the key */
+    ret = wc_ecc_check_key(&wc_key);
+    if (ret != 0) {
+      rc = GPG_ERR_BAD_SECKEY;
+    }
+    else {
+      rc = 0;
+    }
+
+    /* Free the key */
+    wc_ecc_free(&wc_key);
+    XFREE(wc_D_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(wc_QX_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+  }
+  else {
+    if (check_secret_key (ec, flags)) {
+      rc = GPG_ERR_BAD_SECKEY;
+    }
+  }
+
+ leave:
+  /* For some reason this causes a segfault when wolfssl`s chech is used */
+  if (wolf != 1) {
+    _gcry_mpi_ec_free (ec);
+  }
+  if (DBG_CIPHER)
+    log_debug ("ecc_testkey    => %s\n", gpg_strerror (rc));
+  return rc;
+}
+
+
+
+
+
+
+
+
+
+#endif
+
+
+
 
 /*
      Self-test section.
@@ -2361,6 +3043,26 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
   return r;
 }
 
+#ifdef HAVE_WOLFSSL
+gcry_pk_spec_t _gcry_pubkey_spec_ecc =
+  {
+    GCRY_PK_ECC, { 0, 1 },
+    (GCRY_PK_USAGE_SIGN | GCRY_PK_USAGE_ENCR),
+    "ECC", ecc_names,
+    "pabgnhq", "pabgnhqd", "se", "rs", "pabgnhq",
+    wc_ecc_generate,
+    wc_ecc_check_secret_key,
+    ecc_encrypt_raw,
+    ecc_decrypt_raw,
+    ecc_sign,
+    ecc_verify,
+    ecc_get_nbits,
+    run_selftests,
+    compute_keygrip,
+    _gcry_ecc_get_curve,
+    _gcry_ecc_get_param_sexp
+  };
+#else
 gcry_pk_spec_t _gcry_pubkey_spec_ecc =
   {
     GCRY_PK_ECC, { 0, 1 },
@@ -2379,3 +3081,4 @@ gcry_pk_spec_t _gcry_pubkey_spec_ecc =
     _gcry_ecc_get_curve,
     _gcry_ecc_get_param_sexp
   };
+#endif
