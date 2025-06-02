@@ -2226,7 +2226,10 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
 
       /* Export the whole key */
-      ret = wc_ecc_export_private_raw(&wc_key, wc_QX, &wc_QX_len, wc_QY, &wc_QY_len, wc_D, &wc_D_len);
+      PRIVATE_KEY_UNLOCK();
+      ret = wc_ecc_export_private_raw(&wc_key, wc_QX, &wc_QX_len, wc_QY,
+                                        &wc_QY_len, wc_D, &wc_D_len);
+      PRIVATE_KEY_LOCK();
       if (ret != 0) {
         XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -2236,7 +2239,6 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
         XFREE(wc_QY, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         wc_FreeRng(&rng);
         wc_ecc_free(&wc_key);
-        printf("wc_ecc_export_private_raw failed: %d\n", ret);
         rc = GPG_ERR_BROKEN_PUBKEY;
         goto leave;
       }
@@ -2461,7 +2463,7 @@ wc_ecc_check_secret_key (gcry_sexp_t keyparms)
       goto leave;
     }
 
-    /* Get Curve ID */
+  /* Get Curve ID */
   wc_curve_id = wc_name_to_curve_id(ec->name);
   if (wc_curve_id != ECC_CURVE_INVALID) {
     wolf = 1;

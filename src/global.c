@@ -40,6 +40,11 @@
 #include "stdmem.h" /* our own memory allocator */
 #include "secmem.h" /* our own secmem allocator */
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
 
 
 
@@ -90,6 +95,17 @@ static void
 global_init (void)
 {
   gcry_error_t err = 0;
+  static int is_wolfssl_on = 0;
+
+/* add wolfSSL initialization here */
+#ifdef HAVE_WOLFSSL
+  if (is_wolfssl_on == 0) {
+    is_wolfssl_on = 1;
+    if (wc_SetSeed_Cb(wc_GenerateSeed) != 0) {
+      printf("Error libgcrypt (global_init): wc_SetSeed_Cb failed\n");
+    }
+  }
+#endif
 
   if (_gcry_global_any_init_done)
     return;
