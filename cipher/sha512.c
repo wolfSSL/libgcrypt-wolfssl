@@ -56,7 +56,6 @@
 
 
 
-#ifndef HAVE_WOLFSSL
 /* Helper macro to force alignment to 64 bytes.  */
 #ifdef HAVE_GCC_ATTRIBUTE_ALIGNED
 # define ATTR_ALIGNED_64  __attribute__ ((aligned (64)))
@@ -162,7 +161,6 @@
 # define USE_S390X_CRYPTO 1
 #endif /* USE_S390X_CRYPTO */
 
-
 typedef struct
 {
   u64 h[8];
@@ -177,7 +175,6 @@ typedef struct
   int use_s390x_crypto;
 #endif
 } SHA512_CONTEXT;
-
 
 static ATTR_ALIGNED_64 const u64 k[] =
   {
@@ -1017,7 +1014,7 @@ _gcry_sha512_224_hash_buffers (void *outbuf, size_t nbytes,
   sha512_final (&hd);
   memcpy (outbuf, hd.bctx.buf, 28);
 }
-#endif
+
 
 /* wolfCrypt port - Start */
 #if defined(HAVE_WOLFSSL)
@@ -1025,11 +1022,6 @@ _gcry_sha512_224_hash_buffers (void *outbuf, size_t nbytes,
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha512.h>
-
-typedef struct
-{
-  u64 h[8];
-} SHA512_STATE;
 
 typedef struct {
   gcry_md_block_ctx_t bctx;
@@ -1069,7 +1061,7 @@ wolfssl_sha512_transform_generic (void *ctx, const unsigned char *data, size_t n
 
   return 0;
 }
-
+#ifndef WOLFSSL_NOSHA512_224
 static unsigned int
 wolfssl_sha512_224_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
 {
@@ -1084,7 +1076,9 @@ wolfssl_sha512_224_transform_generic (void *ctx, const unsigned char *data, size
 
   return 0;
 }
+#endif /* WOLFSSL_NOSHA512_224 */
 
+#ifndef WOLFSSL_NOSHA512_256
 static unsigned int
 wolfssl_sha512_256_transform_generic (void *ctx, const unsigned char *data, size_t nblks)
 {
@@ -1099,6 +1093,7 @@ wolfssl_sha512_256_transform_generic (void *ctx, const unsigned char *data, size
 
   return 0;
 }
+#endif /* WOLFSSL_NOSHA512_256 */
 
 static void
 wolfssl_sha512_common_init (WOLF_SHA512_CONTEXT *hd)
@@ -1128,6 +1123,7 @@ wolfssl_sha384_common_init (WOLF_SHA512_CONTEXT *hd)
   return;
 }
 
+#ifndef WOLFSSL_NOSHA512_224
 static void
 wolfssl_sha512_224_common_init (WOLF_SHA512_CONTEXT *hd)
 {
@@ -1141,7 +1137,9 @@ wolfssl_sha512_224_common_init (WOLF_SHA512_CONTEXT *hd)
 
   return;
 }
+#endif /* WOLFSSL_NOSHA512_224 */
 
+#ifndef WOLFSSL_NOSHA512_256
 static void
 wolfssl_sha512_256_common_init (WOLF_SHA512_CONTEXT *hd)
 {
@@ -1155,6 +1153,7 @@ wolfssl_sha512_256_common_init (WOLF_SHA512_CONTEXT *hd)
 
   return;
 }
+#endif /* WOLFSSL_NOSHA512_256 */
 
 static void
 wolfssl_sha384_init(void* context, unsigned int flags)
@@ -1188,6 +1187,7 @@ wolfssl_sha512_init(void* context, unsigned int flags)
   wolfssl_sha512_common_init(hd);
 }
 
+#ifndef WOLFSSL_NOSHA512_224
 static void
 wolfssl_sha512_224_init(void* context, unsigned int flags)
 {
@@ -1203,7 +1203,9 @@ wolfssl_sha512_224_init(void* context, unsigned int flags)
 
   wolfssl_sha512_224_common_init(hd);
 }
+#endif /* WOLFSSL_NOSHA512_224 */
 
+#ifndef WOLFSSL_NOSHA512_256
 static void
 wolfssl_sha512_256_init(void* context, unsigned int flags)
 {
@@ -1219,6 +1221,7 @@ wolfssl_sha512_256_init(void* context, unsigned int flags)
 
   wolfssl_sha512_256_common_init(hd);
 }
+#endif /* WOLFSSL_NOSHA512_256 */
 
 static byte *
 wolfssl_sha512_read(void *context)
@@ -1279,6 +1282,7 @@ wolfssl_sha512_final(void *context)
   return;
 }
 
+#ifndef WOLFSSL_NOSHA512_224
 static void
 wolfssl_sha512_224_final(void *context)
 {
@@ -1304,7 +1308,9 @@ wolfssl_sha512_224_final(void *context)
 
   return;
 }
+#endif /* WOLFSSL_NOSHA512_224 */
 
+#ifndef WOLFSSL_NOSHA512_256
 static void
 wolfssl_sha512_256_final(void *context)
 {
@@ -1330,6 +1336,7 @@ wolfssl_sha512_256_final(void *context)
 
   return;
 }
+#endif /* WOLFSSL_NOSHA512_256 */
 
 /* Shortcut functions which puts the hash value of the supplied buffer iov
  * into outbuf which must have a size of 64 bytes.  */
@@ -1371,6 +1378,7 @@ _gcry_wolfssl_sha384_hash_buffers (void *outbuf, size_t nbytes,
   memcpy (outbuf, hd.bctx.buf, WC_SHA384_DIGEST_SIZE);
 }
 
+#ifndef WOLFSSL_NOSHA512_224
 /* Shortcut functions which puts the hash value of the supplied buffer iov
  * into outbuf which must have a size of 28 bytes.  */
 static void
@@ -1388,7 +1396,9 @@ _gcry_wolfssl_sha512_224_hash_buffers (void *outbuf, size_t nbytes,
   wolfssl_sha512_224_final(&hd);
   memcpy (outbuf, hd.bctx.buf, WC_SHA512_224_DIGEST_SIZE);
 }
+#endif /* WOLFSSL_NOSHA512_224 */
 
+#ifndef WOLFSSL_NOSHA512_256
 /* Shortcut functions which puts the hash value of the supplied buffer iov
  * into outbuf which must have a size of 32 bytes.  */
 static void
@@ -1406,6 +1416,7 @@ _gcry_wolfssl_sha512_256_hash_buffers (void *outbuf, size_t nbytes,
   wolfssl_sha512_256_final(&hd);
   memcpy (outbuf, hd.bctx.buf, WC_SHA512_256_DIGEST_SIZE);
 }
+#endif /* WOLFSSL_NOSHA512_256 */
 
 #endif /* HAVE_WOLFSSL */
 
@@ -1754,7 +1765,7 @@ static const gcry_md_oid_spec_t oid_spec_sha512_256[] =
     { NULL },
   };
 
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_NOSHA512_256)
 
 const gcry_md_spec_t _gcry_digest_spec_sha512_256 =
   {
@@ -1794,7 +1805,7 @@ static const gcry_md_oid_spec_t oid_spec_sha512_224[] =
     { NULL },
   };
 
-#if defined(HAVE_WOLFSSL)
+#if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_NOSHA512_224)
 
 const gcry_md_spec_t _gcry_digest_spec_sha512_224 =
   {

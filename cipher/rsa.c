@@ -35,7 +35,7 @@
 #include "pubkey-internal.h"
 #include "const-time.h"
 
-#define HAVE_WOLFSSL
+
 
 #ifdef HAVE_WOLFSSL
 #include <wolfssl/options.h>
@@ -2348,11 +2348,15 @@ _libgcrypt_to_wc_hash(int gcry_hash_algo)
     case GCRY_MD_SHA3_512:        /* 315 */
       return WC_HASH_TYPE_SHA3_512;
 
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MD_SHA512_224:      /* 328 */
       return WC_HASH_TYPE_SHA512_224;
+#endif
 
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:      /* 327 */
       return WC_HASH_TYPE_SHA512_256;
+#endif
 
     default:
       //printf("Unsupported hash algorithm: %d\n", gcry_hash_algo);
@@ -2425,6 +2429,7 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
       ret = wc_Sha384Final(&sha384, digest);
       break;
     }
+#ifndef WOLFSSL_NOSHA512_224
     case WC_HASH_TYPE_SHA512_224:
     {
       wc_Sha512_224 sha512_224;
@@ -2439,6 +2444,8 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
       ret = wc_Sha512_224Final(&sha512_224, digest);
       break;
     }
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case WC_HASH_TYPE_SHA512_256:
     {
       wc_Sha512_256 sha512_256;
@@ -2453,6 +2460,7 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
       ret = wc_Sha512_256Final(&sha512_256, digest);
       break;
     }
+#endif
     case WC_HASH_TYPE_SHA512:
     {
       wc_Sha512 sha512;
@@ -2494,10 +2502,14 @@ _libgcrypt_to_wc_mgf(int gcry_hash_algo)
       return WC_MGF1SHA384;
     case WC_HASH_TYPE_SHA512:
       return WC_MGF1SHA512;
+#ifndef WOLFSSL_NOSHA512_224
     case WC_HASH_TYPE_SHA512_224:
       return WC_MGF1SHA512_224;
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case WC_HASH_TYPE_SHA512_256:
       return WC_MGF1SHA512_256;
+#endif
     default:
       return WC_MGF1NONE;
   }
@@ -2751,8 +2763,6 @@ for (int i = 0; i < myKey_u_len; i++) {
 }
 printf("\n");
 #endif
-/* Use the variables as needed */
-
 
 ret = wc_gcrypt_RsaPrivateKeyDecodeRaw(myKey_mod_n, myKey_mod_n_len,
                                         myKey_exp_e, myKey_exp_e_len,
@@ -2861,6 +2871,11 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   ec = _gcry_pk_util_get_nbits (genparms, &nbits);
   if (ec)
     return ec;
+
+  /* send back to libgcrypt to generate a key less than 2048*/
+  if (nbits < 2048) {
+    return rsa_generate(genparms, r_skey);
+  }
 
   ec = _gcry_pk_util_get_rsa_use_e (genparms, &evalue);
   if (ec)
@@ -2996,6 +3011,7 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
       wc_q = (byte*)XMALLOC(wc_q_len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
       if (wc_q == NULL) {
+        printf("RSA GENERATE: Memory allocation for wc_q failed\n");
         XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         XFREE(wc_d, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -3014,12 +3030,14 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
       }
 
       /* Convert wolfSSL Key to libgcrypt Key */
+      PRIVATE_KEY_UNLOCK();
       ec = wc_RsaExportKey(&rsaKey,
                             wc_e, &wc_e_len,
                             wc_n, &wc_n_len,
                             wc_d, &wc_d_len,
                             wc_p, &wc_p_len,
                             wc_q, &wc_q_len);
+      PRIVATE_KEY_LOCK();
       if (ec) {
         XFREE(wc_e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         XFREE(wc_n, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -3115,7 +3133,6 @@ wc_rsa_check_secret_key (gcry_sexp_t keyparms)
   ret = wc_InitRng(&rng);
   if (ret != 0) {
     rc = GPG_ERR_BAD_SECKEY;
-    printf("Error initializing wolfssl rng\n");
     goto leave;
   }
 
@@ -3817,7 +3834,6 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   ret = wc_InitRng(&rng);
   if (ret != 0) {
     rc = GPG_ERR_INV_OBJ;
-    printf("Error initializing wolfssl rng\n");
     goto leave;
   }
 
@@ -3826,14 +3842,12 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   if (ret != 0) {
     rc = GPG_ERR_INV_OBJ;
     wc_FreeRng(&rng);
-    printf("Error initializing wolfssl rsa key\n");
     goto leave;
   }
 
   /* Now pass the key to wolfssl */
   rc = _gcryp_rsa_key_to_wolfssl_rsa_private_key(&sk, &wcRsaKey);
   if (rc) {
-    printf("Error passing key to wolfssl: %d\n", rc);
     goto leave;
   }
 
@@ -3887,7 +3901,6 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
   /* set mpi for sig */
   sig = mpi_new (0);
-
   switch(ctx.encoding) {
     case PUBKEY_ENC_PKCS1:
     case PUBKEY_ENC_PKCS1_RAW:

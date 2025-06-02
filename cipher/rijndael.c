@@ -1581,12 +1581,7 @@ static unsigned int
 wc_do_encrypt (const RIJNDAEL_context *ctx,
             unsigned char *bx, const unsigned char *ax)
 {
-  unsigned int ret = 0;
-  ret = wc_AesEncryptDirect(&ctx->wc_aes_enc, bx, ax);
-  if (ret != 0) {
-    printf("wc_AesEncryptDirect failed\n");
-    return ret;
-  }
+  wc_AesEncryptDirect(&ctx->wc_aes_enc, bx, ax);
   return WC_AES_BLOCK_SIZE;
 }
 
@@ -1596,12 +1591,7 @@ static unsigned int
 wc_do_decrypt (const RIJNDAEL_context *ctx, unsigned char *bx,
             const unsigned char *ax)
 {
-  unsigned int ret = 0;
-  ret = wc_AesDecryptDirect(&ctx->wc_aes_dec, bx, ax);
-  if (ret != 0) {
-    printf("wc_AesDecryptDirect failed\n");
-    return ret;
-  }
+  wc_AesDecryptDirect(&ctx->wc_aes_dec, bx, ax);
   return WC_AES_BLOCK_SIZE;
 }
 

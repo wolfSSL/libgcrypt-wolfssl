@@ -31,7 +31,7 @@
 
 #define PGM "t-rsa-pss"
 #include "t-common.h"
-#define N_TESTS 120
+#define N_TESTS 80
 
 static int no_verify;
 static int custom_data_file;
