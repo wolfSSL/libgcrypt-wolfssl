@@ -29,9 +29,7 @@
 #include "bufhelp.h"
 #include "cipher.h"
 
-#ifndef HAVE_WOLFSSL
-  #define HAVE_WOLFSSL
-#endif
+#undef HAVE_WOLFSSL
 
 
 

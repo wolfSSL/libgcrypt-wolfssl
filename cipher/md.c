@@ -27,9 +27,7 @@
 
 #include "g10lib.h"
 #include "cipher.h"
-
-#undef HAVE_WOLFSSL_D
-
+//#undef HAVE_WOLFSSL
 #if defined(HAVE_WOLFSSL)
 #include "wolfssl/options.h"
 #include "wolfssl/wolfcrypt/settings.h"
@@ -40,7 +38,44 @@
 #include "wolfssl/wolfcrypt/md5.h"
 #include "wolfssl/wolfcrypt/hmac.h"
 #include "wolfssl/wolfcrypt/hash.h"
-#endif /* HAVE_WOLFSSL_D */
+
+
+static gcry_err_code_t
+_gcry_wc_md_open (gcry_md_hd_t *h, int algo, unsigned int flags);
+
+static gcry_err_code_t
+_gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm);
+
+static gcry_err_code_t
+_gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src);
+
+static void
+_gcry_wc_md_reset (gcry_md_hd_t a);
+
+static void
+_gcry_wc_md_close (gcry_md_hd_t hd);
+
+static void
+_gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen);
+
+static gcry_err_code_t
+_gcry_wc_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen);
+
+static gcry_err_code_t
+_gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen);
+
+static byte *
+_gcry_wc_md_read (gcry_md_hd_t hd, int algo);
+
+static gcry_err_code_t
+_gcry_wc_md_extract (gcry_md_hd_t hd, int algo, void *out, size_t outlen);
+
+static gpg_err_code_t
+_gcry_wc_md_hash_buffers_extract (int algo, unsigned int flags, void *digest,
+			       int digestlen, const gcry_buffer_t *iov,
+			       int iovcnt);
+
+#endif /* HAVE_WOLFSSL */
 
 /* This is the list of the digest implementations included in
    libgcrypt.  */
@@ -274,7 +309,7 @@ typedef struct gcry_md_list
 {
   const gcry_md_spec_t *spec;
   struct gcry_md_list *next;
-  size_t actual_struct_size;     /* Allocated size of this structure. */
+  size_t actual_struct_size;     /* allocated size of this structure. */
   PROPERLY_ALIGNED_TYPE context[1];
 } GcryDigestEntry;
 
@@ -294,6 +329,25 @@ struct gcry_md_context
   GcryDigestEntry *list;
 };
 
+#ifdef HAVE_WOLFSSL
+typedef struct gcry_wc_md_list
+{
+  int algo;
+  Hmac hmac;
+  byte digest[WC_MAX_DIGEST_SIZE];
+  struct gcry_wc_md_list *next;
+} GcryWcDigestEntry;
+
+struct gcry_wc_md_context
+{
+  int use_wc;
+  int flags;
+  byte *key;
+  size_t keylen;
+  GcryWcDigestEntry *list;
+};
+
+#endif
 
 #define CTX_MAGIC_NORMAL 0x11071961
 #define CTX_MAGIC_SECURE 0x16917011
@@ -315,386 +369,6 @@ map_algo (int algo)
   return algo;
 }
 
-/* Some utility functions for wolfSSL */
-/* These functions are used to map libgcrypt hmac to wolfSSL hmac */
-#if defined(HAVE_WOLFSSL_D)
-static int
-map_algo_to_wc_algo (int algo)
-{
-  /* Map libgcrypt digest to wolfSSL digest for HMAC */
-  switch (algo) {
-    case GCRY_MD_SHA1:
-      return WC_HASH_TYPE_SHA;
-    case GCRY_MD_SHA224:
-      return WC_HASH_TYPE_SHA224;
-    case GCRY_MD_SHA256:
-      return WC_HASH_TYPE_SHA256;
-    case GCRY_MD_SHA384:
-      return WC_HASH_TYPE_SHA384;
-    case GCRY_MD_SHA512:
-      return WC_HASH_TYPE_SHA512;
-#ifdef WC_HASH_TYPE_SHA3_224
-    case GCRY_MD_SHA3_224:
-      return WC_HASH_TYPE_SHA3_224;
-#endif
-#ifdef WC_HASH_TYPE_SHA3_256
-    case GCRY_MD_SHA3_256:
-      return WC_HASH_TYPE_SHA3_256;
-#endif
-#ifdef WC_HASH_TYPE_SHA3_384
-    case GCRY_MD_SHA3_384:
-      return WC_HASH_TYPE_SHA3_384;
-#endif
-#ifdef WC_HASH_TYPE_SHA3_512
-    case GCRY_MD_SHA3_512:
-      return WC_HASH_TYPE_SHA3_512;
-#endif
-    default:
-      return WC_HASH_TYPE_NONE;
-  }
-}
-
-
-static int
-wc_get_digest_size(int wc_algo)
-{
-  switch (wc_algo) {
-    case WC_HASH_TYPE_SHA:
-      return WC_SHA_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA256:
-      return WC_SHA256_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA384:
-      return WC_SHA384_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA512:
-      return WC_SHA512_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA224:
-      return WC_SHA224_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA3_224:
-      return WC_SHA3_224_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA3_256:
-      return WC_SHA3_256_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA3_384:
-      return WC_SHA3_384_DIGEST_SIZE;
-    case WC_HASH_TYPE_SHA3_512:
-      return WC_SHA3_512_DIGEST_SIZE;
-    case WC_HASH_TYPE_MD5:
-      return WC_MD5_DIGEST_SIZE;
-    default:
-      /* Default to a safe size if unknown */
-      return 64;
-  }
-}
-
-/* Check if wolfSSL supports the digest */
-/* 0 for not supported, 1 for supported */
-static int
-wc_is_digest_supported(int* wc_algo)
-{
-  if (wc_algo == NULL) {
-    /* If the algo is not set, return 0 */
-    return 0;
-  }
-  switch (*wc_algo) {
-    case WC_HASH_TYPE_SHA:
-    case WC_HASH_TYPE_SHA256:
-    case WC_HASH_TYPE_SHA384:
-    case WC_HASH_TYPE_SHA512:
-    case WC_HASH_TYPE_SHA224:
-    case WC_HASH_TYPE_SHA3_224:
-    case WC_HASH_TYPE_SHA3_384:
-    case WC_HASH_TYPE_SHA3_512:
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-static int
-wc_Hmac_copy(Hmac *dst, Hmac *src, int wc_algo)
-{
-  switch (wc_algo) {
-    case WC_SHA:
-      return wc_ShaCopy((wc_Sha *)&(src->hash), (wc_Sha *)&(dst->hash));
-    case WC_SHA224:
-      return wc_Sha224Copy((wc_Sha224 *)&(src->hash), (wc_Sha224 *) &(dst->hash));
-    case WC_SHA256:
-      return wc_Sha256Copy((wc_Sha256 *)&(src->hash), (wc_Sha256 *) &(dst->hash));
-    case WC_SHA384:
-      return wc_Sha384Copy((wc_Sha384 *)&(src->hash), (wc_Sha384 *) &(dst->hash));
-    case WC_SHA512:
-      return wc_Sha512Copy((wc_Sha512 *)&(src->hash), (wc_Sha512 *) &(dst->hash));
-    case WC_SHA3_224:
-      return wc_Sha3_224_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
-    case WC_SHA3_256:
-      return wc_Sha3_256_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
-    case WC_SHA3_384:
-      return wc_Sha3_384_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
-    case WC_SHA3_512:
-      return wc_Sha3_512_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
-    default:
-      return -1;
-  }
-}
-
-static int
-_gcry_wc_md_open (gcry_md_hd_t hd, int algo, unsigned int flags)
-{
-  int rc = 0;
-  int wc_algo;
-
-  /* Initialize wolfSSL fields to NULL */
-  hd->wc_Hmac_ptr = NULL;
-  hd->wc_algo_ptr = NULL;
-  hd->final_digest = NULL;
-
-  /* If HMAC flag is set and algorithm is supported by wolfSSL, set up HMAC */
-  if (flags & GCRY_MD_FLAG_HMAC) {
-    /* Map libgcrypt digest to wolfSSL digest for HMAC */
-    wc_algo = map_algo_to_wc_algo(algo);
-
-    if (wc_is_digest_supported(&wc_algo)) {
-      /* Initialize the HMAC structure */
-      rc = wc_HmacInit(&(hd->wc_Hmac), NULL, 0);
-      if (rc != 0) {
-        /* Failed to initialize HMAC */
-        printf("Error libgcrypt (md_open): wc_HmacInit failed\n");
-        printf("Return: %d\n", rc);
-        md_close(hd);
-        return GPG_ERR_INTERNAL;
-      }
-
-      /* Allocate memory for algorithm ID */
-      hd->wc_algo_ptr = (int*)XMALLOC(sizeof(int), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-      if (hd->wc_algo_ptr == NULL) {
-        /* Memory allocation failed */
-        wc_HmacFree(&(hd->wc_Hmac));
-        md_close(hd);
-        return GPG_ERR_ENOMEM;
-      }
-
-      /* Store the algorithm ID */
-      *(hd->wc_algo_ptr) = wc_algo;
-
-      /* Allocate memory for the digest */
-      int digest_size = WC_MAX_DIGEST_SIZE;
-
-      /* Ensure we have a valid digest size */
-      if (digest_size <= 0) {
-        XFREE(hd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        wc_HmacFree(&(hd->wc_Hmac));
-        md_close(hd);
-        return GPG_ERR_INTERNAL;
-      }
-
-      hd->final_digest = (byte *)XMALLOC(digest_size, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-      if (hd->final_digest == NULL) {
-        /* Memory allocation failed */
-        XFREE(hd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        wc_HmacFree(&(hd->wc_Hmac));
-        md_close(hd);
-        return GPG_ERR_ENOMEM;
-      }
-
-      /* Set up the HMAC pointer */
-      hd->wc_Hmac_ptr = &hd->wc_Hmac;
-    }
-  }
-
-  return 0;
-}
-
-
-
-
-
-static int
-_gcry_wc_md_copy (gcry_md_hd_t ahd, gcry_md_hd_t bhd)
-{
-  int err = 0;
-
-  /* Initialize wolfSSL fields to NULL first */
-  bhd->wc_Hmac_ptr = NULL;
-  bhd->wc_algo_ptr = NULL;
-  bhd->final_digest = NULL;
-
-  /* Deep copy wolfSSL fields if they exist in the source */
-  if (ahd->wc_algo_ptr != NULL) {
-    /* Copy algorithm information */
-    bhd->wc_algo_ptr = (int *)XMALLOC(sizeof(int), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    if (!bhd->wc_algo_ptr) {
-      err = gpg_err_code_from_syserror();
-      md_close(bhd);
-      return err;
-    }
-
-    /* Copy the algorithm value */
-    memcpy(bhd->wc_algo_ptr, ahd->wc_algo_ptr, sizeof(int));
-
-    /* Initialize the new HMAC structure */
-    int hmac_rc = wc_HmacInit(&(bhd->wc_Hmac), NULL, 0);
-    if (hmac_rc != 0) {
-      XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-      bhd->wc_algo_ptr = NULL;
-      err = GPG_ERR_INTERNAL;
-      md_close(bhd);
-      return err;
-    }
-
-    /* Set the HMAC_ptr to point to the newly initialized HMAC structure */
-    bhd->wc_Hmac_ptr = &(bhd->wc_Hmac);
-
-    /* Copy the HMAC type */
-    memcpy(bhd->wc_Hmac_ptr->ipad, ahd->wc_Hmac_ptr->ipad, sizeof(bhd->wc_Hmac_ptr->ipad));
-    memcpy(bhd->wc_Hmac_ptr->opad, ahd->wc_Hmac_ptr->opad, sizeof(bhd->wc_Hmac_ptr->opad));
-    memcpy(bhd->wc_Hmac_ptr->innerHash, ahd->wc_Hmac_ptr->innerHash, sizeof(bhd->wc_Hmac_ptr->innerHash));
-    bhd->wc_Hmac_ptr->innerHashKeyed = ahd->wc_Hmac_ptr->innerHashKeyed;
-    bhd->wc_Hmac_ptr->macType = ahd->wc_Hmac_ptr->macType;
-
-    if (wc_Hmac_copy(&(bhd->wc_Hmac), &(ahd->wc_Hmac), *(ahd->wc_algo_ptr)) != 0) {
-      wc_HmacFree(bhd->wc_Hmac_ptr);
-      XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-      bhd->wc_algo_ptr = NULL;
-      err = GPG_ERR_INTERNAL;
-      md_close(bhd);
-      return err;
-    }
-
-    /* Create a new buffer for the final digest */
-    if (ahd->final_digest != NULL) {
-      int digest_size = wc_get_digest_size(*(bhd->wc_algo_ptr));
-      /* Double-check that we have a valid size */
-      if (digest_size <= 0) {
-        wc_HmacFree(bhd->wc_Hmac_ptr);
-        XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        bhd->wc_algo_ptr = NULL;
-        err = GPG_ERR_INTERNAL;
-        md_close(bhd);
-        return err;
-      }
-
-      bhd->final_digest = (byte *)XMALLOC(digest_size, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-      if (!bhd->final_digest) {
-        wc_HmacFree(bhd->wc_Hmac_ptr);
-        XFREE(bhd->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        bhd->wc_algo_ptr = NULL;
-        err = gpg_err_code_from_syserror();
-        md_close(bhd);
-        return err;
-      }
-
-      memcpy(bhd->final_digest, ahd->final_digest, digest_size);
-    }
-  }
-
-  return 0;
-}
-
-static void
-_gcry_wc_md_close (gcry_md_hd_t a)
-{
-  if (a == NULL)
-    return;
-
-  /* Properly cleanup wolfSSL HMAC resources */
-  if (a->wc_Hmac_ptr != NULL) {
-    /* Only free HMAC if it's been initialized */
-    wc_HmacFree(a->wc_Hmac_ptr);
-    a->wc_Hmac_ptr = NULL;
-  }
-
-  if (a->final_digest != NULL) {
-    XFREE(a->final_digest, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    a->final_digest = NULL;
-  }
-
-  if (a->wc_algo_ptr != NULL) {
-    XFREE(a->wc_algo_ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    a->wc_algo_ptr = NULL;
-  }
-}
-
-static int
-_gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
-{
-  /* Check if this is a wolfSSL HMAC operation */
-  if (hd->wc_algo_ptr != NULL && hd->wc_Hmac_ptr != NULL) {
-    /* Use wc_is_digest_supported which safely checks for NULL and algorithm type */
-    if (wc_is_digest_supported(hd->wc_algo_ptr)) {
-      int rc = wc_HmacUpdate(hd->wc_Hmac_ptr, inbuf, inlen);
-      if (rc != 0) {
-        /* Log error but continue to fallback path */
-        printf("Error in _gcry_md_write: wc_HmacUpdate failed with %d\n", rc);
-        return rc;
-      }
-
-      /* Successfully processed data with wolfSSL */
-      return 0;
-    }
-  }
-
-  /* Return a code that indicates to use the fallback path */
-  return -1;
-}
-
-
-
-/* Set the key for a wolfSSL HMAC operation.
-   Returns 0 on success or a gcry_err_code_t on failure. */
-static gcry_err_code_t
-_gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
-{
-  int rc;
-
-  /* Check if this is a wolfSSL HMAC operation */
-  if (hd->wc_algo_ptr == NULL || hd->wc_Hmac_ptr == NULL)
-    return -1;  /* Not a wolfSSL handle */
-
-  /* Use wc_is_digest_supported which safely checks for algorithm type */
-  if (!wc_is_digest_supported(hd->wc_algo_ptr))
-    return -1;  /* Algorithm not supported by wolfSSL */
-
-  /* Set the key for the HMAC operation */
-  rc = wc_HmacSetKey(hd->wc_Hmac_ptr, *(hd->wc_algo_ptr), key, keylen);
-  if (rc != 0) {
-    printf("Error libgcrypt (_gcry_wc_md_setkey): wc_HmacSetKey failed with %d\n", rc);
-    return GPG_ERR_INTERNAL;
-  }
-
-  return 0; /* Success */
-}
-
-
-
-
-/* Read the final digest from a wolfSSL HMAC operation.
-   Returns pointer to the digest on success or NULL on failure. */
-static byte *
-_gcry_wc_md_read (gcry_md_hd_t hd, int algo)
-{
-  (void)algo; /* Not used - wolfSSL handles the algorithm internally */
-
-  /* Check if this is a wolfSSL HMAC operation */
-  if (hd->wc_algo_ptr == NULL || hd->wc_Hmac_ptr == NULL || hd->final_digest == NULL)
-    return NULL;  /* Not a wolfSSL handle */
-
-  /* Use wc_is_digest_supported which safely checks for algorithm type */
-  if (!wc_is_digest_supported(hd->wc_algo_ptr))
-    return NULL;  /* Algorithm not supported by wolfSSL */
-
-  /* Compute the HMAC final digest */
-  int rc = wc_HmacFinal(hd->wc_Hmac_ptr, hd->final_digest);
-  if (rc != 0) {
-    /* Log error but continue to fallback path */
-    printf("Error in _gcry_wc_md_read: wc_HmacFinal failed with %d\n", rc);
-    return NULL;
-  }
-
-  /* Return the computed digest */
-  return hd->final_digest;
-}
-
-
-#endif
 
 /* Return the spec structure for the hash algorithm ALGO.  For an
    unknown algorithm NULL is returned.  */
@@ -804,7 +478,7 @@ _gcry_md_map_name (const char *string)
     return spec->algo;
 
   /* Not found, search a matching digest name.  */
-  spec = spec_from_name (string);
+spec = spec_from_name (string);
   if (spec)
     return spec->algo;
 
@@ -821,7 +495,7 @@ _gcry_md_map_name (const char *string)
 const char *
 _gcry_md_algo_name (int algorithm)
 {
-  const gcry_md_spec_t *spec;
+const gcry_md_spec_t *spec;
 
   spec = spec_from_algo (algorithm);
   return spec ? spec->name : "?";
@@ -930,25 +604,25 @@ md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
 gcry_err_code_t
 _gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
 {
+#ifdef HAVE_WOLFSSL
+  if (!!(flags & GCRY_MD_FLAG_HMAC)) {
+    return _gcry_wc_md_open(h, algo, flags);
+  }
+#endif
   gcry_err_code_t rc;
   gcry_md_hd_t hd;
+
 
   if ((flags & ~(GCRY_MD_FLAG_SECURE
                  | GCRY_MD_FLAG_HMAC
                  | GCRY_MD_FLAG_BUGEMU1)))
     rc = GPG_ERR_INV_ARG;
-  else {
-    /* This allocates the memory for the handle and the context */
+  else
     rc = md_open (&hd, algo, flags);
-    if (rc == 0) {
-#if defined(HAVE_WOLFSSL_D)
-      int wc_rc = _gcry_wc_md_open(hd, algo, flags);
-      if (wc_rc != 0) {
-        rc = wc_rc;
-      }
+
+#ifdef HAVE_WOLFSSL
+  hd->wc_c = NULL;
 #endif
-    }
-  }
 
   *h = rc? NULL : hd;
   return rc;
@@ -1022,6 +696,11 @@ md_enable (gcry_md_hd_t hd, int algorithm)
 gcry_err_code_t
 _gcry_md_enable (gcry_md_hd_t hd, int algorithm)
 {
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc) {
+    return _gcry_wc_md_enable(hd, algorithm);
+  }
+#endif
   return md_enable (hd, algorithm);
 }
 
@@ -1061,15 +740,6 @@ md_copy (gcry_md_hd_t ahd, gcry_md_hd_t *b_hd)
   b->list = NULL;
   b->debug = NULL;
 
-#if defined(HAVE_WOLFSSL_D)
-  /* Use the dedicated function for wolfSSL copy */
-  int wc_result = _gcry_wc_md_copy(ahd, bhd);
-  if (wc_result != 0) {
-    err = wc_result;
-    goto leave;
-  }
-#endif
-
   /* Copy the complete list of algorithms.  The copied list is
      reversed, but that doesn't matter. */
   for (ar = a->list; ar; ar = ar->next)
@@ -1103,9 +773,17 @@ md_copy (gcry_md_hd_t ahd, gcry_md_hd_t *b_hd)
 gcry_err_code_t
 _gcry_md_copy (gcry_md_hd_t *handle, gcry_md_hd_t hd)
 {
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc)
+    return _gcry_wc_md_copy(handle, hd);
+#endif
   gcry_err_code_t rc;
 
   rc = md_copy (hd, handle);
+#ifdef HAVE_WOLFSSL
+  hd->wc_c = NULL;
+  (*handle)->wc_c = NULL;
+#endif
   if (rc)
     *handle = NULL;
   return rc;
@@ -1119,6 +797,12 @@ _gcry_md_copy (gcry_md_hd_t *handle, gcry_md_hd_t hd)
 void
 _gcry_md_reset (gcry_md_hd_t a)
 {
+#ifdef HAVE_WOLFSSL
+  if (a->wc_c && a->wc_c->use_wc) {
+    _gcry_wc_md_reset(a);
+    return;
+  }
+#endif
   GcryDigestEntry *r;
 
   /* Note: We allow this even in fips non operational mode.  */
@@ -1148,10 +832,6 @@ md_close (gcry_md_hd_t a)
 
   if (! a)
     return;
-#if defined(HAVE_WOLFSSL_D)
-  /* Use dedicated function for wolfSSL cleanup */
-  _gcry_wc_md_close(a);
-#endif
   if (a->ctx->debug)
     md_stop_debug (a);
   for (r = a->ctx->list; r; r = r2)
@@ -1169,6 +849,12 @@ md_close (gcry_md_hd_t a)
 void
 _gcry_md_close (gcry_md_hd_t hd)
 {
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc) {
+    _gcry_wc_md_close(hd);
+    return;
+  }
+#endif
   /* Note: We allow this even in fips non operational mode.  */
   md_close (hd);
 }
@@ -1203,17 +889,18 @@ md_write (gcry_md_hd_t a, const void *inbuf, size_t inlen)
 void
 _gcry_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
 {
-#if defined(HAVE_WOLFSSL_D)
-  /* Try wolfSSL implementation first */
-  int wc_result = _gcry_wc_md_write(hd, inbuf, inlen);
-  if (wc_result == 0) {
-    /* Successfully handled by wolfSSL */
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc) {
+    if (hd->bufpos)
+      _gcry_wc_md_write(hd, hd->buf, hd->bufpos);
+    else
+      _gcry_wc_md_write(hd, inbuf, inlen);
     return;
   }
 #endif
-  /* Default path using libgcrypt's native implementation */
-    md_write (hd, inbuf, inlen);
+  md_write (hd, inbuf, inlen);
 }
+
 
 static void
 md_final (gcry_md_hd_t a)
@@ -1481,6 +1168,10 @@ md_customize (gcry_md_hd_t h, void *buffer, size_t buflen)
 gcry_err_code_t
 _gcry_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
 {
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc)
+    return _gcry_wc_md_ctl(hd, cmd, buffer, buflen);
+#endif
   gcry_err_code_t rc = 0;
 
   (void)buflen; /* Currently not used.  */
@@ -1509,26 +1200,15 @@ _gcry_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
 gcry_err_code_t
 _gcry_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
 {
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc)
+    return _gcry_wc_md_setkey(hd, key, keylen);
+#endif
   gcry_err_code_t rc;
 
-#if defined(HAVE_WOLFSSL_D)
-  /* Try wolfSSL implementation first */
-  rc = _gcry_wc_md_setkey(hd, key, keylen);
-  if (rc == 0) {
-    /* Successfully handled by wolfSSL */
-    return 0;
-  }
-  else if (rc != -1) {
-    /* An actual error occurred in the wolfSSL function */
-    return rc;
-  }
-  /* Otherwise (-1) fall through to the default implementation */
-#endif
-
-  /* Default path using libgcrypt's native implementation */
   if (hd->ctx->flags.hmac)
     {
-      rc = prepare_macpads(hd, key, keylen);
+      rc = prepare_macpads (hd, key, keylen);
       if (!rc)
 	_gcry_md_reset (hd);
     }
@@ -1601,19 +1281,13 @@ md_read( gcry_md_hd_t a, int algo )
 byte *
 _gcry_md_read (gcry_md_hd_t hd, int algo)
 {
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc)
+    return _gcry_wc_md_read(hd, algo);
+#endif
   /* This function is expected to always return a digest, thus we
      can't return an error which we actually should do in
      non-operational state.  */
-#if defined(HAVE_WOLFSSL_D)
-  /* Try wolfSSL implementation first */
-  byte *digest = _gcry_wc_md_read(hd, algo);
-  if (digest != NULL) {
-    /* Successfully handled by wolfSSL */
-    return digest;
-  }
-  /* Otherwise fall through to the default implementation */
-#endif
-  /* Default path using libgcrypt's native implementation */
   _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
   return md_read (hd, algo);
 }
@@ -1659,6 +1333,10 @@ md_extract(gcry_md_hd_t a, int algo, void *out, size_t outlen)
 gcry_err_code_t
 _gcry_md_extract (gcry_md_hd_t hd, int algo, void *out, size_t outlen)
 {
+#ifdef HAVE_WOLFSSL
+  if (hd->wc_c && hd->wc_c->use_wc)
+    return _gcry_wc_md_extract(hd, algo, out, outlen);
+#endif
   _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
   return md_extract (hd, algo, out, outlen);
 }
@@ -1756,6 +1434,12 @@ _gcry_md_hash_buffers_extract (int algo, unsigned int flags, void *digest,
 			       int digestlen, const gcry_buffer_t *iov,
 			       int iovcnt)
 {
+#ifdef HAVE_WOLFSSL
+  if (!!(flags & GCRY_MD_FLAG_HMAC))
+    return _gcry_wc_md_hash_buffers_extract(algo, flags, digest,
+                                            digestlen, iov,
+                                            iovcnt);
+#endif
   const gcry_md_spec_t *spec;
   int is_xof;
   int hmac;
@@ -1986,7 +1670,7 @@ _gcry_md_algo_info (int algo, int what, void *buffer, size_t *nbytes)
     default:
       rc = GPG_ERR_INV_OP;
       break;
-    }
+  }
 
   return rc;
 }
@@ -2146,3 +1830,454 @@ _gcry_md_selftest (int algo, int extended, selftest_report_func_t report)
 
   return gpg_error (ec);
 }
+
+
+#ifdef HAVE_WOLFSSL
+
+static int
+map_algo_to_wc_algo (int algo)
+{
+  /* Map libgcrypt digest to wolfSSL digest for HMAC */
+  switch (algo) {
+    case GCRY_MD_MD5:
+      return WC_HASH_TYPE_MD5;
+    case GCRY_MD_SHA1:
+      return WC_HASH_TYPE_SHA;
+    case GCRY_MD_SHA224:
+      return WC_HASH_TYPE_SHA224;
+    case GCRY_MD_SHA256:
+      return WC_HASH_TYPE_SHA256;
+    case GCRY_MD_SHA384:
+      return WC_HASH_TYPE_SHA384;
+    case GCRY_MD_SHA512:
+      return WC_HASH_TYPE_SHA512;
+    case GCRY_MD_SHA3_224:
+      return WC_HASH_TYPE_SHA3_224;
+    case GCRY_MD_SHA3_256:
+      return WC_HASH_TYPE_SHA3_256;
+    case GCRY_MD_SHA3_384:
+      return WC_HASH_TYPE_SHA3_384;
+    case GCRY_MD_SHA3_512:
+      return WC_HASH_TYPE_SHA3_512;
+    case GCRY_MD_SHA512_224:
+      return WC_HASH_TYPE_SHA512;
+    case GCRY_MD_SHA512_256:
+      return WC_HASH_TYPE_SHA512;
+    case GCRY_MD_SHAKE128:
+      return WC_HASH_TYPE_SHAKE128;
+    case GCRY_MD_SHAKE256:
+      return WC_HASH_TYPE_SHAKE256;
+    default:
+      return WC_HASH_TYPE_NONE;
+  }
+}
+
+static gcry_err_code_t
+_gcry_wc_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
+{
+  gcry_err_code_t rc;
+  gcry_md_hd_t hd;
+
+  if ((flags & ~(GCRY_MD_FLAG_SECURE
+                 | GCRY_MD_FLAG_HMAC
+                 | GCRY_MD_FLAG_BUGEMU1)))
+    return GPG_ERR_INV_ARG;
+
+  rc = md_open (&hd, algo, flags);
+  if (rc)
+    return rc;
+
+
+  hd->wc_c = calloc(1, sizeof *hd->wc_c);
+  if (hd->wc_c == NULL) {
+    md_close(hd);
+    return GPG_ERR_ENOMEM;
+  }
+
+  hd->wc_c->use_wc = 1;
+  hd->wc_c->flags = flags;
+  rc = _gcry_wc_md_enable(hd, algo);
+  if (rc) {
+    free(hd->wc_c);
+    md_close(hd);
+    hd->wc_c = NULL;
+    *h = NULL;
+    return rc;
+  }
+
+  *h = hd;
+  if (rc)
+    *h = NULL;
+  return rc;
+
+}
+
+static int
+digest_is_supported(int algorithm)
+{
+  switch (algorithm) {
+    case GCRY_MD_MD5:
+    case GCRY_MD_SHA1:
+    case GCRY_MD_SHA224:
+    case GCRY_MD_SHA256:
+    case GCRY_MD_SHA384:
+    case GCRY_MD_SHA512:
+    case GCRY_MD_SHA3_224:
+    case GCRY_MD_SHA3_256:
+    case GCRY_MD_SHA3_384:
+    case GCRY_MD_SHA3_512:
+    case GCRY_MD_SHA512_224:
+    case GCRY_MD_SHA512_256:
+    case GCRY_MD_SHAKE128:
+    case GCRY_MD_SHAKE256:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static gcry_err_code_t
+_gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm)
+{
+
+  struct gcry_wc_md_context *wc = hd->wc_c;
+  GcryWcDigestEntry *entry;
+  GcryWcDigestEntry *last_list_entry;
+  int rc;
+
+  if (!digest_is_supported(algorithm))
+    return GPG_ERR_INV_ARG;
+
+  rc = md_enable(hd, algorithm);
+  if (rc)
+    return rc;
+
+  entry = calloc(1, sizeof *entry);
+  if (!entry)
+    return GPG_ERR_ENOMEM;
+
+  if (!wc->list) {
+    wc->list = entry;
+  } else {
+    last_list_entry = wc->list;
+    while (last_list_entry) {
+      if (last_list_entry->next == NULL)
+        break;
+
+      last_list_entry = last_list_entry->next;
+    }
+
+    last_list_entry->next = entry;
+  }
+
+  entry->algo = algorithm;
+  rc = wc_HmacInit(&entry->hmac, NULL, 0);
+  if (rc != 0) {
+    free(entry);
+    last_list_entry->next = NULL;
+    return GPG_ERR_GENERAL;
+  }
+
+  return GPG_ERR_NO_ERROR;
+}
+
+static int
+hash_copy(Hmac *dst, Hmac *src, int algo)
+{
+  switch (algo) {
+    case GCRY_MD_MD5:
+      return wc_Md5Copy((wc_Md5 *)&(src->hash), (wc_Md5 *)&(dst->hash));
+    case GCRY_MD_SHA1:
+      return wc_ShaCopy((wc_Sha *)&(src->hash), (wc_Sha *)&(dst->hash));
+    case GCRY_MD_SHA224:
+      return wc_Sha224Copy((wc_Sha224 *)&(src->hash), (wc_Sha224 *) &(dst->hash));
+    case GCRY_MD_SHA256:
+      return wc_Sha256Copy((wc_Sha256 *)&(src->hash), (wc_Sha256 *) &(dst->hash));
+    case GCRY_MD_SHA384:
+      return wc_Sha384Copy((wc_Sha384 *)&(src->hash), (wc_Sha384 *) &(dst->hash));
+    case GCRY_MD_SHA512:
+      return wc_Sha512Copy((wc_Sha512 *)&(src->hash), (wc_Sha512 *) &(dst->hash));
+    case GCRY_MD_SHA3_224:
+      return wc_Sha3_224_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    case GCRY_MD_SHA3_256:
+      return wc_Sha3_256_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    case GCRY_MD_SHA3_384:
+      return wc_Sha3_384_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    case GCRY_MD_SHA3_512:
+      return wc_Sha3_512_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+    case GCRY_MD_SHA512_224:
+      return wc_Sha512_224Copy((wc_Sha512*)&(src->hash), (wc_Sha512*) &(dst->hash));
+    case GCRY_MD_SHA512_256:
+      return wc_Sha512_256Copy((wc_Sha512*)&(src->hash), (wc_Sha512*) &(dst->hash));
+    case GCRY_MD_SHAKE128:
+      return wc_Shake128_Copy((wc_Shake*)&(src->hash), (wc_Shake*) &(dst->hash));
+    case GCRY_MD_SHAKE256:
+      return wc_Shake256_Copy((wc_Shake*)&(src->hash), (wc_Shake*) &(dst->hash));
+    default:
+      return -1;
+  }
+}
+
+static gcry_err_code_t
+_gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src)
+{
+  gcry_err_code_t rc;
+  gcry_md_hd_t hd;
+  struct gcry_wc_md_context *dest_wc;
+  struct gcry_wc_md_context *src_wc = src->wc_c;
+  GcryWcDigestEntry *dest_entry;
+  GcryWcDigestEntry *src_entry;
+  int first_iter = 1;
+
+  if (src->bufpos)
+    _gcry_wc_md_write(src, NULL, 0);
+
+  for (src_entry = src_wc->list; src_entry; src_entry = src_entry->next) {
+    if (first_iter) {
+      rc = _gcry_wc_md_open(&hd, src_entry->algo, src_wc->flags);
+      if (rc) {
+        return GPG_ERR_GENERAL;
+      }
+
+      dest_wc = hd->wc_c;
+      first_iter = 0;
+      dest_entry = dest_wc->list;
+
+
+      goto copy;
+    }
+
+    rc = _gcry_wc_md_enable(hd, src_entry->algo);
+    if (rc) {
+      _gcry_wc_md_close(hd);
+      return GPG_ERR_GENERAL;
+    }
+
+    dest_entry = dest_entry->next;
+copy:
+    memcpy(dest_entry, src_entry, sizeof *dest_entry);
+    dest_entry->next = NULL;
+    hash_copy(&dest_entry->hmac, &src_entry->hmac, src_entry->algo);
+  }
+  *dest = hd;
+  return rc;
+}
+
+static void
+_gcry_wc_md_reset (gcry_md_hd_t a)
+{
+  struct gcry_wc_md_context *wc = a->wc_c;
+  GcryWcDigestEntry *entry;
+
+  a->bufpos = a->ctx->flags.finalized = 0;
+
+  for (entry = wc->list; entry; entry = entry->next) {
+    wc_HmacFree(&entry->hmac);
+    memset(&entry->hmac, 0, sizeof entry->hmac);
+    wc_HmacInit(&entry->hmac, NULL, 0);
+    if (wc->key) {
+      int wc_algo = map_algo_to_wc_algo(entry->algo);
+      wc_HmacSetKey(&entry->hmac, wc_algo, wc->key, wc->keylen);
+    }
+
+    memset(entry->digest, 0, sizeof(entry->digest));
+  }
+
+}
+
+static void
+_gcry_wc_md_close (gcry_md_hd_t hd)
+{
+  struct gcry_wc_md_context *wc = hd->wc_c;
+  GcryWcDigestEntry *entry;
+
+  /* Note: We allow this even in fips non operational mode.  */
+  md_close (hd);
+
+  entry = wc->list;
+  while (entry) {
+    GcryWcDigestEntry *next = entry->next;
+    wc_HmacFree(&entry->hmac);
+    free(entry);
+    entry = next;
+  }
+
+  if (wc->key)
+    free(wc->key);
+
+  free(wc);
+}
+
+static void
+_gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
+{
+  struct gcry_wc_md_context *wc = hd->wc_c;
+  GcryWcDigestEntry *entry;
+
+  for (entry = wc->list; entry; entry = entry->next) {
+    wc_HmacUpdate(&entry->hmac, inbuf, inlen);
+  }
+  hd->bufpos = 0;
+}
+
+static void
+_gcry_wc_md_final (gcry_md_hd_t a)
+{
+  struct gcry_wc_md_context *wc = a->wc_c;
+  GcryWcDigestEntry *entry;
+
+  if (a->ctx->flags.finalized)
+    return;
+
+  if (a->bufpos)
+    md_write (a, NULL, 0);
+
+  for (entry = wc->list; entry; entry = entry->next) {
+    wc_HmacFinal(&entry->hmac, entry->digest);
+  }
+
+  a->ctx->flags.finalized = 1;
+}
+
+static gcry_err_code_t
+_gcry_wc_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
+{
+  gcry_err_code_t rc = 0;
+
+  (void)buflen; /* Currently not used.  */
+
+  switch (cmd)
+    {
+    case GCRYCTL_FINALIZE:
+      _gcry_wc_md_final (hd);
+      break;
+    case GCRYCTL_START_DUMP:
+      md_start_debug (hd, buffer);
+      break;
+    case GCRYCTL_STOP_DUMP:
+      md_stop_debug ( hd );
+      break;
+    case GCRYCTL_MD_CUSTOMIZE:
+      rc = md_customize (hd, buffer, buflen);
+      break;
+    default:
+      rc = GPG_ERR_INV_OP;
+    }
+  return rc;
+}
+
+static gcry_err_code_t
+_gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
+{
+  struct gcry_wc_md_context *wc = hd->wc_c;
+  GcryWcDigestEntry *entry;
+  int rc;
+  _gcry_wc_md_reset(hd);
+
+  for (entry = wc->list; entry; entry = entry->next) {
+    int wc_algo = map_algo_to_wc_algo(entry->algo);
+    rc = wc_HmacSetKey(&entry->hmac, wc_algo, key, keylen);
+    if (rc) {
+      return GPG_ERR_GENERAL;
+    }
+  }
+
+  if (wc->key)
+    free(wc->key);
+
+  wc->keylen = keylen;
+  wc->key = calloc(keylen, sizeof *wc->key);
+  if (wc->key == NULL) {
+    return GPG_ERR_ENOMEM;
+  }
+
+  memcpy(wc->key, key, keylen);
+  return GPG_ERR_NO_ERROR;
+}
+
+static byte *
+_gcry_wc_md_read (gcry_md_hd_t hd, int algo)
+{
+  struct gcry_wc_md_context *wc = hd->wc_c;
+  GcryWcDigestEntry *entry;
+
+  _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
+
+  for (entry = wc->list; entry; entry = entry->next) {
+    /* Return the digest for the specific algo or the first
+     * in the list if none specified */
+    if (entry->algo == algo || algo == GCRY_MD_NONE)
+      return entry->digest;
+  }
+
+  return NULL;
+}
+
+static gcry_err_code_t
+_gcry_wc_md_extract (gcry_md_hd_t hd, int algo, void *out, size_t outlen)
+{
+  struct gcry_wc_md_context *wc = hd->wc_c;
+  GcryWcDigestEntry *entry;
+
+  _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
+
+  for (entry = wc->list; entry; entry = entry->next) {
+    /* Return the digest for the specific algo or the first
+     * in the list if none specified */
+    if (entry->algo == algo || algo == GCRY_MD_NONE)
+      memcpy(out, entry->digest, outlen);
+  }
+
+  return GPG_ERR_DIGEST_ALGO;
+}
+
+static gpg_err_code_t
+_gcry_wc_md_hash_buffers_extract (int algo, unsigned int flags, void *digest,
+			       int digestlen, const gcry_buffer_t *iov,
+			       int iovcnt)
+{
+  const gcry_md_spec_t *spec;
+  int is_xof;
+  int hmac;
+
+  if (!iov || iovcnt < 0)
+    return GPG_ERR_INV_ARG;
+  if (flags & ~(GCRY_MD_FLAG_HMAC))
+    return GPG_ERR_INV_ARG;
+
+  hmac = !!(flags & GCRY_MD_FLAG_HMAC);
+  if (hmac && iovcnt < 1)
+    return GPG_ERR_INV_ARG;
+
+  digestlen = WC_MAX_DIGEST_SIZE;
+  /* For the others we do not have a fast function, so we use the
+     normal functions.  */
+  gcry_md_hd_t h;
+  gpg_err_code_t rc;
+
+  rc = _gcry_wc_md_open (&h, algo, (hmac? GCRY_MD_FLAG_HMAC:0));
+  if (rc)
+    return rc;
+
+  if (hmac)
+  {
+    rc = _gcry_wc_md_setkey (h,
+                          (const char*)iov[0].data + iov[0].off,
+                          iov[0].len);
+    if (rc)
+    {
+      _gcry_wc_md_close (h);
+      return rc;
+    }
+    iov++; iovcnt--;
+  }
+  for (;iovcnt; iov++, iovcnt--)
+    _gcry_wc_md_write (h, (const char*)iov[0].data + iov[0].off, iov[0].len);
+  _gcry_wc_md_final (h);
+  _gcry_wc_md_extract (h, algo, digest, digestlen);
+  _gcry_wc_md_close (h);
+
+  return 0;
+}
+
+#endif
