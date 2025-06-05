@@ -27,7 +27,7 @@
 
 #include "g10lib.h"
 #include "cipher.h"
-//#undef HAVE_WOLFSSL
+
 #if defined(HAVE_WOLFSSL)
 #include "wolfssl/options.h"
 #include "wolfssl/wolfcrypt/settings.h"
@@ -2044,17 +2044,16 @@ _gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src)
       dest_entry = dest_wc->list;
 
 
-      goto copy;
+    } else {
+      rc = _gcry_wc_md_enable(hd, src_entry->algo);
+      if (rc) {
+        _gcry_wc_md_close(hd);
+        return GPG_ERR_GENERAL;
+      }
+
+      dest_entry = dest_entry->next;
     }
 
-    rc = _gcry_wc_md_enable(hd, src_entry->algo);
-    if (rc) {
-      _gcry_wc_md_close(hd);
-      return GPG_ERR_GENERAL;
-    }
-
-    dest_entry = dest_entry->next;
-copy:
     memcpy(dest_entry, src_entry, sizeof *dest_entry);
     dest_entry->next = NULL;
     hash_copy(&dest_entry->hmac, &src_entry->hmac, src_entry->algo);
@@ -2236,8 +2235,6 @@ _gcry_wc_md_hash_buffers_extract (int algo, unsigned int flags, void *digest,
 			       int digestlen, const gcry_buffer_t *iov,
 			       int iovcnt)
 {
-  const gcry_md_spec_t *spec;
-  int is_xof;
   int hmac;
 
   if (!iov || iovcnt < 0)
