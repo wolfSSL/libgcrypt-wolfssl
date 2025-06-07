@@ -342,8 +342,6 @@ struct gcry_wc_md_context
 {
   int use_wc;
   int flags;
-  byte *key;
-  size_t keylen;
   GcryWcDigestEntry *list;
 };
 
@@ -2065,23 +2063,7 @@ _gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src)
 static void
 _gcry_wc_md_reset (gcry_md_hd_t a)
 {
-  struct gcry_wc_md_context *wc = a->wc_c;
-  GcryWcDigestEntry *entry;
-
   a->bufpos = a->ctx->flags.finalized = 0;
-
-  for (entry = wc->list; entry; entry = entry->next) {
-    wc_HmacFree(&entry->hmac);
-    memset(&entry->hmac, 0, sizeof entry->hmac);
-    wc_HmacInit(&entry->hmac, NULL, 0);
-    if (wc->key) {
-      int wc_algo = map_algo_to_wc_algo(entry->algo);
-      wc_HmacSetKey(&entry->hmac, wc_algo, wc->key, wc->keylen);
-    }
-
-    memset(entry->digest, 0, sizeof(entry->digest));
-  }
-
 }
 
 static void
@@ -2100,9 +2082,6 @@ _gcry_wc_md_close (gcry_md_hd_t hd)
     free(entry);
     entry = next;
   }
-
-  if (wc->key)
-    free(wc->key);
 
   free(wc);
 }
@@ -2181,16 +2160,6 @@ _gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
     }
   }
 
-  if (wc->key)
-    free(wc->key);
-
-  wc->keylen = keylen;
-  wc->key = calloc(keylen, sizeof *wc->key);
-  if (wc->key == NULL) {
-    return GPG_ERR_ENOMEM;
-  }
-
-  memcpy(wc->key, key, keylen);
   return GPG_ERR_NO_ERROR;
 }
 
