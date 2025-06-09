@@ -1869,10 +1869,12 @@ map_algo_to_wc_algo (int algo)
       return WC_HASH_TYPE_SHA512;
     case GCRY_MD_SHA512_256:
       return WC_HASH_TYPE_SHA512;
+#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
     case GCRY_MD_SHAKE128:
       return WC_HASH_TYPE_SHAKE128;
     case GCRY_MD_SHAKE256:
       return WC_HASH_TYPE_SHAKE256;
+#endif
     default:
       return WC_HASH_TYPE_NONE;
   }
@@ -2011,14 +2013,22 @@ hash_copy(Hmac *dst, Hmac *src, int algo)
       return wc_Sha3_384_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
     case GCRY_MD_SHA3_512:
       return wc_Sha3_512_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MD_SHA512_224:
       return wc_Sha512_224Copy((wc_Sha512*)&(src->hash), (wc_Sha512*) &(dst->hash));
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:
       return wc_Sha512_256Copy((wc_Sha512*)&(src->hash), (wc_Sha512*) &(dst->hash));
+#endif
+
+/* Not available in fips v5 or older */
+#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
     case GCRY_MD_SHAKE128:
       return wc_Shake128_Copy((wc_Shake*)&(src->hash), (wc_Shake*) &(dst->hash));
     case GCRY_MD_SHAKE256:
       return wc_Shake256_Copy((wc_Shake*)&(src->hash), (wc_Shake*) &(dst->hash));
+#endif
     default:
       return -1;
   }
