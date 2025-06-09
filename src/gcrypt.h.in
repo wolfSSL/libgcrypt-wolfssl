@@ -1339,19 +1339,15 @@ typedef struct gcry_md_handle
 {
   /* Actual context.  */
   struct gcry_md_context *ctx;
+#if defined(HAVE_WOLFSSL)
+  struct gcry_wc_md_context *wc_c;
+  /* wolfSSL HMAC context top level structure... */
+#endif /* HAVE_WOLFSSL */
 
   /* Buffer management.  */
   int  bufpos;
   int  bufsize;
   unsigned char buf[1];
-
-#if defined(HAVE_WOLFSSL)
-  /* wolfSSL HMAC context top level structure... */
-  Hmac wc_Hmac;
-  Hmac *wc_Hmac_ptr;
-  int* wc_algo_ptr;
-  byte* final_digest;
-#endif /* HAVE_WOLFSSL */
 
 } *gcry_md_hd_t;
 
