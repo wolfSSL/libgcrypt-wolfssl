@@ -848,6 +848,9 @@ void
 _gcry_md_close (gcry_md_hd_t hd)
 {
 #ifdef HAVE_WOLFSSL
+  if (!hd)
+    return;
+
   if (hd->wc_c && hd->wc_c->use_wc) {
     _gcry_wc_md_close(hd);
     return;
