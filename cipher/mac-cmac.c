@@ -473,7 +473,13 @@ wc_aes_cmac_close (gcry_mac_hd_t h)
     h->authTag = NULL;
   }
 
+/* Not available in fips v5 or older */
+#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
   wc_CmacFree(&h->aesCmac);
+#else
+  wc_AesFree(&h->aesCmac);
+  wipememory(&h->aesCmac, sizeof(h->aesCmac));
+#endif
 
   _gcry_cipher_close (h->u.cmac.ctx);
   h->u.cmac.ctx = NULL;
@@ -503,7 +509,14 @@ wc_aes_cmac_reset (gcry_mac_hd_t h)
     return ret;
 
   memset(h->authTag, 0, h->authTag_len);
+
+/* Not available in fips v5 or older */
+#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
   wc_CmacFree(&h->aesCmac);
+#else
+  wc_AesFree(&h->aesCmac);
+  wipememory(&h->aesCmac, sizeof(h->aesCmac));
+#endif
   return wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL);
 }
 
@@ -532,7 +545,7 @@ wc_aes_cmac_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
     *outlen = h->authTag_len;
 
   if (h->authTagUpdated) {
-    wc_CmacFinalNoFree(&h->aesCmac, h->authTag, &h->authTag_len);
+    wc_CmacFinal(&h->aesCmac, h->authTag, &h->authTag_len);
     h->authTagUpdated = 0;
   }
   memcpy(outbuf, h->authTag, *outlen);
@@ -555,7 +568,7 @@ wc_aes_cmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 
   }
 
-  wc_CmacFinalNoFree(&h->aesCmac, h->authTag, &h->authTag_len);
+  wc_CmacFinal(&h->aesCmac, h->authTag, &h->authTag_len);
   h->authTagUpdated = 0;
 
   return buf_eq_const(buf, h->authTag, buflen) ?
