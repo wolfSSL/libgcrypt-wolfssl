@@ -79,7 +79,7 @@
 #endif
 
 #ifdef HAVE_FIPS_VERSION
-#warning Work need for FIPS version of wolfcrypt
+#warning Work needed for FIPS version of wolfcrypt
 #endif
 
 static const char *ecc_names[] =
