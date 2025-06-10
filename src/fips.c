@@ -365,17 +365,31 @@ _gcry_fips_indicator_cipher (va_list arg_ptr)
         {
         case GCRY_CIPHER_MODE_ECB:
         case GCRY_CIPHER_MODE_CBC:
+#if !defined(HAVE_FIPS_VERSION)
         case GCRY_CIPHER_MODE_CFB:
+#else
+        #warning "FIPS version of wolfcrypt does not support CFB"
+#endif
+#if !defined(HAVE_FIPS_VERSION)
         case GCRY_CIPHER_MODE_CFB8:
+#else
+        #warning "FIPS version of wolfcrypt does not support CFB8"
+#endif
         case GCRY_CIPHER_MODE_OFB:
         case GCRY_CIPHER_MODE_CTR:
         case GCRY_CIPHER_MODE_CCM:
         case GCRY_CIPHER_MODE_GCM:
-#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
+#if !defined(HAVE_FIPS_VERSION)
         case GCRY_CIPHER_MODE_XTS:
-        case GCRY_CIPHER_MODE_AESWRAP:
-          return GPG_ERR_NO_ERROR;
+#else
+        #warning "FIPS version of wolfcrypt does not support XTS"
 #endif
+#if !defined(HAVE_FIPS_VERSION)
+        case GCRY_CIPHER_MODE_AESWRAP:
+#else
+        #warning "FIPS version of wolfcrypt does not support AESWRAP"
+#endif
+          return GPG_ERR_NO_ERROR;
         default:
           return GPG_ERR_NOT_SUPPORTED;
         }
