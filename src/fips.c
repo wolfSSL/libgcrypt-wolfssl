@@ -453,7 +453,7 @@ _gcry_fips_indicator_md (va_list arg_ptr)
     case GCRY_MD_SHAKE128:
     case GCRY_MD_SHAKE256:
 #endif
-#ifdef HAVE_WOLFSSL
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_MD_CSHAKE128:
     case GCRY_MD_CSHAKE256:
 #endif

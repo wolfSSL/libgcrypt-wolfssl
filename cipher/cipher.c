@@ -550,16 +550,23 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
       {
       case GCRY_CIPHER_MODE_ECB:
       case GCRY_CIPHER_MODE_CBC:
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_CFB:
       case GCRY_CIPHER_MODE_CFB8:
+#endif
       case GCRY_CIPHER_MODE_OFB:
       case GCRY_CIPHER_MODE_CTR:
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_AESWRAP:
+#endif
       case GCRY_CIPHER_MODE_CMAC:
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_EAX:
+#endif
 	if (!spec->encrypt || !spec->decrypt)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
+
 
       case GCRY_CIPHER_MODE_CCM:
 	if (!spec->encrypt || !spec->decrypt)
@@ -568,12 +575,14 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
 
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_XTS:
 	if (!spec->encrypt || !spec->decrypt)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	else if (spec->blocksize != GCRY_XTS_BLOCK_LEN)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
+#endif
 
       case GCRY_CIPHER_MODE_GCM:
 	if (!spec->encrypt || !spec->decrypt)
@@ -582,6 +591,7 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
 
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_SIV:
       case GCRY_CIPHER_MODE_GCM_SIV:
 	if (!spec->encrypt || !spec->decrypt)
@@ -589,14 +599,18 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	else if (spec->blocksize != GCRY_SIV_BLOCK_LEN)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
+#endif
 
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_POLY1305:
 	if (!spec->stencrypt || !spec->stdecrypt || !spec->setiv)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	else if (spec->algo != GCRY_CIPHER_CHACHA20)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
+#endif
 
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_OCB:
         /* Note that our implementation allows only for 128 bit block
            length algorithms.  Lower block lengths would be possible
@@ -607,11 +621,14 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	else if (spec->blocksize != GCRY_OCB_BLOCK_LEN)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
+#endif
 
+#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
       case GCRY_CIPHER_MODE_STREAM:
 	if (!spec->stencrypt || !spec->stdecrypt)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
+#endif
 
       case GCRY_CIPHER_MODE_NONE:
         /* This mode may be used for debugging.  It copies the main
