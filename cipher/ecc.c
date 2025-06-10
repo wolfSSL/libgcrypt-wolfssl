@@ -78,6 +78,9 @@
 #include <wolfssl/wolfcrypt/integer.h>
 #endif
 
+#ifdef HAVE_FIPS_VERSION
+#warning Work need for FIPS version of wolfcrypt
+#endif
 
 static const char *ecc_names[] =
   {
@@ -987,22 +990,37 @@ ecc_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   if ((ctx.flags & PUBKEY_FLAG_EDDSA))
     {
       /* EdDSA requires the public key.  */
+    #if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+      #warning "No ECC for EDDSA sign in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
       rc = _gcry_ecc_eddsa_sign (data, ec, sig_r, sig_s, &ctx);
+    #endif
       if (!rc)
         rc = sexp_build (r_sig, NULL,
                          "(sig-val(eddsa(r%M)(s%M)))", sig_r, sig_s);
     }
   else if ((ctx.flags & PUBKEY_FLAG_GOST))
     {
+    #if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+      #warning "No ECC for GOST sign in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
       rc = _gcry_ecc_gost_sign (data, ec, sig_r, sig_s);
+    #endif
       if (!rc)
         rc = sexp_build (r_sig, NULL,
                          "(sig-val(gost(r%M)(s%M)))", sig_r, sig_s);
     }
   else if ((ctx.flags & PUBKEY_FLAG_SM2))
     {
+    #if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+      #warning "No ECC for SM2 sign in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
       rc = _gcry_ecc_sm2_sign (data, ec, sig_r, sig_s,
                                ctx.flags, ctx.hash_algo);
+    #endif
       if (!rc)
         rc = sexp_build (r_sig, NULL,
                          "(sig-val(sm2(r%M)(s%M)))", sig_r, sig_s);
@@ -1130,15 +1148,30 @@ ecc_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t s_keyparms)
    */
   if ((sigflags & PUBKEY_FLAG_EDDSA))
     {
+#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+      #warning "No ECC for EDDSA verify in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+#else
       rc = _gcry_ecc_eddsa_verify (data, ec, sig_r, sig_s, &ctx);
+#endif
     }
   else if ((sigflags & PUBKEY_FLAG_GOST))
     {
+#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+      #warning "No ECC for GOST verify in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+#else
       rc = _gcry_ecc_gost_verify (data, ec, sig_r, sig_s);
+#endif
     }
   else if ((sigflags & PUBKEY_FLAG_SM2))
     {
+#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+      #warning "No ECC for SM2 verify in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+#else
       rc = _gcry_ecc_sm2_verify (data, ec, sig_r, sig_s);
+#endif
     }
   else
     {
@@ -1206,7 +1239,12 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /*
    * Extract the key.
    */
+  #ifdef HAVE_WOLFSSL && defined(HAVE_FIPS_VERSION)
+  #warning "No ECC encrypt raw in FIPS mode with wolfssl"
+  rc = GPG_ERR_NOT_SUPPORTED;
+  #else
   rc = _gcry_mpi_ec_internal_new (&ec, &flags, "ecc_encrypt", keyparms, NULL);
+  #endif
   if (rc)
     goto leave;
 
@@ -2115,10 +2153,23 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
     goto leave;
 
   if ((flags & PUBKEY_FLAG_EDDSA)
-      || (ec->model == MPI_EC_EDWARDS && ec->dialect == ECC_DIALECT_SAFECURVE))
+      || (ec->model == MPI_EC_EDWARDS &&
+      ec->dialect == ECC_DIALECT_SAFECURVE)) {
+    #ifdef HAVE_FIPS_VERSION
+    #warning "No ECC for EDDSA generate in FIPS mode with wolfssl"
+    rc = GPG_ERR_NOT_SUPPORTED;
+    #else
     rc = _gcry_ecc_eddsa_genkey (ec, flags);
-  else if (ec->model == MPI_EC_MONTGOMERY)
-    rc = nist_generate_key (ec, flags, &Qx, NULL);
+    #endif
+  }
+  else if (ec->model == MPI_EC_MONTGOMERY) {
+    #ifdef HAVE_FIPS_VERSION
+    #warning "No ECC for montgomery generate in FIPS mode with wolfssl"
+    rc = GPG_ERR_NOT_SUPPORTED;
+    #else
+    rc = _gcry_ecc_mont_genkey (ec, flags);
+    #endif
+  }
   else {
 
     /* Get Curve ID */
@@ -2266,7 +2317,12 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
     }
     else {
       /* Non-NIST curve */
+      #ifdef HAVE_FIPS_VERSION
+      #warning "No ECC for non-NIST curve generate in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+      #else
       rc = nist_generate_key (ec, flags, &Qx, &Qy);
+      #endif
     }
   }
   if (rc)
@@ -2579,9 +2635,14 @@ wc_ecc_check_secret_key (gcry_sexp_t keyparms)
     XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
   else {
-    if (check_secret_key (ec, flags)) {
-      rc = GPG_ERR_BAD_SECKEY;
-    }
+    #ifdef HAVE_FIPS_VERSION
+    #warning "ECC check secret key for NIST Curves only in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
+      if (check_secret_key (ec, flags)) {
+        rc = GPG_ERR_BAD_SECKEY;
+      }
+    #endif
   }
 
  leave:

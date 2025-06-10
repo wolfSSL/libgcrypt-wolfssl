@@ -28,6 +28,14 @@
 #include "cipher.h"
 #include "kdf-internal.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
+
+#ifndef USE_BLAKE2
+#warning "USE_BLAKE2 is not defined, need for Argon2"
+#endif
 
 /* Transform a passphrase into a suitable key of length KEYSIZE and
    store this key in the caller provided buffer KEYBUFFER.  The caller
@@ -463,19 +471,25 @@ argon2_fill_first_blocks (argon2_ctx_t a)
       iov_count++;
     }
 
+#ifdef USE_BLAKE2
   _gcry_digest_spec_blake2b_512.hash_buffers (h0_01_i, 64, iov, iov_count);
+#endif
 
   for (i = 0; i < a->lanes; i++)
     {
       memset (h0_01_i+64, 0, 4);
       buf_put_le32 (h0_01_i+64+4, i);
+#ifdef USE_BLAKE2
       blake2b_vl_hash (h0_01_i, 72, 1024,
                        &a->block[i*a->lane_length*ARGON2_WORDS_IN_BLOCK]);
+#endif
       beswap64_block (&a->block[i*a->lane_length*ARGON2_WORDS_IN_BLOCK]);
 
       buf_put_le32 (h0_01_i+64, 1);
+#ifdef USE_BLAKE2
       blake2b_vl_hash (h0_01_i, 72, 1024,
                        &a->block[(i*a->lane_length+1)*ARGON2_WORDS_IN_BLOCK]);
+#endif
       beswap64_block (&a->block[(i*a->lane_length+1)*ARGON2_WORDS_IN_BLOCK]);
     }
   return 0;
@@ -803,7 +817,9 @@ argon2_final (argon2_ctx_t a, size_t resultlen, void *result)
     }
 
   beswap64_block (a->block);
+#ifdef USE_BLAKE2
   blake2b_vl_hash (a->block, 1024, a->outlen, result);
+#endif
   return 0;
 }
 
