@@ -1916,7 +1916,9 @@ static int
 digest_is_supported(int algorithm)
 {
   switch (algorithm) {
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_MD_MD5:
+#endif
     case GCRY_MD_SHA1:
     case GCRY_MD_SHA224:
     case GCRY_MD_SHA256:
@@ -1926,10 +1928,16 @@ digest_is_supported(int algorithm)
     case GCRY_MD_SHA3_256:
     case GCRY_MD_SHA3_384:
     case GCRY_MD_SHA3_512:
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MD_SHA512_224:
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:
+#endif
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_MD_SHAKE128:
     case GCRY_MD_SHAKE256:
+#endif
       return 1;
     default:
       return 0;
