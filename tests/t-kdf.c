@@ -1852,16 +1852,28 @@ check_hkdf (void)
                            tv[count].salt, tv[count].saltlen,
                            tv[count].info, tv[count].infolen,
                            tv[count].dklen, out);
-      if (err)
-        fail ("HKDF test %d failed: %s\n", count, gpg_strerror (err));
-      else if (memcmp (out, tv[count].dk, tv[count].dklen))
-        {
-          fail ("HKDF test %d failed: mismatch\n", count);
-          fputs ("got:", stderr);
-          for (i=0; i < tv[count].dklen; i++)
-            fprintf (stderr, " %02x", out[i]);
-          putc ('\n', stderr);
+      #if defined(HAVE_FIPS_VERSION)
+      /* expected to error because too short of a key */
+      if (count == 0 || count == 2) {
+        if (!err) { /* expect error for test vectors 0 and 2 */
+          fail ("HKDF test %d failed: %s\n", count, gpg_strerror (err));
         }
+      }
+      else {
+      #endif
+        if (err)
+            fail ("HKDF test %d failed: %s\n", count, gpg_strerror (err));
+        else if (memcmp (out, tv[count].dk, tv[count].dklen))
+            {
+            fail ("HKDF test %d failed: mismatch\n", count);
+            fputs ("got:", stderr);
+            for (i=0; i < tv[count].dklen; i++)
+                fprintf (stderr, " %02x", out[i]);
+            putc ('\n', stderr);
+            }
+    #if defined(HAVE_FIPS_VERSION)
+      }
+    #endif
     }
 }
 
@@ -2003,7 +2015,9 @@ main (int argc, char **argv)
       check_openpgp ();
       check_pbkdf2 ();
       check_scrypt ();
+#if defined(USE_BLAKE2)
       check_argon2 ();
+#endif
       check_balloon ();
       check_onestep_kdf ();
       check_hkdf ();

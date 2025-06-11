@@ -2709,6 +2709,12 @@ if (sk->p != NULL) {
       goto leave;
     }
 }
+else {
+    if (myKey_mod_n) _gcry_free(myKey_mod_n);
+    if (myKey_exp_e) _gcry_free(myKey_exp_e);
+    if (myKey_exp_d) _gcry_free(myKey_exp_d);
+    return GPG_ERR_NO_OBJ; /* Needed for FIPS mode */
+}
 
 #if DEBUG_PRINT_MPI
 log_printmpi("myKey_prime_p", sk->p);
@@ -2726,6 +2732,13 @@ if (sk->q != NULL) {
     if (ret != 0) {
       goto leave;
     }
+}
+else {
+    if (myKey_mod_n) _gcry_free(myKey_mod_n);
+    if (myKey_exp_e) _gcry_free(myKey_exp_e);
+    if (myKey_exp_d) _gcry_free(myKey_exp_d);
+    if (myKey_prime_p) _gcry_free(myKey_prime_p);
+    return GPG_ERR_NO_OBJ; /* Needed for FIPS mode */
 }
 
 #if DEBUG_PRINT_MPI
