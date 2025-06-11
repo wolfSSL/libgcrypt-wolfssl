@@ -35,6 +35,11 @@
 /* Number of curves defined in ../cipher/ecc-curves.c */
 #define N_CURVES 27
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
+
 /* A real world sample public key.  */
 static char const sample_key_1[] =
 "(public-key\n"
@@ -255,8 +260,13 @@ check_get_params (void)
 
        /* Check also the ECC algo mapping.  */
        { GCRY_PK_ECDSA, "Ed25519" },
+       #if defined(HAVE_FIPS_VERSION)
+       { GCRY_PK_EDDSA, "Ed25519", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECDH,  "Ed25519", TEST_ERROR_EXPECTED },
+       #else
        { GCRY_PK_EDDSA, "Ed25519" },
        { GCRY_PK_ECDH,  "Ed25519" },
+       #endif
        { GCRY_PK_ECDSA, "Curve25519", TEST_NOFIPS },
        { GCRY_PK_EDDSA, "Curve25519", TEST_NOFIPS },
        { GCRY_PK_ECDH,  "Curve25519", TEST_NOFIPS },

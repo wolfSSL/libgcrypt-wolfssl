@@ -113,9 +113,14 @@ one_test (int testno, int algo,
 
   err = gcry_kem_decap (algo, sk, sk_len, ct, ct_len,
                         ss_computed, ss_len, NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     fail ("gcry_kem_decap failed for test %d: %s", testno, gpg_strerror (err));
 
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (ss_computed, ss, ss_len) != 0)
     {
       size_t i;
@@ -130,6 +135,7 @@ one_test (int testno, int algo,
         fprintf (stderr, " %02x", ss[i]);
       putc ('\n', stderr);
     }
+#endif
 
  leave:
   xfree (sk);

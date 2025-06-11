@@ -31,6 +31,11 @@
 #include "t-common.h"
 #define N_TESTS 10
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
+
 static int in_fips_mode;
 
 static void
@@ -46,7 +51,11 @@ test_kem_sntrup761 (int testno)
   err = gcry_kem_keypair (GCRY_KEM_SNTRUP761,
                           pubkey, GCRY_KEM_SNTRUP761_PUBKEY_LEN,
                           seckey, GCRY_KEM_SNTRUP761_SECKEY_LEN);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_keypair %d: %s", testno, gpg_strerror (err));
       return;
@@ -57,7 +66,11 @@ test_kem_sntrup761 (int testno)
                         ciphertext, GCRY_KEM_SNTRUP761_ENCAPS_LEN,
                         key1, GCRY_KEM_SNTRUP761_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_enc %d: %s", testno, gpg_strerror (err));
       return;
@@ -68,12 +81,16 @@ test_kem_sntrup761 (int testno)
                         ciphertext, GCRY_KEM_SNTRUP761_ENCAPS_LEN,
                         key2, GCRY_KEM_SNTRUP761_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_dec %d: %s", testno, gpg_strerror (err));
       return;
     }
-
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (key1, key2, GCRY_KEM_SNTRUP761_SHARED_LEN) != 0)
     {
       size_t i;
@@ -88,6 +105,7 @@ test_kem_sntrup761 (int testno)
         fprintf (stderr, " %02x", key2[i]);
       putc ('\n', stderr);
     }
+#endif
 }
 
 
@@ -104,7 +122,11 @@ test_kem_mceliece6688128f (int testno)
   err = gcry_kem_keypair (GCRY_KEM_CM6688128F,
 			  pubkey, GCRY_KEM_CM6688128F_PUBKEY_LEN,
 			  seckey, GCRY_KEM_CM6688128F_SECKEY_LEN);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_keypair %d: %s", testno, gpg_strerror (err));
       return;
@@ -115,7 +137,11 @@ test_kem_mceliece6688128f (int testno)
 			ciphertext, GCRY_KEM_CM6688128F_ENCAPS_LEN,
 			key1, GCRY_KEM_CM6688128F_SHARED_LEN,
 			NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_enc %d: %s", testno, gpg_strerror (err));
       return;
@@ -126,12 +152,16 @@ test_kem_mceliece6688128f (int testno)
 			ciphertext, GCRY_KEM_CM6688128F_ENCAPS_LEN,
 			key2, GCRY_KEM_CM6688128F_SHARED_LEN,
 			NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_dec %d: %s", testno, gpg_strerror (err));
       return;
     }
-
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (key1, key2, GCRY_KEM_CM6688128F_SHARED_LEN) != 0)
     {
       size_t i;
@@ -146,6 +176,7 @@ test_kem_mceliece6688128f (int testno)
 	fprintf (stderr, " %02x", key2[i]);
       putc ('\n', stderr);
     }
+#endif
 }
 
 
@@ -162,7 +193,11 @@ test_kem_mlkem512 (int testno)
   err = gcry_kem_keypair (GCRY_KEM_MLKEM512,
                           pubkey, GCRY_KEM_MLKEM512_PUBKEY_LEN,
                           seckey, GCRY_KEM_MLKEM512_SECKEY_LEN);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_keypair %d: %s", testno, gpg_strerror (err));
       return;
@@ -173,7 +208,11 @@ test_kem_mlkem512 (int testno)
                         ciphertext, GCRY_KEM_MLKEM512_ENCAPS_LEN,
                         key1, GCRY_KEM_MLKEM512_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_enc %d: %s", testno, gpg_strerror (err));
       return;
@@ -184,12 +223,16 @@ test_kem_mlkem512 (int testno)
                         ciphertext, GCRY_KEM_MLKEM512_ENCAPS_LEN,
                         key2, GCRY_KEM_MLKEM512_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_dec %d: %s", testno, gpg_strerror (err));
       return;
     }
-
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (key1, key2, GCRY_KEM_MLKEM512_SHARED_LEN) != 0)
     {
       size_t i;
@@ -204,6 +247,7 @@ test_kem_mlkem512 (int testno)
         fprintf (stderr, " %02x", key2[i]);
       putc ('\n', stderr);
     }
+#endif
 }
 
 static void
@@ -219,7 +263,11 @@ test_kem_mlkem768 (int testno)
   err = gcry_kem_keypair (GCRY_KEM_MLKEM768,
                           pubkey, GCRY_KEM_MLKEM768_PUBKEY_LEN,
                           seckey, GCRY_KEM_MLKEM768_SECKEY_LEN);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_keypair %d: %s", testno, gpg_strerror (err));
       return;
@@ -230,7 +278,11 @@ test_kem_mlkem768 (int testno)
                         ciphertext, GCRY_KEM_MLKEM768_ENCAPS_LEN,
                         key1, GCRY_KEM_MLKEM768_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_enc %d: %s", testno, gpg_strerror (err));
       return;
@@ -241,12 +293,16 @@ test_kem_mlkem768 (int testno)
                         ciphertext, GCRY_KEM_MLKEM768_ENCAPS_LEN,
                         key2, GCRY_KEM_MLKEM768_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_dec %d: %s", testno, gpg_strerror (err));
       return;
     }
-
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (key1, key2, GCRY_KEM_MLKEM768_SHARED_LEN) != 0)
     {
       size_t i;
@@ -261,6 +317,7 @@ test_kem_mlkem768 (int testno)
         fprintf (stderr, " %02x", key2[i]);
       putc ('\n', stderr);
     }
+#endif
 }
 
 static void
@@ -276,7 +333,11 @@ test_kem_mlkem1024 (int testno)
   err = gcry_kem_keypair (GCRY_KEM_MLKEM1024,
                           pubkey, GCRY_KEM_MLKEM1024_PUBKEY_LEN,
                           seckey, GCRY_KEM_MLKEM1024_SECKEY_LEN);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_keypair %d: %s", testno, gpg_strerror (err));
       return;
@@ -287,7 +348,11 @@ test_kem_mlkem1024 (int testno)
                         ciphertext, GCRY_KEM_MLKEM1024_ENCAPS_LEN,
                         key1, GCRY_KEM_MLKEM1024_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_enc %d: %s", testno, gpg_strerror (err));
       return;
@@ -298,12 +363,16 @@ test_kem_mlkem1024 (int testno)
                         ciphertext, GCRY_KEM_MLKEM1024_ENCAPS_LEN,
                         key2, GCRY_KEM_MLKEM1024_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_dec %d: %s", testno, gpg_strerror (err));
       return;
     }
-
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (key1, key2, GCRY_KEM_MLKEM1024_SHARED_LEN) != 0)
     {
       size_t i;
@@ -318,6 +387,7 @@ test_kem_mlkem1024 (int testno)
         fprintf (stderr, " %02x", key2[i]);
       putc ('\n', stderr);
     }
+#endif
 }
 
 
@@ -354,7 +424,11 @@ test_kem_raw_x25519 (int testno)
                         ciphertext, GCRY_KEM_ECC_X25519_ENCAPS_LEN,
                         key1, GCRY_KEM_RAW_X25519_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_encap %d: %s", testno, gpg_strerror (err));
       return;
@@ -365,12 +439,17 @@ test_kem_raw_x25519 (int testno)
                         ciphertext, GCRY_KEM_ECC_X25519_ENCAPS_LEN,
                         key2, GCRY_KEM_RAW_X25519_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_decap %d: %s", testno, gpg_strerror (err));
       return;
     }
 
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (key1, key2, GCRY_KEM_RAW_X25519_SHARED_LEN) != 0)
     {
       size_t i;
@@ -385,6 +464,7 @@ test_kem_raw_x25519 (int testno)
         fprintf (stderr, " %02x", key2[i]);
       putc ('\n', stderr);
     }
+#endif
 }
 
 
@@ -421,7 +501,11 @@ test_kem_dhkem_x25519 (int testno)
                         ciphertext, GCRY_KEM_DHKEM25519_ENCAPS_LEN,
                         key1, GCRY_KEM_DHKEM25519_SHARED_LEN,
                         NULL, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_encap %d: %s", testno, gpg_strerror (err));
       return;
@@ -432,12 +516,17 @@ test_kem_dhkem_x25519 (int testno)
                         ciphertext, GCRY_KEM_DHKEM25519_ENCAPS_LEN,
                         key2, GCRY_KEM_DHKEM25519_SHARED_LEN,
                         pubkey, GCRY_KEM_DHKEM25519_PUBKEY_LEN);
+#if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Unknown algorithm", 20) != 0)
+#else
   if (err)
+#endif
     {
       fail ("gcry_kem_decap %d: %s", testno, gpg_strerror (err));
       return;
     }
 
+#if !defined(HAVE_FIPS_VERSION)
   if (memcmp (key1, key2, GCRY_KEM_DHKEM25519_SHARED_LEN) != 0)
     {
       size_t i;
@@ -452,6 +541,7 @@ test_kem_dhkem_x25519 (int testno)
         fprintf (stderr, " %02x", key2[i]);
       putc ('\n', stderr);
     }
+#endif
 }
 
 

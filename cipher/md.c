@@ -606,6 +606,17 @@ md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
 gcry_err_code_t
 _gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
 {
+
+#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+    if (algo == GCRY_MD_SHA512_224 ||
+        algo == GCRY_MD_SHA512_256 ||
+        algo == GCRY_MD_SHAKE128 ||
+        algo == GCRY_MD_SHAKE256 ||
+        algo == GCRY_MD_CSHAKE128 ||
+        algo == GCRY_MD_CSHAKE256) {
+        return GPG_ERR_DIGEST_ALGO;
+    }
+#endif
 #ifdef HAVE_WOLFSSL
   if (!!(flags & GCRY_MD_FLAG_HMAC)) {
     return _gcry_wc_md_open(h, algo, flags);

@@ -32,6 +32,10 @@
 #include "kyber.h"
 #include "kem-ecc.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
 
 /* Information about the the KEM algoithms for use by the s-expression
  * interface.  */
@@ -88,6 +92,7 @@ _gcry_kem_keypair (int algo,
 {
   switch (algo)
     {
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_KEM_SNTRUP761:
       if (seckey_len != GCRY_KEM_SNTRUP761_SECKEY_LEN
           || pubkey_len != GCRY_KEM_SNTRUP761_PUBKEY_LEN)
@@ -125,18 +130,19 @@ _gcry_kem_keypair (int algo,
     case GCRY_KEM_RAW_BP256:
     case GCRY_KEM_RAW_BP384:
     case GCRY_KEM_RAW_BP512:
+#endif
     case GCRY_KEM_RAW_P256R1:
     case GCRY_KEM_RAW_P384R1:
     case GCRY_KEM_RAW_P521R1:
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_KEM_DHKEM25519:
     case GCRY_KEM_DHKEM448:
+#endif
       return _gcry_ecc_raw_keypair (algo, pubkey, pubkey_len,
                                     seckey, seckey_len);
-
     default:
       return GPG_ERR_UNKNOWN_ALGORITHM;
     }
-
   return GPG_ERR_UNKNOWN_ALGORITHM;
 }
 
@@ -150,6 +156,7 @@ _gcry_kem_encap (int algo,
 {
   switch (algo)
     {
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_KEM_SNTRUP761:
       if (optional != NULL || optional_len != 0)
         return GPG_ERR_INV_VALUE;
@@ -179,6 +186,7 @@ _gcry_kem_encap (int algo,
     case GCRY_KEM_RAW_BP256:
     case GCRY_KEM_RAW_BP384:
     case GCRY_KEM_RAW_BP512:
+#endif
     case GCRY_KEM_RAW_P256R1:
     case GCRY_KEM_RAW_P384R1:
     case GCRY_KEM_RAW_P521R1:
@@ -187,13 +195,13 @@ _gcry_kem_encap (int algo,
       return _gcry_ecc_raw_encap (algo, pubkey, pubkey_len,
                                   ciphertext, ciphertext_len,
                                   shared, shared_len);
-
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_KEM_DHKEM25519:
     case GCRY_KEM_DHKEM448:
       if (optional != NULL)
         return GPG_ERR_INV_VALUE;
       return _gcry_ecc_dhkem_encap (algo, pubkey, ciphertext, shared);
-
+#endif
     default:
       return GPG_ERR_UNKNOWN_ALGORITHM;
     }
@@ -210,6 +218,7 @@ _gcry_kem_decap (int algo,
 {
   switch (algo)
     {
+  #if !defined(HAVE_FIPS_VERSION)
     case GCRY_KEM_SNTRUP761:
       if (optional != NULL || optional_len != 0)
         return GPG_ERR_INV_VALUE;
@@ -239,6 +248,7 @@ _gcry_kem_decap (int algo,
     case GCRY_KEM_RAW_BP256:
     case GCRY_KEM_RAW_BP384:
     case GCRY_KEM_RAW_BP512:
+  #endif
     case GCRY_KEM_RAW_P256R1:
     case GCRY_KEM_RAW_P384R1:
     case GCRY_KEM_RAW_P521R1:
@@ -247,12 +257,12 @@ _gcry_kem_decap (int algo,
       return _gcry_ecc_raw_decap (algo, seckey, seckey_len,
                                   ciphertext, ciphertext_len,
                                   shared, shared_len);
-
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_KEM_DHKEM25519:
     case GCRY_KEM_DHKEM448:
       return _gcry_ecc_dhkem_decap (algo, seckey, ciphertext, shared,
                                     optional);
-
+#endif
     default:
       return GPG_ERR_UNKNOWN_ALGORITHM;
     }
@@ -385,7 +395,6 @@ kem_compute_keygrip (gcry_md_hd_t md, gcry_sexp_t keyparam)
 
   _gcry_md_write (md, data, datalen);
   sexp_release (l1);
-
   return 0;
 }
 

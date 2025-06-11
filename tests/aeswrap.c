@@ -29,6 +29,10 @@
 #define PGM "aeswrap"
 #include "t-common.h"
 
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
 
 static void
 check_one (int algo,
@@ -43,6 +47,15 @@ check_one (int algo,
   size_t outbuflen;
 
   err = gcry_cipher_open (&hd, algo, GCRY_CIPHER_MODE_AESWRAP, 0);
+  #if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Invalid cipher mode", 20) == 0) {
+    return;
+  }
+  else {
+      fail ("failed to deny unsupported cipher mode");
+      return;
+  }
+  #endif
   if (err)
     {
       fail ("gcry_cipher_open failed: %s\n", gpg_strerror (err));
@@ -209,6 +222,15 @@ check_one_with_padding (int algo,
 
   err = gcry_cipher_open (&hd, algo, GCRY_CIPHER_MODE_AESWRAP,
                           GCRY_CIPHER_EXTENDED);
+  #if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Invalid cipher mode", 20) == 0) {
+    return;
+  }
+  else {
+      fail ("failed to deny unsupported cipher mode");
+      return;
+  }
+  #endif
   if (err)
     {
       fail ("gcry_cipher_open failed: %s\n", gpg_strerror (err));

@@ -860,6 +860,10 @@ argon2_open (gcry_kdf_hd_t *hd, int subalgo,
   gpg_err_code_t ec;
   size_t n;
 
+#if !defined(USE_BLAKE2)
+  return GPG_ERR_NOT_SUPPORTED;
+#endif
+
   if (subalgo != GCRY_KDF_ARGON2D
       && subalgo != GCRY_KDF_ARGON2I
       && subalgo != GCRY_KDF_ARGON2ID)
@@ -2014,6 +2018,7 @@ _gcry_kdf_open (gcry_kdf_hd_t *hd, int algo, int subalgo,
 
   switch (algo)
     {
+#if defined(USE_BLAKE2)
     case GCRY_KDF_ARGON2:
       if (!saltlen)
         ec = GPG_ERR_INV_VALUE;
@@ -2023,6 +2028,7 @@ _gcry_kdf_open (gcry_kdf_hd_t *hd, int algo, int subalgo,
                           key, keylen, ad, adlen);
       break;
 
+#endif
     case GCRY_KDF_BALLOON:
       if (!inputlen || !saltlen || keylen || adlen)
         ec = GPG_ERR_INV_VALUE;
@@ -2080,7 +2086,6 @@ _gcry_kdf_open (gcry_kdf_hd_t *hd, int algo, int subalgo,
                               input, inputlen, ad, adlen);
         }
       break;
-
     default:
       ec = GPG_ERR_UNKNOWN_ALGORITHM;
       break;

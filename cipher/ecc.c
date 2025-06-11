@@ -1987,11 +1987,28 @@ wc_check_is_nist_curve(const char *curve_name) {
     return 0; /* False */
   }
 
-  if (strncmp(curve_name, "NIST P-", 7) == 0 ||
-      strncmp(curve_name, "nistp", 5) == 0 ||
-      strncmp(curve_name, "secp256r1", 9) == 0 ||
-      strncmp(curve_name, "secp384r1", 9) == 0 ||
-      strncmp(curve_name, "secp521r1", 9) == 0) {
+  if (strncmp(curve_name, "NIST P-192", 10) == 0 ||
+       strncmp(curve_name, "1.2.840.10045.3.1.1", 20) == 0 ||
+       strncmp(curve_name, "prime192v1", 11) == 0 ||
+       strncmp(curve_name, "secp192r1", 10) == 0 ||
+       strncmp(curve_name, "nistp192", 9) == 0 ||
+       strncmp(curve_name, "NIST P-224", 10) == 0 ||
+       strncmp(curve_name, "1.3.132.0.33", 13) == 0 ||
+       strncmp(curve_name, "secp224r1", 10) == 0 ||
+       strncmp(curve_name, "nistp224", 9) == 0 ||
+       strncmp(curve_name, "NIST P-256", 10) == 0 ||
+       strncmp(curve_name, "1.2.840.10045.3.1.7", 20) == 0 ||
+       strncmp(curve_name, "prime256v1", 11) == 0 ||
+       strncmp(curve_name, "secp256r1", 10) == 0 ||
+       strncmp(curve_name, "nistp256", 9) == 0 ||
+       strncmp(curve_name, "NIST P-384", 10) == 0 ||
+       strncmp(curve_name, "1.3.132.0.34", 13) == 0 ||
+       strncmp(curve_name, "secp384r1", 10) == 0 ||
+       strncmp(curve_name, "nistp384", 9) == 0 ||
+       strncmp(curve_name, "NIST P-521", 10) == 0 ||
+       strncmp(curve_name, "1.3.132.0.35", 13) == 0 ||
+       strncmp(curve_name, "secp521r1", 10) == 0 ||
+       strncmp(curve_name, "nistp521", 9) == 0 ) {
       return 1; /* True */
     }
   return 0; /* False */

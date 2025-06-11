@@ -753,7 +753,11 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
   if (wc_curve_id != ECC_CURVE_INVALID) {
     wc_curve_size = wc_ecc_get_curve_size_from_id(wc_curve_id);
   }
-
+#if defined(HAVE_FIPS_VERSION)
+  else {
+    return GPG_ERR_NOT_SUPPORTED; /* Needed for FIPS mode */
+  }
+#endif
 
   if (DBG_CIPHER)
     log_mpidump ("ecdsa sign hash  ", input );
@@ -1137,6 +1141,12 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   word32 wc_hash_len = 0;
 
   wc_curve_id = wc_name_to_curve_id(ec->name);
+
+#if defined(HAVE_FIPS_VERSION)
+  if (wc_curve_id == ECC_CURVE_INVALID) {
+    return GPG_ERR_NOT_SUPPORTED; /* Needed for FIPS mode */
+  }
+#endif
 
   if (!_gcry_mpi_ec_curve_point (ec->Q, ec))
     return GPG_ERR_BROKEN_PUBKEY;

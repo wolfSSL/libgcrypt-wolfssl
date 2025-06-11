@@ -307,11 +307,18 @@ one_test_sexp (const char *n, const char *e, const char *d,
   buffer2 = NULL;
 
   err = gcry_pk_hash_sign (&s_sig, data_tmpl, s_sk, hd, ctx);
+  #if defined(HAVE_FIPS_VERSION)
+  if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
+    fail ("gcry_pk_hash_sign failed to detect missing item prime p/q\n");
+  }
+  goto leave; /* Don't check the signature because it should fail */
+  #else
   if (err)
     {
       fail ("gcry_pk_hash_sign failed: %s", gpg_strerror (err));
       goto leave;
     }
+  #endif
 
   s_tmp2 = NULL;
   s_tmp = gcry_sexp_find_token (s_sig, "sig-val", 0);

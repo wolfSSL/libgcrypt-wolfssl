@@ -275,6 +275,15 @@ one_test_sexp (const char *curvename, const char *sha_alg,
     }
 
   err = gcry_md_open (&hd, md_algo, 0);
+#if defined(HAVE_FIPS_VERSION)
+  if (md_algo == GCRY_MD_SHA512_224 || md_algo == GCRY_MD_SHA512_256)
+    {
+      if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 28) != 0) {
+        fail("Should fail for sha512 224 and 512 256");
+      }
+      goto leave;
+    }
+#endif
   if (err)
     {
       fail ("algo %d, gcry_md_open failed: %s\n", md_algo, gpg_strerror (err));
