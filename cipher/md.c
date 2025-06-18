@@ -327,6 +327,10 @@ struct gcry_md_context
   size_t actual_handle_size;     /* Allocated size of this handle. */
   FILE  *debug;
   GcryDigestEntry *list;
+
+#ifdef HAVE_WOLFSSL
+  struct gcry_wc_md_context *wc_c;
+#endif
 };
 
 #ifdef HAVE_WOLFSSL
@@ -619,7 +623,8 @@ _gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
     rc = md_open (&hd, algo, flags);
 
 #ifdef HAVE_WOLFSSL
-  hd->wc_c = NULL;
+  if (rc == 0)
+      hd->ctx->wc_c = NULL;
 #endif
 
   *h = rc? NULL : hd;
@@ -695,7 +700,7 @@ gcry_err_code_t
 _gcry_md_enable (gcry_md_hd_t hd, int algorithm)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc) {
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc) {
     return _gcry_wc_md_enable(hd, algorithm);
   }
 #endif
@@ -772,15 +777,15 @@ gcry_err_code_t
 _gcry_md_copy (gcry_md_hd_t *handle, gcry_md_hd_t hd)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc)
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc)
     return _gcry_wc_md_copy(handle, hd);
 #endif
   gcry_err_code_t rc;
 
   rc = md_copy (hd, handle);
 #ifdef HAVE_WOLFSSL
-  hd->wc_c = NULL;
-  (*handle)->wc_c = NULL;
+  hd->ctx->wc_c = NULL;
+  (*handle)->ctx->wc_c = NULL;
 #endif
   if (rc)
     *handle = NULL;
@@ -796,7 +801,7 @@ void
 _gcry_md_reset (gcry_md_hd_t a)
 {
 #ifdef HAVE_WOLFSSL
-  if (a->wc_c && a->wc_c->use_wc) {
+  if (a->ctx->wc_c && a->ctx->wc_c->use_wc) {
     _gcry_wc_md_reset(a);
     return;
   }
@@ -848,7 +853,10 @@ void
 _gcry_md_close (gcry_md_hd_t hd)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc) {
+  if (!hd)
+    return;
+
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc) {
     _gcry_wc_md_close(hd);
     return;
   }
@@ -888,7 +896,7 @@ void
 _gcry_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc) {
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc) {
     if (hd->bufpos)
       _gcry_wc_md_write(hd, hd->buf, hd->bufpos);
     else
@@ -1167,7 +1175,7 @@ gcry_err_code_t
 _gcry_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc)
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc)
     return _gcry_wc_md_ctl(hd, cmd, buffer, buflen);
 #endif
   gcry_err_code_t rc = 0;
@@ -1199,7 +1207,7 @@ gcry_err_code_t
 _gcry_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc)
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc)
     return _gcry_wc_md_setkey(hd, key, keylen);
 #endif
   gcry_err_code_t rc;
@@ -1280,7 +1288,7 @@ byte *
 _gcry_md_read (gcry_md_hd_t hd, int algo)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc)
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc)
     return _gcry_wc_md_read(hd, algo);
 #endif
   /* This function is expected to always return a digest, thus we
@@ -1332,7 +1340,7 @@ gcry_err_code_t
 _gcry_md_extract (gcry_md_hd_t hd, int algo, void *out, size_t outlen)
 {
 #ifdef HAVE_WOLFSSL
-  if (hd->wc_c && hd->wc_c->use_wc)
+  if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc)
     return _gcry_wc_md_extract(hd, algo, out, outlen);
 #endif
   _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
@@ -1886,19 +1894,19 @@ _gcry_wc_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
     return rc;
 
 
-  hd->wc_c = calloc(1, sizeof *hd->wc_c);
-  if (hd->wc_c == NULL) {
+  hd->ctx->wc_c = calloc(1, sizeof *hd->ctx->wc_c);
+  if (hd->ctx->wc_c == NULL) {
     md_close(hd);
     return GPG_ERR_ENOMEM;
   }
 
-  hd->wc_c->use_wc = 1;
-  hd->wc_c->flags = flags;
+  hd->ctx->wc_c->use_wc = 1;
+  hd->ctx->wc_c->flags = flags;
   rc = _gcry_wc_md_enable(hd, algo);
   if (rc) {
-    free(hd->wc_c);
+    free(hd->ctx->wc_c);
     md_close(hd);
-    hd->wc_c = NULL;
+    hd->ctx->wc_c = NULL;
     *h = NULL;
     return rc;
   }
@@ -1938,7 +1946,7 @@ static gcry_err_code_t
 _gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm)
 {
 
-  struct gcry_wc_md_context *wc = hd->wc_c;
+  struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
   GcryWcDigestEntry *last_list_entry;
   int rc;
@@ -2022,7 +2030,7 @@ _gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src)
   gcry_err_code_t rc;
   gcry_md_hd_t hd;
   struct gcry_wc_md_context *dest_wc;
-  struct gcry_wc_md_context *src_wc = src->wc_c;
+  struct gcry_wc_md_context *src_wc = src->ctx->wc_c;
   GcryWcDigestEntry *dest_entry;
   GcryWcDigestEntry *src_entry;
   int first_iter = 1;
@@ -2037,7 +2045,7 @@ _gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src)
         return GPG_ERR_GENERAL;
       }
 
-      dest_wc = hd->wc_c;
+      dest_wc = hd->ctx->wc_c;
       first_iter = 0;
       dest_entry = dest_wc->list;
 
@@ -2069,7 +2077,7 @@ _gcry_wc_md_reset (gcry_md_hd_t a)
 static void
 _gcry_wc_md_close (gcry_md_hd_t hd)
 {
-  struct gcry_wc_md_context *wc = hd->wc_c;
+  struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
   /* Note: We allow this even in fips non operational mode.  */
@@ -2089,7 +2097,7 @@ _gcry_wc_md_close (gcry_md_hd_t hd)
 static void
 _gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
 {
-  struct gcry_wc_md_context *wc = hd->wc_c;
+  struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
   for (entry = wc->list; entry; entry = entry->next) {
@@ -2101,7 +2109,7 @@ _gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
 static void
 _gcry_wc_md_final (gcry_md_hd_t a)
 {
-  struct gcry_wc_md_context *wc = a->wc_c;
+  struct gcry_wc_md_context *wc = a->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
   if (a->ctx->flags.finalized)
@@ -2147,7 +2155,7 @@ _gcry_wc_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
 static gcry_err_code_t
 _gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
 {
-  struct gcry_wc_md_context *wc = hd->wc_c;
+  struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
   int rc;
   _gcry_wc_md_reset(hd);
@@ -2166,7 +2174,7 @@ _gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
 static byte *
 _gcry_wc_md_read (gcry_md_hd_t hd, int algo)
 {
-  struct gcry_wc_md_context *wc = hd->wc_c;
+  struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
   _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
@@ -2184,7 +2192,7 @@ _gcry_wc_md_read (gcry_md_hd_t hd, int algo)
 static gcry_err_code_t
 _gcry_wc_md_extract (gcry_md_hd_t hd, int algo, void *out, size_t outlen)
 {
-  struct gcry_wc_md_context *wc = hd->wc_c;
+  struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
   _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
