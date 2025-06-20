@@ -773,10 +773,10 @@ AC_MSG_RESULT($enable_wolfssl_fips)
 
 # If WolfSSL FIPS mode is enabled, override defaults to use FIPS-compliant subsets
 if test "x$enable_wolfssl_fips" = "xyes"; then
-  default_ciphers="$available_wc_ciphers_fips"
-  default_pubkey_ciphers="$available_wc_pubkey_fips"
-  default_digests="$available_wc_digests_fips"
-  default_kdfs="$available_wc_kdfs_fips"
+  enabled_ciphers="$available_wc_ciphers_fips"
+  enabled_pubkey_ciphers="$available_wc_pubkey_fips"
+  enabled_digests="$available_wc_digests_fips"
+  enabled_kdfs="$available_wc_kdfs_fips"
 
   AC_MSG_NOTICE([WolfSSL FIPS mode enabled - using restricted algorithm set and disabling hardware acceleration])
 fi
