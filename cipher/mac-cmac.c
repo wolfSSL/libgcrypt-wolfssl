@@ -474,7 +474,7 @@ wc_aes_cmac_close (gcry_mac_hd_t h)
   }
 
 /* Not available in fips v5 or older */
-#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
+#if !defined(ENABLED_WOLFSSL_FIPS) || FIPS_VERSION3_GE(6,0,0)
   wc_CmacFree(&h->aesCmac);
 #else
   wc_AesFree(&h->aesCmac);
@@ -511,7 +511,7 @@ wc_aes_cmac_reset (gcry_mac_hd_t h)
   memset(h->authTag, 0, h->authTag_len);
 
 /* Not available in fips v5 or older */
-#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
+#if !defined(ENABLED_WOLFSSL_FIPS) || FIPS_VERSION3_GE(6,0,0)
   wc_CmacFree(&h->aesCmac);
 #else
   wc_AesFree(&h->aesCmac);

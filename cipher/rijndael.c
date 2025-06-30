@@ -2333,7 +2333,7 @@ selftest_fips_128 (int extended, selftest_report_func_t report)
   if (errtxt)
     goto failed;
 
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
   if (extended)
     {
       what = "cfb";

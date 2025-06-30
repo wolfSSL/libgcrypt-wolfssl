@@ -1852,7 +1852,7 @@ check_hkdf (void)
                            tv[count].salt, tv[count].saltlen,
                            tv[count].info, tv[count].infolen,
                            tv[count].dklen, out);
-      #if defined(HAVE_FIPS_VERSION)
+      #if defined(ENABLED_WOLFSSL_FIPS)
       /* expected to error because too short of a key */
       if (count == 0 || count == 2) {
         if (!err) { /* expect error for test vectors 0 and 2 */
@@ -1871,7 +1871,7 @@ check_hkdf (void)
                 fprintf (stderr, " %02x", out[i]);
             putc ('\n', stderr);
             }
-    #if defined(HAVE_FIPS_VERSION)
+    #if defined(ENABLED_WOLFSSL_FIPS)
       }
     #endif
     }

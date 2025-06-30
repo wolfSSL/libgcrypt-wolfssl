@@ -98,7 +98,7 @@ global_init (void)
   static int is_wolfssl_on = 0;
 
 /* add wolfSSL initialization here */
-#ifdef HAVE_WOLFSSL
+#if defined (HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
   if (is_wolfssl_on == 0) {
     is_wolfssl_on = 1;
     if (wc_SetSeed_Cb(wc_GenerateSeed) != 0) {

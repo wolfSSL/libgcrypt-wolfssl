@@ -607,7 +607,7 @@ gcry_err_code_t
 _gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
 {
 
-#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
     if (algo == GCRY_MD_SHA512_224 ||
         algo == GCRY_MD_SHA512_256 ||
         algo == GCRY_MD_SHAKE128 ||
@@ -1880,7 +1880,7 @@ map_algo_to_wc_algo (int algo)
       return WC_HASH_TYPE_SHA512;
     case GCRY_MD_SHA512_256:
       return WC_HASH_TYPE_SHA512;
-#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
+#if !defined(ENABLED_WOLFSSL_FIPS) || FIPS_VERSION3_GE(6,0,0)
     case GCRY_MD_SHAKE128:
       return WC_HASH_TYPE_SHAKE128;
     case GCRY_MD_SHAKE256:
@@ -1935,7 +1935,7 @@ static int
 digest_is_supported(int algorithm)
 {
   switch (algorithm) {
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
     case GCRY_MD_MD5:
 #endif
     case GCRY_MD_SHA1:
@@ -1953,7 +1953,7 @@ digest_is_supported(int algorithm)
 #ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:
 #endif
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
     case GCRY_MD_SHAKE128:
     case GCRY_MD_SHAKE256:
 #endif
@@ -2012,7 +2012,7 @@ static int
 hash_copy(Hmac *dst, Hmac *src, int algo)
 {
   switch (algo) {
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
     case GCRY_MD_MD5:
       return wc_Md5Copy((wc_Md5 *)&(src->hash), (wc_Md5 *)&(dst->hash));
 #endif
@@ -2044,7 +2044,7 @@ hash_copy(Hmac *dst, Hmac *src, int algo)
 #endif
 
 /* Not available in fips v5 or older */
-#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
+#if !defined(ENABLED_WOLFSSL_FIPS) || FIPS_VERSION3_GE(6,0,0)
     case GCRY_MD_SHAKE128:
       return wc_Shake128_Copy((wc_Shake*)&(src->hash), (wc_Shake*) &(dst->hash));
     case GCRY_MD_SHAKE256:

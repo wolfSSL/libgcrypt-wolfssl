@@ -41,7 +41,7 @@
 #define PGM "basic"
 #include "t-common.h"
 
-#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
 #include "wolfssl/options.h"
 #include "wolfssl/wolfcrypt/settings.h"
 #endif
@@ -11459,7 +11459,7 @@ check_bulk_cipher_modes (void)
     int ivlen;
     char t1_hash[20];
   } tv[] = {
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
     { GCRY_CIPHER_AES, GCRY_CIPHER_MODE_CFB,
       "abcdefghijklmnop", 16,
       "1234567890123456", 16,
@@ -11566,7 +11566,7 @@ check_bulk_cipher_modes (void)
       { 0x2d, 0x71, 0x54, 0xb9, 0xc5, 0x28, 0x76, 0xff, 0x76, 0xb5,
         0x99, 0x37, 0x99, 0x9d, 0xf7, 0x10, 0x6d, 0x86, 0x4f, 0x3f }
     },
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
     { GCRY_CIPHER_AES128, GCRY_CIPHER_MODE_XTS,
       "abcdefghijklmnopABCDEFGHIJKLMNOP", 32,
       "1234567890123456", 16,
@@ -13492,7 +13492,7 @@ check_ciphers (void)
 		 gcry_cipher_map_name (gcry_cipher_algo_name (algos[i])));
 
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_ECB, 0);
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CFB, 0);
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CFB8, 0);
 #endif
@@ -13500,7 +13500,7 @@ check_ciphers (void)
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CBC, 0);
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CBC, GCRY_CIPHER_CBC_CTS);
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CTR, 0);
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_EAX, 0);
 #endif
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_CCM_BLOCK_LEN)
@@ -13508,7 +13508,7 @@ check_ciphers (void)
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_GCM_BLOCK_LEN)
         check_one_cipher (algos[i], GCRY_CIPHER_MODE_GCM, 0);
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_OCB_BLOCK_LEN)
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
         check_one_cipher (algos[i], GCRY_CIPHER_MODE_OCB, 0);
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_XTS_BLOCK_LEN)
         check_one_cipher (algos[i], GCRY_CIPHER_MODE_XTS, 0);
@@ -13517,7 +13517,7 @@ check_ciphers (void)
       if (gcry_cipher_get_algo_blklen (algos[i]) >= 8)
         {
           cipher_cbc_bulk_test (algos[i]);
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
           cipher_cfb_bulk_test (algos[i]);
 #endif
           cipher_ctr_bulk_test (algos[i]);
@@ -13570,7 +13570,7 @@ check_cipher_modes(void)
   check_aes128_cbc_cts_cipher ();
   check_cbc_mac_cipher ();
   check_ctr_cipher ();
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
   check_cfb_cipher ();
 #endif
   check_ofb_cipher ();
@@ -13581,7 +13581,7 @@ check_cipher_modes(void)
        * as late as in gcry_cipher_gettag, but we want to allow it in the end */
       check_gcm_cipher ();
     }
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
   check_poly1305_cipher ();
   check_ocb_cipher ();
   check_xts_cipher ();
@@ -15684,7 +15684,7 @@ check_hmac (void)
     const char *expect;
   } algos[] =
     {
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
       { GCRY_MD_MD5, "what do ya want for nothing?", "Jefe",
 	"\x75\x0c\x78\x3e\x6a\xb0\xb5\x03\xea\xa8\x6e\x31\x0a\x5d\xb7\x38" },
       { GCRY_MD_MD5,
@@ -16195,7 +16195,7 @@ check_mac (void)
     unsigned int klen;
   } algos[] =
     {
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
       { GCRY_MAC_HMAC_MD5, "what do ya want for nothing?", "Jefe",
         "\x75\x0c\x78\x3e\x6a\xb0\xb5\x03\xea\xa8\x6e\x31\x0a\x5d\xb7\x38" },
       { GCRY_MAC_HMAC_MD5,
@@ -17354,7 +17354,7 @@ check_pubkey_sign_ecdsa (int n, gcry_sexp_t skey, gcry_sexp_t pkey,
         /* */          "000102030405060708090A0B0C0D0E0F#))",
         0
       },
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
       { 256,
         "(data (flags gost)\n"
         " (value #00112233445566778899AABBCCDDEEFF"

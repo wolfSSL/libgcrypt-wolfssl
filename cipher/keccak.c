@@ -1994,7 +1994,7 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
     case GCRY_MD_SHA3_256:
     case GCRY_MD_SHA3_384:
     case GCRY_MD_SHA3_512:
-#if defined(HAVE_WOLFSSL) && !defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
     case GCRY_MD_CSHAKE128:
     case GCRY_MD_SHAKE128:
     case GCRY_MD_CSHAKE256:
@@ -2193,7 +2193,7 @@ const gcry_md_spec_t _gcry_digest_spec_sha3_512 =
 
 const gcry_md_spec_t _gcry_digest_spec_shake128 =
   {
-#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
     #warning "FIPS version of wolfcrypt does not support SHAKE 128"
     GCRY_MD_SHAKE128, {0, 0}, /* Turn off FIPS mode for SHAKE128 */
 #else
@@ -2209,7 +2209,7 @@ const gcry_md_spec_t _gcry_digest_spec_shake128 =
 
 const gcry_md_spec_t _gcry_digest_spec_shake256 =
   {
-#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
     #warning "FIPS version of wolfcrypt does not support SHAKE 256"
     GCRY_MD_SHAKE256, {0, 0}, /* Turn off FIPS mode for SHAKE256 */
 #else
@@ -2225,7 +2225,7 @@ const gcry_md_spec_t _gcry_digest_spec_shake256 =
 
 const gcry_md_spec_t _gcry_digest_spec_cshake128 =
   {
-#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
     #warning "FIPS version of wolfcrypt does not support CSHAKE 128"
     GCRY_MD_CSHAKE128, {0, 0}, /* Turn off FIPS mode for CSHAKE128 */
 #else
@@ -2240,7 +2240,7 @@ const gcry_md_spec_t _gcry_digest_spec_cshake128 =
 
 const gcry_md_spec_t _gcry_digest_spec_cshake256 =
   {
-#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
     #warning "FIPS version of wolfcrypt does not support CSHAKE 256"
     GCRY_MD_CSHAKE256, {0, 0}, /* Turn off FIPS mode for CSHAKE256 */
 #else

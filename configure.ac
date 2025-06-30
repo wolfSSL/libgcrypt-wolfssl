@@ -777,6 +777,7 @@ if test "x$enable_wolfssl_fips" = "xyes"; then
   enabled_pubkey_ciphers="$available_wc_pubkey_fips"
   enabled_digests="$available_wc_digests_fips"
   enabled_kdfs="$available_wc_kdfs_fips"
+  AC_DEFINE([ENABLED_WOLFSSL_FIPS], [1], [Define to 1 if wolfssl is using FIPS])
 
   AC_MSG_NOTICE([WolfSSL FIPS mode enabled - using restricted algorithm set and disabling hardware acceleration])
 fi

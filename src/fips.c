@@ -365,12 +365,12 @@ _gcry_fips_indicator_cipher (va_list arg_ptr)
         {
         case GCRY_CIPHER_MODE_ECB:
         case GCRY_CIPHER_MODE_CBC:
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
         case GCRY_CIPHER_MODE_CFB:
 #else
         #warning "FIPS version of wolfcrypt does not support CFB"
 #endif
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
         case GCRY_CIPHER_MODE_CFB8:
 #else
         #warning "FIPS version of wolfcrypt does not support CFB8"
@@ -379,12 +379,12 @@ _gcry_fips_indicator_cipher (va_list arg_ptr)
         case GCRY_CIPHER_MODE_CTR:
         case GCRY_CIPHER_MODE_CCM:
         case GCRY_CIPHER_MODE_GCM:
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
         case GCRY_CIPHER_MODE_XTS:
 #else
         #warning "FIPS version of wolfcrypt does not support XTS"
 #endif
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
         case GCRY_CIPHER_MODE_AESWRAP:
 #else
         #warning "FIPS version of wolfcrypt does not support AESWRAP"
@@ -449,11 +449,11 @@ _gcry_fips_indicator_md (va_list arg_ptr)
     case GCRY_MD_SHA3_256:
     case GCRY_MD_SHA3_384:
     case GCRY_MD_SHA3_512:
-#if !defined(HAVE_FIPS_VERSION) || FIPS_VERSION3_GE(6,0,0)
+#if !defined(ENABLED_WOLFSSL_FIPS) || FIPS_VERSION3_GE(6,0,0)
     case GCRY_MD_SHAKE128:
     case GCRY_MD_SHAKE256:
 #endif
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
     case GCRY_MD_CSHAKE128:
     case GCRY_MD_CSHAKE256:
 #endif

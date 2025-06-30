@@ -68,17 +68,17 @@ map_algo (int algo)
    {
    case GCRY_PK_RSA_E: return GCRY_PK_RSA;
    case GCRY_PK_RSA_S: return GCRY_PK_RSA;
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
    case GCRY_PK_ELG_E: return GCRY_PK_ELG;
 #endif
    case GCRY_PK_ECDSA: return GCRY_PK_ECC;
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
    case GCRY_PK_EDDSA: return GCRY_PK_ECC;
 #endif
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
    case GCRY_PK_ECDH:  return GCRY_PK_ECC;
 #endif
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
    case GCRY_PK_ECC:  return GCRY_PK_ECC;
    case GCRY_PK_RSA:  return GCRY_PK_RSA;
    default:            return -1;

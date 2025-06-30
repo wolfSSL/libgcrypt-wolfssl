@@ -224,7 +224,7 @@ check_oaep (void)
           gcry_free (seed);
 
           err = gcry_pk_decrypt (&plain, ciph, sec_key);
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
           if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
               fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
           }
@@ -337,7 +337,7 @@ check_pss (void)
           gcry_free (salt);
 
           err = gcry_pk_sign (&sig, sigtmpl, sec_key);
-        #if defined(HAVE_FIPS_VERSION)
+        #if defined(ENABLED_WOLFSSL_FIPS)
           if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
               fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
           }
@@ -510,7 +510,7 @@ check_v15crypt (void)
           gcry_free (seed);
 
           err = gcry_pk_decrypt (&plain, ciph, sec_key);
-        #if defined(HAVE_FIPS_VERSION)
+        #if defined(ENABLED_WOLFSSL_FIPS)
           if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
               fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
           }
@@ -619,7 +619,7 @@ check_v15sign (void)
           gcry_free (mesg);
 
           err = gcry_pk_sign (&sig, sigtmpl, sec_key);
-        #if defined(HAVE_FIPS_VERSION)
+        #if defined(ENABLED_WOLFSSL_FIPS)
           if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
               fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
           }

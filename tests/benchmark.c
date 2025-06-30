@@ -641,7 +641,7 @@ mac_bench ( const char *algoname )
     key[i] = (keylen - i) ^ 0x54;
 
   err = gcry_mac_open (&hd, algo, 0, NULL);
-  #if defined(HAVE_FIPS_VERSION)
+  #if defined(ENABLED_WOLFSSL_FIPS)
   if (algo == GCRY_MD_SHA512_224 || algo == GCRY_MD_SHA512_256 ||
     algo == GCRY_MAC_HMAC_SHA512_224 || algo == GCRY_MAC_HMAC_SHA512_256) {
     if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 25) != 0) {
@@ -982,7 +982,7 @@ cipher_bench ( const char *algoname )
         buf[i] = i;
 
       err = gcry_cipher_open (&hd, algo, modes[modeidx].mode, 0);
-      #if defined(HAVE_FIPS_VERSION)
+      #if defined(ENABLED_WOLFSSL_FIPS)
       if (modes[modeidx].mode == GCRY_CIPHER_MODE_CFB ||
             modes[modeidx].mode == GCRY_CIPHER_MODE_XTS ||
             modes[modeidx].mode == GCRY_CIPHER_MODE_EAX ||
@@ -1624,7 +1624,7 @@ ecc_bench (int iterations, int print_header)
 
       start_timer ();
       err = gcry_pk_genkey (&key_pair, key_spec);
-      #if defined(HAVE_FIPS_VERSION)
+      #if defined(ENABLED_WOLFSSL_FIPS)
       if (is_ed25519 || is_ed448) {
         if (strncmp(gpg_strerror(err), "Not supported", 13) != 0) {
             fprintf (stderr, PGM ": Not expected error for `%s' : error %s\n",

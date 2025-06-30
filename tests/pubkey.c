@@ -768,7 +768,7 @@ check_run (void)
           || (variant > 0 && gpg_err_code (err) != GPG_ERR_NO_OBJ))
           die ("gcry_pk_testkey failed: %s\n", gpg_strerror (err));
       /* Run the usual check but expect an error from variant 2.  */
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
       /* Only variant 0 is supported in FIPS mode with wolfSSL */
       check_keys (pkey, skey, 800, variant == 0? 0 : GPG_ERR_NO_OBJ);
 #else
@@ -1292,7 +1292,7 @@ check_ed25519ecdsa_sample_key (void)
     die ("line %d: %s", __LINE__, gpg_strerror (err));
   if ((err = gcry_sexp_new (&key, ecc_private_key, 0, 1)))
     die ("line %d: %s", __LINE__, gpg_strerror (err));
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_sign (&sig, hash, key);
   if (strncmp(gpg_strerror(err), "Not supported", 14) != 0)
 #else
@@ -1304,7 +1304,7 @@ check_ed25519ecdsa_sample_key (void)
   gcry_sexp_release (key);
   if ((err = gcry_sexp_new (&key, ecc_public_key, 0, 1)))
     die ("line %d: %s", __LINE__, gpg_strerror (err));
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
   if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
 #else
@@ -1316,7 +1316,7 @@ check_ed25519ecdsa_sample_key (void)
   gcry_sexp_release (key);
   if ((err = gcry_sexp_new (&key, ecc_public_key_comp, 0, 1)))
     die ("line %d: %s", __LINE__, gpg_strerror (err));
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
   if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
 #else
@@ -1329,7 +1329,7 @@ check_ed25519ecdsa_sample_key (void)
   if ((err = gcry_sexp_new (&key, ecc_private_key_wo_q, 0, 1)))
     die ("line %d: %s", __LINE__, gpg_strerror (err));
   gcry_sexp_release (sig);
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_sign (&sig, hash, key);
   if (strncmp(gpg_strerror(err), "Not supported", 14) != 0)
 #else
@@ -1341,7 +1341,7 @@ check_ed25519ecdsa_sample_key (void)
   gcry_sexp_release (key);
   if ((err = gcry_sexp_new (&key, ecc_public_key, 0, 1)))
     die ("line %d: %s", __LINE__, gpg_strerror (err));
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
   if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
 #else
@@ -1353,7 +1353,7 @@ check_ed25519ecdsa_sample_key (void)
   gcry_sexp_release (key);
   if ((err = gcry_sexp_new (&key, ecc_public_key_comp, 0, 1)))
     die ("line %d: %s", __LINE__, gpg_strerror (err));
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
   if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
 #else
@@ -1361,7 +1361,7 @@ check_ed25519ecdsa_sample_key (void)
 #endif
     die ("gcry_pk_verify signed w/o Q failed (comp): %s", gpg_strerror (err));
 
-#if !defined(HAVE_FIPS_VERSION)
+#if !defined(ENABLED_WOLFSSL_FIPS)
   extract_cmp_data (sig, "r", ("a63123a783ef29b8276e08987daca4"
                                "655d0179e22199bf63691fd88eb64e15"));
   extract_cmp_data (sig, "s", ("0d9b45c696ab90b96b08812b485df185"

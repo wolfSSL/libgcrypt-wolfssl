@@ -753,7 +753,7 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
   if (wc_curve_id != ECC_CURVE_INVALID) {
     wc_curve_size = wc_ecc_get_curve_size_from_id(wc_curve_id);
   }
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   else {
     return GPG_ERR_NOT_SUPPORTED; /* Needed for FIPS mode */
   }
@@ -1142,7 +1142,7 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
 
   wc_curve_id = wc_name_to_curve_id(ec->name);
 
-#if defined(HAVE_FIPS_VERSION)
+#if defined(ENABLED_WOLFSSL_FIPS)
   if (wc_curve_id == ECC_CURVE_INVALID) {
     return GPG_ERR_NOT_SUPPORTED; /* Needed for FIPS mode */
   }

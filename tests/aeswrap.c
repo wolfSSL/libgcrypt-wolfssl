@@ -47,7 +47,7 @@ check_one (int algo,
   size_t outbuflen;
 
   err = gcry_cipher_open (&hd, algo, GCRY_CIPHER_MODE_AESWRAP, 0);
-  #if defined(HAVE_FIPS_VERSION)
+  #if defined(ENABLED_WOLFSSL_FIPS)
   if (strncmp(gpg_strerror(err), "Invalid cipher mode", 20) == 0) {
     return;
   }
@@ -222,7 +222,7 @@ check_one_with_padding (int algo,
 
   err = gcry_cipher_open (&hd, algo, GCRY_CIPHER_MODE_AESWRAP,
                           GCRY_CIPHER_EXTENDED);
-  #if defined(HAVE_FIPS_VERSION)
+  #if defined(ENABLED_WOLFSSL_FIPS)
   if (strncmp(gpg_strerror(err), "Invalid cipher mode", 20) == 0) {
     return;
   }
