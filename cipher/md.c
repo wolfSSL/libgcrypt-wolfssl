@@ -2012,8 +2012,10 @@ static int
 hash_copy(Hmac *dst, Hmac *src, int algo)
 {
   switch (algo) {
+#if !defined(HAVE_FIPS_VERSION)
     case GCRY_MD_MD5:
       return wc_Md5Copy((wc_Md5 *)&(src->hash), (wc_Md5 *)&(dst->hash));
+#endif
     case GCRY_MD_SHA1:
       return wc_ShaCopy((wc_Sha *)&(src->hash), (wc_Sha *)&(dst->hash));
     case GCRY_MD_SHA224:
