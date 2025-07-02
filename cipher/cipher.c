@@ -846,7 +846,7 @@ cipher_setkey (gcry_cipher_hd_t c, byte *key, size_t keylen)
 
         case GCRY_CIPHER_MODE_GCM:
             switch (c->spec->algo) {
-          #ifdef HAVE_WOLFSSL_D
+          #ifdef HAVE_WOLFSSL
               case GCRY_CIPHER_AES:     /* AES-128, AES-192, AES-256 */
               case GCRY_CIPHER_AES192:  /* These are all supported by wolfSSL */
               case GCRY_CIPHER_AES256:  /* These are all supported by wolfSSL */
@@ -1534,7 +1534,7 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
 
     case GCRY_CIPHER_MODE_GCM:
       switch(c->spec->algo) {
-      #ifdef HAVE_WOLFSSL_D
+      #ifdef HAVE_WOLFSSL
         case GCRY_CIPHER_AES:
         case GCRY_CIPHER_AES192:
         case GCRY_CIPHER_AES256:
@@ -1598,7 +1598,7 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
 
     case GCRY_CIPHER_MODE_GCM:
       switch(c->spec->algo) {
-      #ifdef HAVE_WOLFSSL_D
+      #ifdef HAVE_WOLFSSL
         case GCRY_CIPHER_AES:
         case GCRY_CIPHER_AES192:
         case GCRY_CIPHER_AES256:
@@ -1661,7 +1661,7 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
 
     case GCRY_CIPHER_MODE_GCM:
       switch(c->spec->algo) {
-      #ifdef HAVE_WOLFSSL_D
+      #ifdef HAVE_WOLFSSL
         case GCRY_CIPHER_AES:
         case GCRY_CIPHER_AES192:
         case GCRY_CIPHER_AES256:
@@ -1722,7 +1722,7 @@ _gcry_cipher_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
     case GCRYCTL_RESET:
       if (h->mode == GCRY_CIPHER_MODE_GCM) {
         switch(h->spec->algo) {
-      #ifdef HAVE_WOLFSSL_D
+      #ifdef HAVE_WOLFSSL
           case GCRY_CIPHER_AES:
           case GCRY_CIPHER_AES192:
           case GCRY_CIPHER_AES256:
