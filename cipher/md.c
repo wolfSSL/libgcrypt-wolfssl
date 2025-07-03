@@ -2146,10 +2146,10 @@ _gcry_wc_md_final (gcry_md_hd_t a)
   if (a->ctx->flags.finalized)
     return;
 
-  if (a->bufpos)
-    md_write (a, NULL, 0);
-
   for (entry = wc->list; entry; entry = entry->next) {
+    if (a->bufpos)
+      wc_HmacUpdate(&entry->hmac, a->buf, a->bufpos);
+
     wc_HmacFinal(&entry->hmac, entry->digest);
   }
 
