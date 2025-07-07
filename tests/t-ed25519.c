@@ -33,6 +33,11 @@
 #include "t-common.h"
 #define N_TESTS 1026
 
+#if defined(HAVE_WOLFSSL)
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#endif
+
 static int sign_with_pk;
 static int no_verify;
 static int no_fips;
@@ -272,7 +277,7 @@ one_test (int testno, const char *sk, const char *pk,
 
   data_tmpl = "(data(value %b))";
   err = gcry_pk_hash_sign (&s_sig, data_tmpl, s_sk, NULL, ctx);
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(HAVE_ED25519)
   if (strncmp(gpg_strerror(err), "Not supported", 14) != 0) {
     fail("Should fail for ed25519");
   }
@@ -336,7 +341,7 @@ one_test (int testno, const char *sk, const char *pk,
 
   if (!no_verify)
     if ((err = gcry_pk_hash_verify (s_sig, data_tmpl, s_pk, NULL, ctx))) {
-        #if defined(ENABLED_WOLFSSL_FIPS)
+        #if !defined(HAVE_ED25519)
         if (strncmp(gpg_strerror(err), "Invalid object", 15) != 0) {
             fail("Should fail for ed25519: %s", gpg_strerror(err));
         }

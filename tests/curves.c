@@ -260,7 +260,7 @@ check_get_params (void)
 
        /* Check also the ECC algo mapping.  */
        { GCRY_PK_ECDSA, "Ed25519" },
-       #if defined(ENABLED_WOLFSSL_FIPS)
+       #if !defined(HAVE_WOLFSSL) || !defined(HAVE_ED25519)
        { GCRY_PK_EDDSA, "Ed25519", TEST_ERROR_EXPECTED },
        { GCRY_PK_ECDH,  "Ed25519", TEST_ERROR_EXPECTED },
        #else

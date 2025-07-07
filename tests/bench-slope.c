@@ -1037,15 +1037,31 @@ bench_encrypt_init (struct bench_obj *obj)
   obj->num_measure_repetitions = num_measurement_repetitions;
 
   err = gcry_cipher_open (&hd, mode->algo, mode->mode, 0);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (mode->mode == GCRY_CIPHER_MODE_CFB ||
+#if defined(HAVE_WOLFSSL)
+  if (
+            #if !defined(WOLFSSL_AES_CFB)
+            mode->mode == GCRY_CIPHER_MODE_CFB ||
+            #endif
+            #if !defined(WOLFSSL_AES_XTS)
             mode->mode == GCRY_CIPHER_MODE_XTS ||
+            #endif
+            #if !defined(WOLFSSL_AES_EAX)
             mode->mode == GCRY_CIPHER_MODE_EAX ||
+            #endif
+            #if !defined(HAVE_POLY1305)
             mode->mode == GCRY_CIPHER_MODE_POLY1305 ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_STREAM ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_OCB ||
+            #endif
+            #if !defined(WOLFSSL_AES_SIV)
             mode->mode == GCRY_CIPHER_MODE_SIV ||
-            mode->mode == GCRY_CIPHER_MODE_GCM_SIV
+            mode->mode == GCRY_CIPHER_MODE_GCM_SIV ||
+            #endif
+            0
   ) {
     if (strncmp(gpg_strerror(err), "Invalid cipher mode", 20) != 0) {
         fprintf (stderr, PGM ": Not expected error for `%s' : error %s\n",
@@ -1089,16 +1105,32 @@ static void
 bench_encrypt_free (struct bench_obj *obj)
 {
   gcry_cipher_hd_t hd = obj->hd;
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if defined(HAVE_WOLFSSL)
   struct bench_cipher_mode *mode = obj->priv;
-  if (mode->mode == GCRY_CIPHER_MODE_CFB ||
+  if (
+            #if !defined(WOLFSSL_AES_CFB)
+            mode->mode == GCRY_CIPHER_MODE_CFB ||
+            #endif
+            #if !defined(WOLFSSL_AES_XTS)
             mode->mode == GCRY_CIPHER_MODE_XTS ||
+            #endif
+            #if !defined(WOLFSSL_AES_EAX)
             mode->mode == GCRY_CIPHER_MODE_EAX ||
+            #endif
+            #if !defined(HAVE_POLY1305)
             mode->mode == GCRY_CIPHER_MODE_POLY1305 ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_STREAM ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_OCB ||
+            #endif
+            #if !defined(WOLFSSL_AES_SIV)
             mode->mode == GCRY_CIPHER_MODE_SIV ||
-            mode->mode == GCRY_CIPHER_MODE_GCM_SIV
+            mode->mode == GCRY_CIPHER_MODE_GCM_SIV ||
+            #endif
+            0
   ) {
     return;
   }
@@ -1112,16 +1144,32 @@ bench_encrypt_do_bench (struct bench_obj *obj, void *buf, size_t buflen)
 {
   gcry_cipher_hd_t hd = obj->hd;
   int err;
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if defined(HAVE_WOLFSSL)
   struct bench_cipher_mode *mode = obj->priv;
-  if (mode->mode == GCRY_CIPHER_MODE_CFB ||
+  if (
+            #if !defined(WOLFSSL_AES_CFB)
+            mode->mode == GCRY_CIPHER_MODE_CFB ||
+            #endif
+            #if !defined(WOLFSSL_AES_XTS)
             mode->mode == GCRY_CIPHER_MODE_XTS ||
+            #endif
+            #if !defined(WOLFSSL_AES_EAX)
             mode->mode == GCRY_CIPHER_MODE_EAX ||
+            #endif
+            #if !defined(HAVE_POLY1305)
             mode->mode == GCRY_CIPHER_MODE_POLY1305 ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_STREAM ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_OCB ||
+            #endif
+            #if !defined(WOLFSSL_AES_SIV)
             mode->mode == GCRY_CIPHER_MODE_SIV ||
-            mode->mode == GCRY_CIPHER_MODE_GCM_SIV
+            mode->mode == GCRY_CIPHER_MODE_GCM_SIV ||
+            #endif
+            0
   ) {
     return;
   }
@@ -1143,16 +1191,32 @@ bench_decrypt_do_bench (struct bench_obj *obj, void *buf, size_t buflen)
 {
   gcry_cipher_hd_t hd = obj->hd;
   int err;
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if defined(HAVE_WOLFSSL)
   struct bench_cipher_mode *mode = obj->priv;
-  if (mode->mode == GCRY_CIPHER_MODE_CFB ||
+  if (
+            #if !defined(WOLFSSL_AES_CFB)
+            mode->mode == GCRY_CIPHER_MODE_CFB ||
+            #endif
+            #if !defined(WOLFSSL_AES_XTS)
             mode->mode == GCRY_CIPHER_MODE_XTS ||
+            #endif
+            #if !defined(WOLFSSL_AES_EAX)
             mode->mode == GCRY_CIPHER_MODE_EAX ||
+            #endif
+            #if !defined(HAVE_POLY1305)
             mode->mode == GCRY_CIPHER_MODE_POLY1305 ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_STREAM ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_OCB ||
+            #endif
+            #if !defined(WOLFSSL_AES_SIV)
             mode->mode == GCRY_CIPHER_MODE_SIV ||
-            mode->mode == GCRY_CIPHER_MODE_GCM_SIV
+            mode->mode == GCRY_CIPHER_MODE_GCM_SIV ||
+            #endif
+            0
   ) {
     return;
   }
@@ -1195,15 +1259,31 @@ bench_xts_encrypt_init (struct bench_obj *obj)
   obj->num_measure_repetitions = num_measurement_repetitions;
 
   err = gcry_cipher_open (&hd, mode->algo, mode->mode, 0);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (mode->mode == GCRY_CIPHER_MODE_CFB ||
+#if defined(HAVE_WOLFSSL)
+  if (
+            #if !defined(WOLFSSL_AES_CFB)
+            mode->mode == GCRY_CIPHER_MODE_CFB ||
+            #endif
+            #if !defined(WOLFSSL_AES_XTS)
             mode->mode == GCRY_CIPHER_MODE_XTS ||
+            #endif
+            #if !defined(WOLFSSL_AES_EAX)
             mode->mode == GCRY_CIPHER_MODE_EAX ||
+            #endif
+            #if !defined(HAVE_POLY1305)
             mode->mode == GCRY_CIPHER_MODE_POLY1305 ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_STREAM ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
             mode->mode == GCRY_CIPHER_MODE_OCB ||
+            #endif
+            #if !defined(WOLFSSL_AES_SIV)
             mode->mode == GCRY_CIPHER_MODE_SIV ||
-            mode->mode == GCRY_CIPHER_MODE_GCM_SIV
+            mode->mode == GCRY_CIPHER_MODE_GCM_SIV ||
+            #endif
+            0
   ) {
     if (strncmp(gpg_strerror(err), "Invalid cipher mode", 20) != 0) {
         fprintf (stderr, PGM ": Not expected error for `%s' : error %s\n",
@@ -1655,7 +1735,7 @@ static void
 bench_siv_encrypt_do_bench (struct bench_obj *obj, void *buf,
 			    size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_SIV)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_SIV) {
     return;
@@ -1668,7 +1748,7 @@ static void
 bench_siv_decrypt_do_bench (struct bench_obj *obj, void *buf,
 			    size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_SIV)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_SIV) {
     return;
@@ -1681,7 +1761,7 @@ static void
 bench_siv_authenticate_do_bench (struct bench_obj *obj, void *buf,
 				 size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_SIV)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_SIV) {
     return;
@@ -1713,7 +1793,7 @@ static void
 bench_gcm_siv_encrypt_do_bench (struct bench_obj *obj, void *buf,
 				size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_SIV)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_GCM_SIV) {
     return;
@@ -1728,7 +1808,7 @@ static void
 bench_gcm_siv_decrypt_do_bench (struct bench_obj *obj, void *buf,
 				size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_SIV)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_GCM_SIV) {
     return;
@@ -1743,7 +1823,7 @@ static void
 bench_gcm_siv_authenticate_do_bench (struct bench_obj *obj, void *buf,
 				     size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_SIV)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_GCM_SIV) {
     return;
@@ -1777,7 +1857,7 @@ static void
 bench_eax_encrypt_do_bench (struct bench_obj *obj, void *buf,
 			    size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_EAX)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_EAX) {
     return;
@@ -1793,7 +1873,7 @@ static void
 bench_eax_decrypt_do_bench (struct bench_obj *obj, void *buf,
 			    size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_EAX)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_EAX) {
     return;
@@ -1809,7 +1889,7 @@ static void
 bench_eax_authenticate_do_bench (struct bench_obj *obj, void *buf,
 				 size_t buflen)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(WOLFSSL_AES_EAX)
   struct bench_cipher_mode *mode = obj->priv;
   if (mode->mode == GCRY_CIPHER_MODE_EAX) {
     return;
@@ -2153,6 +2233,20 @@ hash_bench (char **argv, int argc)
   else
     {
       for (i = 1; i < 400; i++)
+        #if defined(HAVE_WOLFSSL)
+          if (
+              #if defined(WOLFSSL_NOSHA512_224)
+              i == GCRY_MD_SHA512_224 ||
+              i == GCRY_MAC_HMAC_SHA512_224 ||
+              #endif
+              #if defined(WOLFSSL_NOSHA512_256)
+              i == GCRY_MD_SHA512_256 ||
+              i == GCRY_MAC_HMAC_SHA512_256 ||
+              #endif
+              0
+             )
+              continue;
+        #endif
         if (i == GCRY_MD_CSHAKE128 || i == GCRY_MD_CSHAKE256)
           ; /* Skip the bench. */
         else if (!gcry_md_test_algo (i))
@@ -2200,11 +2294,17 @@ bench_mac_init (struct bench_obj *obj)
   memset(key, 42, keylen);
 
   err = gcry_mac_open (&hd, mode->algo, 0, NULL);
-  #if defined(ENABLED_WOLFSSL_FIPS)
-  if (mode->algo == GCRY_MD_SHA512_224 ||
-        mode->algo == GCRY_MD_SHA512_256 ||
+  #if defined(HAVE_WOLFSSL)
+  if (
+        #if defined(WOLFSSL_NOSHA512_224)
+        mode->algo == GCRY_MD_SHA512_224 ||
         mode->algo == GCRY_MAC_HMAC_SHA512_224 ||
-        mode->algo == GCRY_MAC_HMAC_SHA512_256) {
+        #endif
+        #if defined(WOLFSSL_NOSHA512_256)
+        mode->algo == GCRY_MD_SHA512_256 ||
+        mode->algo == GCRY_MAC_HMAC_SHA512_256 ||
+        #endif
+        0) {
     if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 25) != 0) {
         fprintf (stderr, PGM ": Should have failed for `%d': %s\n", mode->algo,
                 gpg_strerror (err));
@@ -2256,12 +2356,18 @@ bench_mac_init (struct bench_obj *obj)
 static void
 bench_mac_free (struct bench_obj *obj)
 {
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if defined(HAVE_WOLFSSL)
   struct bench_mac_mode *mode = obj->priv;
-  if (mode->algo == GCRY_MD_SHA512_224 ||
-        mode->algo == GCRY_MD_SHA512_256 ||
+  if (
+        #if defined(WOLFSSL_NOSHA512_224)
+        mode->algo == GCRY_MD_SHA512_224 ||
         mode->algo == GCRY_MAC_HMAC_SHA512_224 ||
-        mode->algo == GCRY_MAC_HMAC_SHA512_256) {
+        #endif
+        #if defined(WOLFSSL_NOSHA512_256)
+        mode->algo == GCRY_MD_SHA512_256 ||
+        mode->algo == GCRY_MAC_HMAC_SHA512_256 ||
+        #endif
+        0) {
     return;
   }
 #endif
@@ -2276,12 +2382,18 @@ bench_mac_do_bench (struct bench_obj *obj, void *buf, size_t buflen)
   gcry_mac_hd_t hd = obj->hd;
   size_t bs;
   char b;
-#if defined(ENABLED_WOLFSSL_FIPS)
+#if defined(HAVE_WOLFSSL)
   struct bench_mac_mode *mode = obj->priv;
-  if (mode->algo == GCRY_MD_SHA512_224 ||
-        mode->algo == GCRY_MD_SHA512_256 ||
+  if (
+        #if defined(WOLFSSL_NOSHA512_224)
+        mode->algo == GCRY_MD_SHA512_224 ||
         mode->algo == GCRY_MAC_HMAC_SHA512_224 ||
-        mode->algo == GCRY_MAC_HMAC_SHA512_256) {
+        #endif
+        #if defined(WOLFSSL_NOSHA512_256)
+        mode->algo == GCRY_MD_SHA512_256 ||
+        mode->algo == GCRY_MAC_HMAC_SHA512_256 ||
+        #endif
+        0) {
     return;
   }
 #endif
@@ -2323,11 +2435,17 @@ mac_bench_one (int algo, struct bench_mac_mode *pmode)
 
   result = do_slope_benchmark (&obj);
   bench_print_result (result);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (mode.algo == GCRY_MD_SHA512_224 ||
-        mode.algo == GCRY_MD_SHA512_256 ||
+#if defined(HAVE_WOLFSSL)
+  if (
+        #if defined(WOLFSSL_NOSHA512_224)
+        mode.algo == GCRY_MD_SHA512_224 ||
         mode.algo == GCRY_MAC_HMAC_SHA512_224 ||
-        mode.algo == GCRY_MAC_HMAC_SHA512_256) {
+        #endif
+        #if defined(WOLFSSL_NOSHA512_256)
+        mode.algo == GCRY_MD_SHA512_256 ||
+        mode.algo == GCRY_MAC_HMAC_SHA512_256 ||
+        #endif
+        0) {
     fprintf (stderr, "not supported with wolfcrypt fips\n");
     return;
   }
@@ -2787,8 +2905,15 @@ bench_ecc_mult_do_bench (struct bench_obj *obj, void *buf, size_t num_iter)
 
   (void)buf;
 
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (on_ecc_algo == ECC_ALGO_ED25519 || on_ecc_algo == ECC_ALGO_ED448) {
+#if defined(HAVE_WOLFSSL)
+  if (
+      #if !defined(HAVE_ED25519)
+      on_ecc_algo == ECC_ALGO_ED25519 ||
+      #endif
+      #if !defined(HAVE_ED448)
+      on_ecc_algo == ECC_ALGO_ED448 ||
+      #endif
+      0) {
       return;
   }
 #endif
@@ -2936,8 +3061,15 @@ bench_ecc_keygen (struct bench_ecc_hd *hd)
   gpg_error_t err;
 
   err = gcry_pk_genkey (&key_pair, hd->key_spec);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (on_ecc_algo == ECC_ALGO_ED25519 || on_ecc_algo == ECC_ALGO_ED448) {
+#if defined(HAVE_WOLFSSL)
+  if (
+      #if !defined(HAVE_ED25519)
+      on_ecc_algo == ECC_ALGO_ED25519 ||
+      #endif
+      #if !defined(HAVE_ED448)
+      on_ecc_algo == ECC_ALGO_ED448 ||
+      #endif
+      0) {
     if (strncmp(gpg_strerror(err), "Not supported", 13) != 0) {
       fprintf (stderr, PGM ": Not expected error for `%s'\n");
       exit (1);
@@ -2997,8 +3129,15 @@ bench_ecc_sign_do_bench (struct bench_obj *obj, void *buf, size_t num_iter)
   (void)buf;
 
   bench_ecc_keygen (hd);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (on_ecc_algo == ECC_ALGO_ED25519 || on_ecc_algo == ECC_ALGO_ED448) {
+#if defined(HAVE_WOLFSSL)
+  if (
+      #if !defined(HAVE_ED25519)
+      on_ecc_algo == ECC_ALGO_ED25519 ||
+      #endif
+      #if !defined(HAVE_ED448)
+      on_ecc_algo == ECC_ALGO_ED448 ||
+      #endif
+      0) {
       hd->sig = NULL;
       hd->pub_key = NULL;
       hd->sec_key = NULL;
@@ -3035,8 +3174,15 @@ bench_ecc_verify_do_bench (struct bench_obj *obj, void *buf, size_t num_iter)
   (void)buf;
 
   bench_ecc_keygen (hd);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (on_ecc_algo == ECC_ALGO_ED25519 || on_ecc_algo == ECC_ALGO_ED448) {
+#if defined(HAVE_WOLFSSL)
+  if (
+      #if !defined(HAVE_ED25519)
+      on_ecc_algo == ECC_ALGO_ED25519 ||
+      #endif
+      #if !defined(HAVE_ED448)
+      on_ecc_algo == ECC_ALGO_ED448 ||
+      #endif
+      0) {
       hd->sig = NULL;
       hd->pub_key = NULL;
       hd->sec_key = NULL;

@@ -2333,20 +2333,21 @@ selftest_fips_128 (int extended, selftest_report_func_t report)
   if (errtxt)
     goto failed;
 
-#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
   if (extended)
     {
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
       what = "cfb";
       errtxt = selftest_fips_128_38a (GCRY_CIPHER_MODE_CFB);
       if (errtxt)
         goto failed;
-
+#endif
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_OFB)
       what = "ofb";
       errtxt = selftest_fips_128_38a (GCRY_CIPHER_MODE_OFB);
       if (errtxt)
         goto failed;
-    }
 #endif
+    }
 
   return 0; /* Succeeded. */
 

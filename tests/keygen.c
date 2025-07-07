@@ -449,7 +449,7 @@ check_ecc_keys (void)
 {
 #if USE_ECC
   const char *curves[] = { "NIST P-521", "NIST P-384", "NIST P-256",
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
                            "Ed25519", NULL };
 #else
                            NULL };
@@ -495,7 +495,7 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
 #else
   if (!rc) /* We expect this to fail in FIPS mode */
@@ -520,7 +520,7 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
 #else
   if (!rc) /* We expect this to fail in FIPS mode */
@@ -580,7 +580,7 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
 #else
   if (!rc) /* We expect this to fail in FIPS mode */
@@ -607,7 +607,7 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
 #else
   if (!rc) /* We expect this to fail in FIPS mode */

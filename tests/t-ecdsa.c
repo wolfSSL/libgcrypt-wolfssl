@@ -275,14 +275,25 @@ one_test_sexp (const char *curvename, const char *sha_alg,
     }
 
   err = gcry_md_open (&hd, md_algo, 0);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (md_algo == GCRY_MD_SHA512_224 || md_algo == GCRY_MD_SHA512_256)
+#if defined(HAVE_WOLFSSL)
+  #if defined(WOLFSSL_NOSHA512_224)
+  if (md_algo == GCRY_MD_SHA512_224)
     {
       if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 28) != 0) {
-        fail("Should fail for sha512 224 and 512 256");
+        fail("Should fail for sha512_224");
       }
       goto leave;
     }
+  #endif
+  #if defined(WOLFSSL_NOSHA512_256)
+  if (md_algo == GCRY_MD_SHA512_256)
+    {
+      if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 28) != 0) {
+        fail("Should fail for sha512_256");
+      }
+      goto leave;
+    }
+  #endif
 #endif
   if (err)
     {

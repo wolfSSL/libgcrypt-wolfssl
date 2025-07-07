@@ -33,6 +33,11 @@
 #include "t-common.h"
 #define N_TESTS 120
 
+#if defined(HAVE_WOLFSSL)
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#endif
+
 static int no_verify;
 static int custom_data_file;
 static int in_fips_mode;
@@ -200,14 +205,24 @@ one_test_sexp (const char *n, const char *e, const char *d,
     }
 
   err = gcry_md_open (&hd, md_algo, 0);
-  #if defined(ENABLED_WOLFSSL_FIPS)
-  if (md_algo == GCRY_MD_SHA512_224 || md_algo == GCRY_MD_SHA512_256) {
+#if defined(HAVE_WOLFSSL)
+  #if defined(WOLFSSL_NOSHA512_224)
+  if (md_algo == GCRY_MD_SHA512_224) {
     if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 26) != 0) {
         fail ("gcry_md_open failed to detect invalid digest algorithm\n");
     }
     goto leave; /* Don't check the signature because it should fail */
   }
   #endif
+  #if defined(WOLFSSL_NOSHA512_256)
+  if (md_algo == GCRY_MD_SHA512_256) {
+    if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 26) != 0) {
+        fail ("gcry_md_open failed to detect invalid digest algorithm\n");
+    }
+    goto leave; /* Don't check the signature because it should fail */
+  }
+  #endif
+#endif
   if (err)
     {
       fail ("algo %d, gcry_md_open failed: %s\n", md_algo, gpg_strerror (err));

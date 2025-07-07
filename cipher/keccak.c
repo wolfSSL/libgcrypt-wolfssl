@@ -1994,13 +1994,13 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
     case GCRY_MD_SHA3_256:
     case GCRY_MD_SHA3_384:
     case GCRY_MD_SHA3_512:
-#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE128)
     case GCRY_MD_CSHAKE128:
     case GCRY_MD_SHAKE128:
+#endif
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE256)
     case GCRY_MD_CSHAKE256:
     case GCRY_MD_SHAKE256:
-#else
-    #warning "FIPS version of wolfcrypt does not support SHAKE/CSHAKE"
 #endif
       ec = selftests_keccak (algo, extended, report);
       break;
@@ -2193,11 +2193,10 @@ const gcry_md_spec_t _gcry_digest_spec_sha3_512 =
 
 const gcry_md_spec_t _gcry_digest_spec_shake128 =
   {
-#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support SHAKE 128"
-    GCRY_MD_SHAKE128, {0, 0}, /* Turn off FIPS mode for SHAKE128 */
-#else
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE128)
     GCRY_MD_SHAKE128, {0, 1},
+#else
+    GCRY_MD_SHAKE128, {0, 0}, /* Turn off FIPS mode for SHAKE128 */
 #endif
     "SHAKE128", shake128_asn, DIM (shake128_asn), oid_spec_shake128, 32,
     shake128_init, keccak_write, keccak_final, keccak_shake_read,
@@ -2209,11 +2208,10 @@ const gcry_md_spec_t _gcry_digest_spec_shake128 =
 
 const gcry_md_spec_t _gcry_digest_spec_shake256 =
   {
-#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support SHAKE 256"
-    GCRY_MD_SHAKE256, {0, 0}, /* Turn off FIPS mode for SHAKE256 */
-#else
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE256)
     GCRY_MD_SHAKE256, {0, 1},
+#else
+    GCRY_MD_SHAKE256, {0, 0}, /* Turn off FIPS mode for SHAKE256 */
 #endif
     "SHAKE256", shake256_asn, DIM (shake256_asn), oid_spec_shake256, 64,
     shake256_init, keccak_write, keccak_final, keccak_shake_read,
@@ -2225,11 +2223,10 @@ const gcry_md_spec_t _gcry_digest_spec_shake256 =
 
 const gcry_md_spec_t _gcry_digest_spec_cshake128 =
   {
-#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support CSHAKE 128"
-    GCRY_MD_CSHAKE128, {0, 0}, /* Turn off FIPS mode for CSHAKE128 */
-#else
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE128)
     GCRY_MD_CSHAKE128, {0, 1},
+#else
+    GCRY_MD_CSHAKE128, {0, 0}, /* Turn off FIPS mode for CSHAKE128 */
 #endif
     "CSHAKE128", NULL, 0, NULL, 32,
     cshake128_init, keccak_write, keccak_final, keccak_shake_read,
@@ -2240,11 +2237,10 @@ const gcry_md_spec_t _gcry_digest_spec_cshake128 =
 
 const gcry_md_spec_t _gcry_digest_spec_cshake256 =
   {
-#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support CSHAKE 256"
-    GCRY_MD_CSHAKE256, {0, 0}, /* Turn off FIPS mode for CSHAKE256 */
-#else
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE256)
     GCRY_MD_CSHAKE256, {0, 1},
+#else
+    GCRY_MD_CSHAKE256, {0, 0}, /* Turn off FIPS mode for CSHAKE256 */
 #endif
     "CSHAKE256", NULL, 0, NULL, 64,
     cshake256_init, keccak_write, keccak_final, keccak_shake_read,

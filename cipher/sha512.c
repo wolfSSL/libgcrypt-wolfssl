@@ -1676,31 +1676,22 @@ static const gcry_md_oid_spec_t oid_spec_sha512[] =
     { NULL }
   };
 
-#if defined(HAVE_WOLFSSL)
 
 const gcry_md_spec_t _gcry_digest_spec_sha512 =
   {
     GCRY_MD_SHA512, {0, 1},
     "SHA512", sha512_asn, DIM (sha512_asn), oid_spec_sha512, 64,
+    #if defined(HAVE_WOLFSSL)
     wolfssl_sha512_init, _gcry_md_block_write, wolfssl_sha512_final, wolfssl_sha512_read, NULL,
     _gcry_wolfssl_sha512_hash_buffers,
+    #else
+    sha512_init, _gcry_md_block_write, sha512_final, sha512_read, NULL,
+    _gcry_sha512_hash_buffers,
+    #endif
     sizeof (WOLF_SHA512_CONTEXT),
     run_selftests
   };
 
-#else
-
-const gcry_md_spec_t _gcry_digest_spec_sha512 =
-  {
-    GCRY_MD_SHA512, {0, 1},
-    "SHA512", sha512_asn, DIM (sha512_asn), oid_spec_sha512, 64,
-    sha512_init, _gcry_md_block_write, sha512_final, sha512_read, NULL,
-    _gcry_sha512_hash_buffers,
-    sizeof (SHA512_CONTEXT),
-    run_selftests
-  };
-
-#endif
 
 static const byte sha384_asn[] =	/* Object ID is 2.16.840.1.101.3.4.2.2 */
   {
@@ -1765,41 +1756,26 @@ static const gcry_md_oid_spec_t oid_spec_sha512_256[] =
     { NULL },
   };
 
-#if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_NOSHA512_256)
 
 const gcry_md_spec_t _gcry_digest_spec_sha512_256 =
   {
-    #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support SHA512_256"
-    GCRY_MD_SHA512_256, {0, 0}, /* Turn off FIPS mode for SHA512_256 */
-    #else
+    #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_NOSHA512_256)
     GCRY_MD_SHA512_256, {0, 1},
+    #else
+    GCRY_MD_SHA512_256, {0, 0}, /* Turn off FIPS mode for SHA512_256 */
     #endif
     "SHA512_256", sha512_256_asn, DIM (sha512_256_asn), oid_spec_sha512_256, 32,
+    #if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_NO_SHAKE256)
     wolfssl_sha512_256_init, _gcry_md_block_write, wolfssl_sha512_256_final, wolfssl_sha512_read, NULL,
     _gcry_wolfssl_sha512_256_hash_buffers,
+    #else
+    sha512_256_init, _gcry_md_block_write, sha512_final, sha512_read, NULL,
+    _gcry_sha512_256_hash_buffers,
+    #endif
     sizeof (WOLF_SHA512_CONTEXT),
     run_selftests
   };
 
-#else
-
-const gcry_md_spec_t _gcry_digest_spec_sha512_256 =
-  {
-    #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support SHA512_256"
-    GCRY_MD_SHA512_256, {0, 0}, /* Turn off FIPS mode for SHA512_256 */
-    #else
-    GCRY_MD_SHA512_256, {0, 1},
-    #endif
-    "SHA512_256", sha512_256_asn, DIM (sha512_256_asn), oid_spec_sha512_256, 32,
-    sha512_256_init, _gcry_md_block_write, sha512_final, sha512_read, NULL,
-    _gcry_sha512_256_hash_buffers,
-    sizeof (SHA512_CONTEXT),
-    run_selftests
-  };
-
-#endif
 
 static const byte sha512_224_asn[] =
   {
@@ -1815,38 +1791,22 @@ static const gcry_md_oid_spec_t oid_spec_sha512_224[] =
     { NULL },
   };
 
-#if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_NOSHA512_224)
 
 const gcry_md_spec_t _gcry_digest_spec_sha512_224 =
   {
-    #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support SHA512_224"
-    GCRY_MD_SHA512_224, {0, 0}, /* Turn off FIPS mode for SHA512_224 */
-    #else
+    #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_NOSHA512_224)
     GCRY_MD_SHA512_224, {0, 1},
+    #else
+    GCRY_MD_SHA512_224, {0, 0}, /* Turn off FIPS mode for SHA512_224 */
     #endif
     "SHA512_224", sha512_224_asn, DIM (sha512_224_asn), oid_spec_sha512_224, 28,
+    #if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_NOSHA512_224)
     wolfssl_sha512_224_init, _gcry_md_block_write, wolfssl_sha512_224_final, wolfssl_sha512_read, NULL,
     _gcry_wolfssl_sha512_224_hash_buffers,
+    #else
+    sha512_224_init, _gcry_md_block_write, sha512_final, sha512_read, NULL,
+    _gcry_sha512_224_hash_buffers,
+    #endif
     sizeof (WOLF_SHA512_CONTEXT),
     run_selftests
   };
-
-#else
-
-const gcry_md_spec_t _gcry_digest_spec_sha512_224 =
-  {
-    #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
-    #warning "FIPS version of wolfcrypt does not support SHA512_224"
-    GCRY_MD_SHA512_224, {0, 0}, /* Turn off FIPS mode for SHA512_224 */
-    #else
-    GCRY_MD_SHA512_224, {0, 1},
-    #endif
-    "SHA512_224", sha512_224_asn, DIM (sha512_224_asn), oid_spec_sha512_224, 28,
-    sha512_224_init, _gcry_md_block_write, sha512_final, sha512_read, NULL,
-    _gcry_sha512_224_hash_buffers,
-    sizeof (SHA512_CONTEXT),
-    run_selftests
-  };
-
-#endif
