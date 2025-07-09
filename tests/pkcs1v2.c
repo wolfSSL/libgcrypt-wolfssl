@@ -36,6 +36,11 @@
 #include "t-common.h"
 
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
+
 static int in_fips_mode;
 
 static void
@@ -219,6 +224,15 @@ check_oaep (void)
           gcry_free (seed);
 
           err = gcry_pk_decrypt (&plain, ciph, sec_key);
+#if defined(ENABLED_WOLFSSL_FIPS)
+          if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
+              fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
+          }
+          gcry_sexp_release (plain);
+          plain = NULL;
+          gcry_sexp_release (ciph);
+          ciph = NULL;
+#else
           if (err)
             {
               show_sexp ("ciph:\n", ciph);
@@ -237,6 +251,7 @@ check_oaep (void)
             }
           gcry_sexp_release (ciph);
           ciph = NULL;
+#endif
         }
 
     next:
@@ -322,6 +337,11 @@ check_pss (void)
           gcry_free (salt);
 
           err = gcry_pk_sign (&sig, sigtmpl, sec_key);
+        #if defined(ENABLED_WOLFSSL_FIPS)
+          if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
+              fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
+          }
+        #else
           if (err)
             {
               show_sexp ("sigtmpl:\n", sigtmpl);
@@ -338,6 +358,7 @@ check_pss (void)
               gcry_sexp_release (sig);
               sig = NULL;
             }
+        #endif
           gcry_sexp_release (sigtmpl);
           sigtmpl = NULL;
 
@@ -489,6 +510,15 @@ check_v15crypt (void)
           gcry_free (seed);
 
           err = gcry_pk_decrypt (&plain, ciph, sec_key);
+        #if defined(ENABLED_WOLFSSL_FIPS)
+          if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
+              fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
+          }
+          gcry_sexp_release (plain);
+          plain = NULL;
+          gcry_sexp_release (ciph);
+          ciph = NULL;
+        #else
           if (err)
             {
               show_sexp ("ciph:\n", ciph);
@@ -507,6 +537,7 @@ check_v15crypt (void)
             }
           gcry_sexp_release (ciph);
           ciph = NULL;
+        #endif
         }
 
     next:
@@ -588,6 +619,11 @@ check_v15sign (void)
           gcry_free (mesg);
 
           err = gcry_pk_sign (&sig, sigtmpl, sec_key);
+        #if defined(ENABLED_WOLFSSL_FIPS)
+          if (strncmp(gpg_strerror(err), "Missing item in object", 20) != 0) {
+              fail ("gcry_pk_decrypt failed to detect missing item prime p/q\n");
+          }
+        #else
           if (err)
             {
               show_sexp ("sigtmpl:\n", sigtmpl);
@@ -604,6 +640,7 @@ check_v15sign (void)
               gcry_sexp_release (sig);
               sig = NULL;
             }
+        #endif
           gcry_sexp_release (sigtmpl);
           sigtmpl = NULL;
 

@@ -347,9 +347,23 @@ run_selftest (int algo)
 
   n = 1;
   err = gcry_md_algo_info (algo, GCRYCTL_SELFTEST, NULL, &n);
-  if (err && gpg_err_code (err) != GPG_ERR_NOT_IMPLEMENTED)
+  if (err && gpg_err_code (err) != GPG_ERR_NOT_IMPLEMENTED) {
+#if defined(HAVE_WOLFSSL)
+      if (
+          #if defined(WOLFSSL_NOSHA512_224)
+          algo == GCRY_MD_SHA512_224 ||
+          #endif
+          #if defined(WOLFSSL_NOSHA512_256)
+          algo == GCRY_MD_SHA512_256 ||
+          #endif
+          0)
+    info ("extended selftest for %s (%d) expected to fail",
+          gcry_md_algo_name (algo), algo);
+      else
+#endif
     fail ("extended selftest for %s (%d) failed: %s",
           gcry_md_algo_name (algo), algo, gpg_strerror (err));
+  }
   else if (err && verbose)
     info ("extended selftest for %s (%d) not implemented",
           gcry_md_algo_name (algo), algo);

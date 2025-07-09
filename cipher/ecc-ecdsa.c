@@ -406,11 +406,14 @@ _libgcrypt_to_wc_hash(int gcry_hash_algo)
     case GCRY_MD_SHA3_512:        /* 315 */
       return WC_HASH_TYPE_SHA3_512;
 
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MD_SHA512_224:      /* 328 */
       return WC_HASH_TYPE_SHA512_224;
-
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:      /* 327 */
       return WC_HASH_TYPE_SHA512_256;
+#endif
 
     default:
       //printf("Unsupported hash algorithm: %d\n", gcry_hash_algo);
@@ -483,6 +486,7 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
       ret = wc_Sha384Final(&sha384, digest);
       break;
     }
+#ifndef WOLFSSL_NOSHA512_224
     case WC_HASH_TYPE_SHA512_224:
     {
       wc_Sha512_224 sha512_224;
@@ -497,6 +501,8 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
       ret = wc_Sha512_224Final(&sha512_224, digest);
       break;
     }
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case WC_HASH_TYPE_SHA512_256:
     {
       wc_Sha512_256 sha512_256;
@@ -511,6 +517,7 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
       ret = wc_Sha512_256Final(&sha512_256, digest);
       break;
     }
+#endif
     case WC_HASH_TYPE_SHA512:
     {
       wc_Sha512 sha512;
@@ -746,7 +753,11 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
   if (wc_curve_id != ECC_CURVE_INVALID) {
     wc_curve_size = wc_ecc_get_curve_size_from_id(wc_curve_id);
   }
-
+#if defined(ENABLED_WOLFSSL_FIPS)
+  else {
+    return GPG_ERR_NOT_SUPPORTED; /* Needed for FIPS mode */
+  }
+#endif
 
   if (DBG_CIPHER)
     log_mpidump ("ecdsa sign hash  ", input );
@@ -859,16 +870,14 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     memcpy(wc_D_rightAligned + (wc_D_rightAligned_len - wc_D_len), wc_D, wc_D_len);
 
     /* Import the key into wolfSSL */
-    ret = wc_ecc_import_unsigned(&wc_key, wc_QX_rightAligned,
-                                    wc_QY_rightAligned, wc_D_rightAligned,
-                                    wc_curve_id);
+    ret = wc_ecc_import_private_key_ex(wc_D_rightAligned, wc_D_rightAligned_len,
+                                        NULL, 0, &wc_key, wc_curve_id);
     if (ret != 0) {
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
       goto leave;
     }
-
 
     /* Do not need these anymore */
   if (k != NULL) {
@@ -919,6 +928,7 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
       mp_clear(&wc_s_mpi);
       goto leave;
     }
+
     _gcry_free (wc_hash);
     wc_FreeRng(&rng); /* dont need this anymore */
     wc_ecc_free(&wc_key); /* dont need this anymore */
@@ -1132,8 +1142,11 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
 
   wc_curve_id = wc_name_to_curve_id(ec->name);
 
-  if (!_gcry_mpi_ec_curve_point (ec->Q, ec))
-    return GPG_ERR_BROKEN_PUBKEY;
+#if defined(ENABLED_WOLFSSL_FIPS)
+  if (wc_curve_id == ECC_CURVE_INVALID) {
+    return GPG_ERR_NOT_SUPPORTED; /* Needed for FIPS mode */
+  }
+#endif
 
   if (!_gcry_mpi_ec_curve_point (ec->Q, ec))
     return GPG_ERR_BROKEN_PUBKEY;
@@ -1160,12 +1173,7 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
       return err;
     }
 
-  /* Some raw messages have issues with wolfSSL, so we use libgcrypt's native implementation */
-  #if 0
-  if (0) {
-  #else
   if (wc_curve_id != ECC_CURVE_INVALID) {
-  #endif
     wolf = 1;
     ret = wc_ecc_init(&wc_key);
     if (ret != 0) {

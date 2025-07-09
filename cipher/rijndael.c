@@ -1581,12 +1581,7 @@ static unsigned int
 wc_do_encrypt (const RIJNDAEL_context *ctx,
             unsigned char *bx, const unsigned char *ax)
 {
-  unsigned int ret = 0;
-  ret = wc_AesEncryptDirect(&ctx->wc_aes_enc, bx, ax);
-  if (ret != 0) {
-    printf("wc_AesEncryptDirect failed\n");
-    return ret;
-  }
+  wc_AesEncryptDirect(&ctx->wc_aes_enc, bx, ax);
   return WC_AES_BLOCK_SIZE;
 }
 
@@ -1596,12 +1591,7 @@ static unsigned int
 wc_do_decrypt (const RIJNDAEL_context *ctx, unsigned char *bx,
             const unsigned char *ax)
 {
-  unsigned int ret = 0;
-  ret = wc_AesDecryptDirect(&ctx->wc_aes_dec, bx, ax);
-  if (ret != 0) {
-    printf("wc_AesDecryptDirect failed\n");
-    return ret;
-  }
+  wc_AesDecryptDirect(&ctx->wc_aes_dec, bx, ax);
   return WC_AES_BLOCK_SIZE;
 }
 
@@ -2345,15 +2335,18 @@ selftest_fips_128 (int extended, selftest_report_func_t report)
 
   if (extended)
     {
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
       what = "cfb";
       errtxt = selftest_fips_128_38a (GCRY_CIPHER_MODE_CFB);
       if (errtxt)
         goto failed;
-
+#endif
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_OFB)
       what = "ofb";
       errtxt = selftest_fips_128_38a (GCRY_CIPHER_MODE_OFB);
       if (errtxt)
         goto failed;
+#endif
     }
 
   return 0; /* Succeeded. */

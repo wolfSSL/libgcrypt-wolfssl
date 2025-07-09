@@ -298,6 +298,11 @@ one_test (int testno, int ph, const char *sk, const char *pk,
     }
 
   err = gcry_pk_hash_sign (&s_sig, data_tmpl, s_sk, NULL, ctx);
+  #if !defined(HAVE_ED448)
+  if (strncmp(gpg_strerror(err), "Not supported", 14) != 0) {
+    fail("Should fail for ed448: %s", gpg_strerror(err));
+  }
+  #else
   if (err)
     fail ("gcry_pk_sign failed for test %d: %s", testno, gpg_strerror (err));
   if (debug)
@@ -348,11 +353,19 @@ one_test (int testno, int ph, const char *sk, const char *pk,
           info ("       got: '%s'", sig_rs_string);
         }
     }
+#endif
 
   if (!no_verify)
-    if ((err = gcry_pk_hash_verify (s_sig, data_tmpl, s_pk, NULL, ctx)))
-      fail ("gcry_pk_verify failed for test %d: %s",
-            testno, gpg_strerror (err));
+    if ((err = gcry_pk_hash_verify (s_sig, data_tmpl, s_pk, NULL, ctx))) {
+        #if !defined(HAVE_ED448)
+        if (strncmp(gpg_strerror(err), "Invalid object", 15) != 0) {
+            fail("Should fail for ed448: %s", gpg_strerror(err));
+        }
+        #else
+        fail ("gcry_pk_verify failed for test %d: %s",
+              testno, gpg_strerror (err));
+        #endif
+    }
 
 
  leave:

@@ -37,6 +37,11 @@
 #define PGM "benchmark"
 #include "t-common.h"
 
+#if defined(HAVE_WOLFSSL)
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#endif
+
 /* Do encryption tests with large buffers (100 KiB).  */
 static int large_buffers;
 
@@ -508,6 +513,18 @@ md_bench ( const char *algoname )
   err = gcry_md_open (&hd, algo, 0);
   if (err)
     {
+#if defined(HAVE_WOLFSSL)
+      if (
+          #if defined(WOLFSSL_NOSHA512_224)
+          algo == GCRY_MD_SHA512_224 ||
+          #endif
+          #if defined(WOLFSSL_NOSHA512_256)
+          algo == GCRY_MD_SHA512_256 ||
+          #endif
+          0
+         )
+          return;
+#endif
       fprintf (stderr, PGM ": error opening hash algorithm `%s'\n", algoname);
       exit (1);
     }
@@ -619,7 +636,7 @@ mac_bench ( const char *algoname )
   algo = gcry_mac_map_name (algoname);
   if (!algo)
     {
-      fprintf (stderr, PGM ": invalid MAC algorithm `%s'\n", algoname);
+      printf ("%s: invalid MAC algorithm `%s'\n", PGM, algoname);
       exit (1);
     }
 
@@ -636,6 +653,32 @@ mac_bench ( const char *algoname )
     key[i] = (keylen - i) ^ 0x54;
 
   err = gcry_mac_open (&hd, algo, 0, NULL);
+#if defined(HAVE_WOLFSSL)
+  #if defined(WOLFSSL_NOSHA512_224)
+  if (algo == GCRY_MD_SHA512_224 ||
+    algo == GCRY_MAC_HMAC_SHA512_224) {
+    if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 25) != 0) {
+        fprintf (stderr, PGM ": Should have failed for `%s': %s\n", algoname,
+                gpg_strerror (err));
+        exit (1);
+    }
+    fprintf (stderr, PGM ": Algo Not Supported `%s'\n", algoname);
+    return;
+  }
+  #endif
+  #if defined(WOLFSSL_NOSHA512_256)
+  if (algo == GCRY_MD_SHA512_256 ||
+    algo == GCRY_MAC_HMAC_SHA512_256) {
+    if (strncmp(gpg_strerror(err), "Invalid digest algorithm", 25) != 0) {
+        fprintf (stderr, PGM ": Should have failed for `%s': %s\n", algoname,
+                gpg_strerror (err));
+        exit (1);
+    }
+    fprintf (stderr, PGM ": Algo Not Supported `%s'\n", algoname);
+    return;
+  }
+  #endif
+#endif
   if (err)
     {
       fprintf (stderr, PGM ": error opening mac algorithm `%s': %s\n", algoname,
@@ -965,9 +1008,40 @@ cipher_bench ( const char *algoname )
         buf[i] = i;
 
       err = gcry_cipher_open (&hd, algo, modes[modeidx].mode, 0);
+      #if defined(HAVE_WOLFSSL)
+      if (
+            #if !defined(WOLFSSL_AES_CFB)
+            modes[modeidx].mode == GCRY_CIPHER_MODE_CFB ||
+            #endif
+            #if !defined(WOLFSSL_AES_XTS)
+            modes[modeidx].mode == GCRY_CIPHER_MODE_XTS ||
+            #endif
+            #if !defined(WOLFSSL_AES_EAX)
+            modes[modeidx].mode == GCRY_CIPHER_MODE_EAX ||
+            #endif
+            #if !defined(HAVE_POLY1305)
+            modes[modeidx].mode == GCRY_CIPHER_MODE_POLY1305 ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
+            modes[modeidx].mode == GCRY_CIPHER_MODE_STREAM ||
+            #endif
+            #if defined(ENABLED_WOLFSSL_FIPS)
+            modes[modeidx].mode == GCRY_CIPHER_MODE_OCB ||
+            #endif
+            0
+        ) {
+        if (strncmp(gpg_strerror(err), "Invalid cipher mode", 20) != 0) {
+            fprintf (stderr, PGM ": Not expected error for `%s' : error %s\n",
+            algoname, gpg_strerror(err));
+            exit (1);
+        }
+        printf (" no fips ");
+        continue;
+      }
+      #endif
       if (err)
         {
-          fprintf (stderr, PGM ": error opening cipher `%s'\n", algoname);
+          fprintf (stderr, PGM ": error opening cipher `%s' : error %s : mode %d\n", algoname, gpg_strerror(err), modes[modeidx].mode);
           exit (1);
         }
 
@@ -1590,6 +1664,24 @@ ecc_bench (int iterations, int print_header)
 
       start_timer ();
       err = gcry_pk_genkey (&key_pair, key_spec);
+      #if defined(HAVE_WOLFSSL)
+      if (
+          #if !defined(HAVE_ED25519)
+          is_ed25519 ||
+          #endif
+          #if !defined(HAVE_ED448)
+          is_ed448 ||
+          #endif
+          0) {
+        if (strncmp(gpg_strerror(err), "Not supported", 13) != 0) {
+            fprintf (stderr, PGM ": Not expected error for `%s' : error %s\n",
+            p_sizes[testno], gpg_strerror(err));
+            exit (1);
+        }
+        printf (" not supported with fips ");
+        continue;
+      }
+      #endif
       if (err)
         die ("creating %d bit ECC key failed: %s\n",
              p_size, gcry_strerror (err));

@@ -606,6 +606,27 @@ md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
 gcry_err_code_t
 _gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
 {
+
+#if defined(HAVE_WOLFSSL)
+    if (
+        #if defined(WOLFSSL_NOSHA512_224)
+        algo == GCRY_MD_SHA512_224 ||
+        #endif
+        #if defined(WOLFSSL_NOSHA512_256)
+        algo == GCRY_MD_SHA512_256 ||
+        #endif
+        #if defined(WOLFSSL_NO_SHAKE128)
+        algo == GCRY_MD_SHAKE128 ||
+        algo == GCRY_MD_CSHAKE128 ||
+        #endif
+        #if defined(WOLFSSL_NO_SHAKE256)
+        algo == GCRY_MD_SHAKE256 ||
+        algo == GCRY_MD_CSHAKE256 ||
+        #endif
+        0) {
+        return GPG_ERR_DIGEST_ALGO;
+    }
+#endif
 #ifdef HAVE_WOLFSSL
   if (!!(flags & GCRY_MD_FLAG_HMAC)) {
     return _gcry_wc_md_open(h, algo, flags);
@@ -1869,10 +1890,14 @@ map_algo_to_wc_algo (int algo)
       return WC_HASH_TYPE_SHA512;
     case GCRY_MD_SHA512_256:
       return WC_HASH_TYPE_SHA512;
+#if !defined(WOLFSSL_NO_SHAKE128)
     case GCRY_MD_SHAKE128:
       return WC_HASH_TYPE_SHAKE128;
+#endif
+#if !defined(WOLFSSL_NO_SHAKE256)
     case GCRY_MD_SHAKE256:
       return WC_HASH_TYPE_SHAKE256;
+#endif
     default:
       return WC_HASH_TYPE_NONE;
   }
@@ -1922,7 +1947,9 @@ static int
 digest_is_supported(int algorithm)
 {
   switch (algorithm) {
+#if !defined(NO_MD5)
     case GCRY_MD_MD5:
+#endif
     case GCRY_MD_SHA1:
     case GCRY_MD_SHA224:
     case GCRY_MD_SHA256:
@@ -1932,10 +1959,18 @@ digest_is_supported(int algorithm)
     case GCRY_MD_SHA3_256:
     case GCRY_MD_SHA3_384:
     case GCRY_MD_SHA3_512:
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MD_SHA512_224:
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:
+#endif
+#if !defined(WOLFSSL_NO_SHAKE128)
     case GCRY_MD_SHAKE128:
+#endif
+#if !defined(WOLFSSL_NO_SHAKE256)
     case GCRY_MD_SHAKE256:
+#endif
       return 1;
     default:
       return 0;
@@ -1991,8 +2026,10 @@ static int
 hash_copy(Hmac *dst, Hmac *src, int algo)
 {
   switch (algo) {
+#if !defined(NO_MD5)
     case GCRY_MD_MD5:
       return wc_Md5Copy((wc_Md5 *)&(src->hash), (wc_Md5 *)&(dst->hash));
+#endif
     case GCRY_MD_SHA1:
       return wc_ShaCopy((wc_Sha *)&(src->hash), (wc_Sha *)&(dst->hash));
     case GCRY_MD_SHA224:
@@ -2011,14 +2048,24 @@ hash_copy(Hmac *dst, Hmac *src, int algo)
       return wc_Sha3_384_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
     case GCRY_MD_SHA3_512:
       return wc_Sha3_512_Copy((wc_Sha3*)&(src->hash), (wc_Sha3*) &(dst->hash));
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MD_SHA512_224:
       return wc_Sha512_224Copy((wc_Sha512*)&(src->hash), (wc_Sha512*) &(dst->hash));
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:
       return wc_Sha512_256Copy((wc_Sha512*)&(src->hash), (wc_Sha512*) &(dst->hash));
+#endif
+
+/* Not available in fips v5 or older */
+#if !defined(WOLFSSL_NO_SHAKE128)
     case GCRY_MD_SHAKE128:
       return wc_Shake128_Copy((wc_Shake*)&(src->hash), (wc_Shake*) &(dst->hash));
+#endif
+#if !defined(WOLFSSL_NO_SHAKE256)
     case GCRY_MD_SHAKE256:
       return wc_Shake256_Copy((wc_Shake*)&(src->hash), (wc_Shake*) &(dst->hash));
+#endif
     default:
       return -1;
   }
@@ -2115,10 +2162,10 @@ _gcry_wc_md_final (gcry_md_hd_t a)
   if (a->ctx->flags.finalized)
     return;
 
-  if (a->bufpos)
-    md_write (a, NULL, 0);
-
   for (entry = wc->list; entry; entry = entry->next) {
+    if (a->bufpos)
+      wc_HmacUpdate(&entry->hmac, a->buf, a->bufpos);
+
     wc_HmacFinal(&entry->hmac, entry->digest);
   }
 

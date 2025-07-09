@@ -78,6 +78,9 @@
 #include <wolfssl/wolfcrypt/integer.h>
 #endif
 
+#ifdef ENABLED_WOLFSSL_FIPS
+#warning Work needed for FIPS version of wolfcrypt
+#endif
 
 static const char *ecc_names[] =
   {
@@ -987,22 +990,37 @@ ecc_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   if ((ctx.flags & PUBKEY_FLAG_EDDSA))
     {
       /* EdDSA requires the public key.  */
+    #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+      #warning "No ECC for EDDSA sign in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
       rc = _gcry_ecc_eddsa_sign (data, ec, sig_r, sig_s, &ctx);
+    #endif
       if (!rc)
         rc = sexp_build (r_sig, NULL,
                          "(sig-val(eddsa(r%M)(s%M)))", sig_r, sig_s);
     }
   else if ((ctx.flags & PUBKEY_FLAG_GOST))
     {
+    #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+      #warning "No ECC for GOST sign in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
       rc = _gcry_ecc_gost_sign (data, ec, sig_r, sig_s);
+    #endif
       if (!rc)
         rc = sexp_build (r_sig, NULL,
                          "(sig-val(gost(r%M)(s%M)))", sig_r, sig_s);
     }
   else if ((ctx.flags & PUBKEY_FLAG_SM2))
     {
+    #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+      #warning "No ECC for SM2 sign in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
       rc = _gcry_ecc_sm2_sign (data, ec, sig_r, sig_s,
                                ctx.flags, ctx.hash_algo);
+    #endif
       if (!rc)
         rc = sexp_build (r_sig, NULL,
                          "(sig-val(sm2(r%M)(s%M)))", sig_r, sig_s);
@@ -1130,15 +1148,30 @@ ecc_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t s_keyparms)
    */
   if ((sigflags & PUBKEY_FLAG_EDDSA))
     {
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+      #warning "No ECC for EDDSA verify in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+#else
       rc = _gcry_ecc_eddsa_verify (data, ec, sig_r, sig_s, &ctx);
+#endif
     }
   else if ((sigflags & PUBKEY_FLAG_GOST))
     {
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+      #warning "No ECC for GOST verify in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+#else
       rc = _gcry_ecc_gost_verify (data, ec, sig_r, sig_s);
+#endif
     }
   else if ((sigflags & PUBKEY_FLAG_SM2))
     {
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+      #warning "No ECC for SM2 verify in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+#else
       rc = _gcry_ecc_sm2_verify (data, ec, sig_r, sig_s);
+#endif
     }
   else
     {
@@ -1206,7 +1239,12 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /*
    * Extract the key.
    */
+  #ifdef HAVE_WOLFSSL && defined(ENABLED_WOLFSSL_FIPS)
+  #warning "No ECC encrypt raw in FIPS mode with wolfssl"
+  rc = GPG_ERR_NOT_SUPPORTED;
+  #else
   rc = _gcry_mpi_ec_internal_new (&ec, &flags, "ecc_encrypt", keyparms, NULL);
+  #endif
   if (rc)
     goto leave;
 
@@ -1949,11 +1987,28 @@ wc_check_is_nist_curve(const char *curve_name) {
     return 0; /* False */
   }
 
-  if (strncmp(curve_name, "NIST P-", 7) == 0 ||
-      strncmp(curve_name, "nistp", 5) == 0 ||
-      strncmp(curve_name, "secp256r1", 9) == 0 ||
-      strncmp(curve_name, "secp384r1", 9) == 0 ||
-      strncmp(curve_name, "secp521r1", 9) == 0) {
+  if (strncmp(curve_name, "NIST P-192", 10) == 0 ||
+       strncmp(curve_name, "1.2.840.10045.3.1.1", 20) == 0 ||
+       strncmp(curve_name, "prime192v1", 11) == 0 ||
+       strncmp(curve_name, "secp192r1", 10) == 0 ||
+       strncmp(curve_name, "nistp192", 9) == 0 ||
+       strncmp(curve_name, "NIST P-224", 10) == 0 ||
+       strncmp(curve_name, "1.3.132.0.33", 13) == 0 ||
+       strncmp(curve_name, "secp224r1", 10) == 0 ||
+       strncmp(curve_name, "nistp224", 9) == 0 ||
+       strncmp(curve_name, "NIST P-256", 10) == 0 ||
+       strncmp(curve_name, "1.2.840.10045.3.1.7", 20) == 0 ||
+       strncmp(curve_name, "prime256v1", 11) == 0 ||
+       strncmp(curve_name, "secp256r1", 10) == 0 ||
+       strncmp(curve_name, "nistp256", 9) == 0 ||
+       strncmp(curve_name, "NIST P-384", 10) == 0 ||
+       strncmp(curve_name, "1.3.132.0.34", 13) == 0 ||
+       strncmp(curve_name, "secp384r1", 10) == 0 ||
+       strncmp(curve_name, "nistp384", 9) == 0 ||
+       strncmp(curve_name, "NIST P-521", 10) == 0 ||
+       strncmp(curve_name, "1.3.132.0.35", 13) == 0 ||
+       strncmp(curve_name, "secp521r1", 10) == 0 ||
+       strncmp(curve_name, "nistp521", 9) == 0 ) {
       return 1; /* True */
     }
   return 0; /* False */
@@ -2115,10 +2170,23 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
     goto leave;
 
   if ((flags & PUBKEY_FLAG_EDDSA)
-      || (ec->model == MPI_EC_EDWARDS && ec->dialect == ECC_DIALECT_SAFECURVE))
+      || (ec->model == MPI_EC_EDWARDS &&
+      ec->dialect == ECC_DIALECT_SAFECURVE)) {
+    #ifdef ENABLED_WOLFSSL_FIPS
+    #warning "No ECC for EDDSA generate in FIPS mode with wolfssl"
+    rc = GPG_ERR_NOT_SUPPORTED;
+    #else
     rc = _gcry_ecc_eddsa_genkey (ec, flags);
-  else if (ec->model == MPI_EC_MONTGOMERY)
-    rc = nist_generate_key (ec, flags, &Qx, NULL);
+    #endif
+  }
+  else if (ec->model == MPI_EC_MONTGOMERY) {
+    #ifdef ENABLED_WOLFSSL_FIPS
+    #warning "No ECC for montgomery generate in FIPS mode with wolfssl"
+    rc = GPG_ERR_NOT_SUPPORTED;
+    #else
+    rc = nist_generate_key(ec, flags, &Qx, NULL);
+    #endif
+  }
   else {
 
     /* Get Curve ID */
@@ -2226,7 +2294,10 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
 
       /* Export the whole key */
-      ret = wc_ecc_export_private_raw(&wc_key, wc_QX, &wc_QX_len, wc_QY, &wc_QY_len, wc_D, &wc_D_len);
+      PRIVATE_KEY_UNLOCK();
+      ret = wc_ecc_export_private_raw(&wc_key, wc_QX, &wc_QX_len, wc_QY,
+                                        &wc_QY_len, wc_D, &wc_D_len);
+      PRIVATE_KEY_LOCK();
       if (ret != 0) {
         XFREE(wc_X, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         XFREE(wc_Y, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -2236,7 +2307,6 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
         XFREE(wc_QY, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         wc_FreeRng(&rng);
         wc_ecc_free(&wc_key);
-        printf("wc_ecc_export_private_raw failed: %d\n", ret);
         rc = GPG_ERR_BROKEN_PUBKEY;
         goto leave;
       }
@@ -2264,7 +2334,12 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
     }
     else {
       /* Non-NIST curve */
+      #ifdef ENABLED_WOLFSSL_FIPS
+      #warning "No ECC for non-NIST curve generate in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+      #else
       rc = nist_generate_key (ec, flags, &Qx, &Qy);
+      #endif
     }
   }
   if (rc)
@@ -2461,7 +2536,7 @@ wc_ecc_check_secret_key (gcry_sexp_t keyparms)
       goto leave;
     }
 
-    /* Get Curve ID */
+  /* Get Curve ID */
   wc_curve_id = wc_name_to_curve_id(ec->name);
   if (wc_curve_id != ECC_CURVE_INVALID) {
     wolf = 1;
@@ -2577,9 +2652,14 @@ wc_ecc_check_secret_key (gcry_sexp_t keyparms)
     XFREE(wc_QY_rightAligned, NULL, DYNAMIC_TYPE_TMP_BUFFER);
   }
   else {
-    if (check_secret_key (ec, flags)) {
-      rc = GPG_ERR_BAD_SECKEY;
-    }
+    #ifdef ENABLED_WOLFSSL_FIPS
+    #warning "ECC check secret key for NIST Curves only in FIPS mode with wolfssl"
+      rc = GPG_ERR_NOT_SUPPORTED;
+    #else
+      if (check_secret_key (ec, flags)) {
+        rc = GPG_ERR_BAD_SECKEY;
+      }
+    #endif
   }
 
  leave:
@@ -2605,6 +2685,354 @@ wc_ecc_check_secret_key (gcry_sexp_t keyparms)
 
 
 
+
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+
+
+static const char *
+selftest_hash_sign_wc_fips (gcry_sexp_t pkey, gcry_sexp_t skey, const char *tmpl,
+                    const char *input_str, const char *input_bad_str,
+                    const char *signature_r, const char *signature_s,
+                    gcry_error_t success_return_code)
+{
+  int md_algo = GCRY_MD_SHA256;
+  gcry_md_hd_t hd = NULL;
+  const char *errtxt = NULL;
+  gcry_error_t err;
+  gcry_sexp_t sig = NULL;
+  gcry_sexp_t l1 = NULL;
+  gcry_sexp_t l2 = NULL;
+  gcry_mpi_t r = NULL;
+  gcry_mpi_t s = NULL;
+  gcry_mpi_t calculated_r = NULL;
+  gcry_mpi_t calculated_s = NULL;
+  int cmp;
+
+  err = _gcry_md_open (&hd, md_algo, 0);
+  if (err)
+    {
+      errtxt = "gcry_md_open failed";
+      goto leave;
+    }
+
+  _gcry_md_write (hd, input_str, strlen (input_str));
+
+  err = _gcry_mpi_scan (&r, GCRYMPI_FMT_HEX, signature_r, 0, NULL);
+  if (!err)
+    err = _gcry_mpi_scan (&s, GCRYMPI_FMT_HEX, signature_s, 0, NULL);
+
+  if (err)
+    {
+      errtxt = "converting data failed";
+      goto leave;
+    }
+
+  err = _gcry_pk_sign_md (&sig, tmpl, hd, skey, NULL);
+  if (err != success_return_code)
+    {
+      errtxt = "signing failed";
+      goto leave;
+    }
+
+  if (success_return_code == GPG_ERR_NOT_SUPPORTED) {
+    goto leave;
+  }
+
+  /* check against known signature */
+  errtxt = "signature validity failed";
+  l1 = _gcry_sexp_find_token (sig, "sig-val", 0);
+  if (!l1)
+    goto leave;
+
+  /* Here, we have the ECC name like: "ecdsa", "eddsa"...,
+     But we skip parsing the name.  */
+
+  l2 = _gcry_sexp_find_token (l1, "r", 0);
+  if (!l2)
+    goto leave;
+  calculated_r = _gcry_sexp_nth_mpi (l2, 1, GCRYMPI_FMT_USG);
+  if (!calculated_r)
+    goto leave;
+
+  sexp_release (l2);
+  l2 = _gcry_sexp_find_token (l1, "s", 0);
+  if (!l2)
+    goto leave;
+  calculated_s = _gcry_sexp_nth_mpi (l2, 1, GCRYMPI_FMT_USG);
+  if (!calculated_s)
+    goto leave;
+
+  errtxt = "known sig check failed";
+
+  cmp = _gcry_mpi_cmp (r, calculated_r);
+  if (cmp)
+    goto leave;
+  cmp = _gcry_mpi_cmp (s, calculated_s);
+  if (cmp)
+    goto leave;
+
+  errtxt = NULL;
+
+  /* verify generated signature */
+  err = _gcry_pk_verify_md (sig, tmpl, hd, pkey, NULL);
+  if (err)
+    {
+      errtxt = "verify failed";
+      goto leave;
+    }
+
+  _gcry_md_reset(hd);
+  _gcry_md_write (hd, input_bad_str, strlen (input_bad_str));
+  err = _gcry_pk_verify_md (sig, tmpl, hd, pkey, NULL);
+  if (gcry_err_code (err) != GPG_ERR_BAD_SIGNATURE)
+    {
+      errtxt = "bad signature not detected";
+      goto leave;
+    }
+
+
+ leave:
+  _gcry_md_close (hd);
+  sexp_release (sig);
+  sexp_release (l1);
+  sexp_release (l2);
+  mpi_release (r);
+  mpi_release (s);
+  mpi_release (calculated_r);
+  mpi_release (calculated_s);
+  return errtxt;
+}
+
+
+static const char *
+selftest_hash_sign_eddsa_wc_fips (gcry_sexp_t pkey, gcry_sexp_t skey, const char *tmpl,
+                          const char *input_str, const char *input_bad_str,
+                          const char *signature_r, const char *signature_s,
+                          gcry_error_t success_return_code)
+{
+  gcry_ctx_t ctx = NULL;
+  const char *errtxt = NULL;
+  gcry_error_t err;
+  gcry_sexp_t sig = NULL;
+  gcry_sexp_t l1 = NULL;
+  gcry_sexp_t l2 = NULL;
+  unsigned char *r = NULL;
+  unsigned char *s = NULL;
+  size_t r_len, s_len;
+  unsigned char *calculated_r = NULL;
+  unsigned char *calculated_s = NULL;
+  size_t calculated_r_len, calculated_s_len;
+
+  err = _gcry_pk_single_data_push (&ctx, (void *)input_str, strlen (input_str));
+  if (err)
+    {
+      errtxt ="error setting input data";
+      goto leave;
+    }
+
+  r = _gcry_hex2buffer (signature_r, &r_len);
+  s = _gcry_hex2buffer (signature_s, &s_len);
+  if (!r || !s)
+    {
+      errtxt = "converting data failed";
+      goto leave;
+    }
+
+  err = _gcry_pk_sign_md (&sig, tmpl, NULL, skey, ctx);
+  if (err != success_return_code)
+    {
+      errtxt = "signing failed";
+      goto leave;
+    }
+
+  if (success_return_code == GPG_ERR_NOT_SUPPORTED) {
+    goto leave;
+  }
+
+  /* check against known signature */
+  errtxt = "signature validity failed";
+  l1 = _gcry_sexp_find_token (sig, "sig-val", 0);
+  if (!l1)
+    goto leave;
+
+  /* Here, we have the ECC name like: "ecdsa", "eddsa"...,
+     But we skip parsing the name.  */
+
+  l2 = _gcry_sexp_find_token (l1, "r", 0);
+  if (!l2)
+    goto leave;
+  calculated_r = _gcry_sexp_nth_buffer (l2, 1, &calculated_r_len);
+  if (!calculated_r)
+    goto leave;
+
+  sexp_release (l2);
+  l2 = _gcry_sexp_find_token (l1, "s", 0);
+  if (!l2)
+    goto leave;
+  calculated_s = _gcry_sexp_nth_buffer (l2, 1, &calculated_s_len);
+  if (!calculated_s)
+    goto leave;
+
+  errtxt = "known sig check failed";
+
+  if (r_len != calculated_r_len)
+    goto leave;
+  if (s_len != calculated_s_len)
+    goto leave;
+  if (memcmp (r, calculated_r, r_len))
+    goto leave;
+  if (memcmp (s, calculated_s, s_len))
+    goto leave;
+
+  errtxt = NULL;
+
+  /* verify generated signature */
+  err = _gcry_pk_verify_md (sig, tmpl, NULL, pkey, ctx);
+  if (err)
+    {
+      errtxt = "verify failed";
+      goto leave;
+    }
+
+  _gcry_ctx_release (ctx);
+  ctx = NULL;
+  err = _gcry_pk_single_data_push (&ctx, (void *)input_bad_str,
+                                   strlen (input_bad_str));
+  if (err)
+    {
+      errtxt ="error setting input data";
+      goto leave;
+    }
+
+  err = _gcry_pk_verify_md (sig, tmpl, NULL, pkey, ctx);
+  if (gcry_err_code (err) != GPG_ERR_BAD_SIGNATURE)
+    {
+      errtxt = "bad signature not detected";
+      goto leave;
+    }
+
+ leave:
+  _gcry_ctx_release (ctx);
+  sexp_release (sig);
+  sexp_release (l1);
+  sexp_release (l2);
+  xfree (r);
+  xfree (s);
+  xfree (calculated_r);
+  xfree (calculated_s);
+  return errtxt;
+}
+
+
+static const char *
+selftest_sign_wc_fips (gcry_sexp_t pkey, gcry_sexp_t skey,
+               const char *input, const char *input_bad,
+               const char *signature_r, const char *signature_s,
+               gcry_error_t success_return_code)
+{
+  const char *errtxt = NULL;
+  gcry_error_t err;
+  gcry_sexp_t data = NULL;
+  gcry_sexp_t data_bad = NULL;
+  gcry_sexp_t sig = NULL;
+  gcry_sexp_t l1 = NULL;
+  gcry_sexp_t l2 = NULL;
+  gcry_mpi_t r = NULL;
+  gcry_mpi_t s = NULL;
+  gcry_mpi_t calculated_r = NULL;
+  gcry_mpi_t calculated_s = NULL;
+  int cmp;
+
+  err = sexp_sscan (&data, NULL, input, strlen (input));
+  if (!err)
+    err = sexp_sscan (&data_bad, NULL,
+                      input_bad, strlen (input_bad));
+  if (!err)
+    err = _gcry_mpi_scan (&r, GCRYMPI_FMT_HEX, signature_r, 0, NULL);
+  if (!err)
+    err = _gcry_mpi_scan (&s, GCRYMPI_FMT_HEX, signature_s, 0, NULL);
+
+  if (err)
+    {
+      errtxt = "converting data failed";
+      goto leave;
+    }
+
+  err = _gcry_pk_sign (&sig, data, skey);
+  if (err != success_return_code)
+    {
+      errtxt = "signing failed";
+      goto leave;
+    }
+
+  if (success_return_code == GPG_ERR_NOT_SUPPORTED) {
+    goto leave;
+  }
+
+  /* check against known signature */
+  errtxt = "signature validity failed";
+  l1 = _gcry_sexp_find_token (sig, "sig-val", 0);
+  if (!l1)
+    goto leave;
+
+  /* Here, we have the ECC name like: "ecdsa", "eddsa"...,
+     But we skip parsing the name.  */
+
+  l2 = _gcry_sexp_find_token (l1, "r", 0);
+  if (!l2)
+    goto leave;
+  calculated_r = _gcry_sexp_nth_mpi (l2, 1, GCRYMPI_FMT_USG);
+  if (!calculated_r)
+    goto leave;
+
+  sexp_release (l2);
+  l2 = _gcry_sexp_find_token (l1, "s", 0);
+  if (!l2)
+    goto leave;
+  calculated_s = _gcry_sexp_nth_mpi (l2, 1, GCRYMPI_FMT_USG);
+  if (!calculated_s)
+    goto leave;
+
+  errtxt = "known sig check failed";
+
+  cmp = _gcry_mpi_cmp (r, calculated_r);
+  if (cmp)
+    goto leave;
+  cmp = _gcry_mpi_cmp (s, calculated_s);
+  if (cmp)
+    goto leave;
+
+  errtxt = NULL;
+
+  /* verify generated signature */
+  err = _gcry_pk_verify (sig, data, pkey);
+  if (err)
+    {
+      errtxt = "verify failed";
+      goto leave;
+    }
+  err = _gcry_pk_verify (sig, data_bad, pkey);
+  if (gcry_err_code (err) != GPG_ERR_BAD_SIGNATURE)
+    {
+      errtxt = "bad signature not detected";
+      goto leave;
+    }
+
+
+ leave:
+  sexp_release (sig);
+  sexp_release (data_bad);
+  sexp_release (data);
+  sexp_release (l1);
+  sexp_release (l2);
+  mpi_release (r);
+  mpi_release (s);
+  mpi_release (calculated_r);
+  mpi_release (calculated_s);
+  return errtxt;
+}
+
+#else
 /*
      Self-test section.
  */
@@ -2937,6 +3365,135 @@ selftest_sign (gcry_sexp_t pkey, gcry_sexp_t skey,
   return errtxt;
 }
 
+#endif
+
+
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+static gpg_err_code_t
+selftests_ecc_wc_fips (selftest_report_func_t report, int extended, int is_eddsa,
+               const char *secret_key, const char *public_key,
+               const char *input, const char *input_bad,
+               const char *tmpl,
+               const char *input_str, const char *input_bad_str,
+               const char *signature_r, const char *signature_s,
+               gcry_error_t success_return_code)
+{
+  const char *what;
+  const char *errtxt;
+  gcry_error_t err;
+  gcry_sexp_t skey = NULL;
+  gcry_sexp_t pkey = NULL;
+
+  what = "convert";
+  err = sexp_sscan (&skey, NULL, secret_key, strlen (secret_key));
+  if (!err)
+    err = sexp_sscan (&pkey, NULL, public_key, strlen (public_key));
+  if (err)
+    {
+      errtxt = _gcry_strerror (err);
+      goto failed;
+    }
+
+  what = "key consistency";
+  err = wc_ecc_check_secret_key (skey);
+  if (err != success_return_code)
+    {
+      errtxt = _gcry_strerror (err);
+      goto failed;
+    }
+
+  if (extended)
+    {
+      what = "sign";
+      errtxt = selftest_sign_wc_fips (pkey, skey, input, input_bad,
+                              signature_r, signature_s,
+                              success_return_code);
+      if (errtxt)
+        goto failed;
+    }
+
+  what = "digest sign";
+  if (is_eddsa)
+    errtxt = selftest_hash_sign_eddsa_wc_fips (pkey, skey, tmpl,
+                                       input_str, input_bad_str,
+                                       signature_r, signature_s,
+                                       success_return_code);
+  else
+    errtxt = selftest_hash_sign_wc_fips (pkey, skey, tmpl,
+                                 input_str, input_bad_str,
+                                 signature_r, signature_s,
+                                 success_return_code);
+  if (errtxt)
+    goto failed;
+
+  sexp_release(pkey);
+  sexp_release(skey);
+  return err; /* Succeeded. */
+
+ failed:
+  sexp_release(pkey);
+  sexp_release(skey);
+  if (report)
+    report ("pubkey", GCRY_PK_ECC, what, errtxt);
+  return GPG_ERR_SELFTEST_FAILED;
+}
+
+
+
+
+/* Run a full self-test for ALGO and return 0 on success.  */
+static gpg_err_code_t
+run_selftests_wc_fips (int algo, int extended, selftest_report_func_t report)
+{
+  int r;
+  if (algo != GCRY_PK_ECC)
+    return GPG_ERR_PUBKEY_ALGO;
+  /* ECDSA is only supported in FIPS mode with wolfCrypt */
+  r = selftests_ecc_wc_fips (report, extended, 0,
+                     ecdsa_sample_secret_key_secp256,
+                     ecdsa_sample_public_key_secp256,
+                     ecdsa_sample_data, ecdsa_sample_data_bad,
+                     ecdsa_data_tmpl,
+                     ecdsa_sample_data_string, ecdsa_sample_data_bad_string,
+                     ecdsa_signature_r, ecdsa_signature_s,
+                     0);
+  if (r) {
+    return r;
+  }
+
+  r = selftests_ecc_wc_fips (report, extended, 1,
+                     ed25519_sample_secret_key,
+                     ed25519_sample_public_key,
+                     ed25519_sample_data, ed25519_sample_data_bad,
+                     ed25519_data_tmpl,
+                     ed25519_sample_data_string, ed25519_sample_data_bad_string,
+                     ed25519_signature_r, ed25519_signature_s,
+                     GPG_ERR_NOT_SUPPORTED);
+  if (r != GPG_ERR_NOT_SUPPORTED) {
+    return GPG_ERR_SELFTEST_FAILED;
+  }
+  else {
+    r = 0; /* Successfully ran the test, but it is not supported */
+  }
+
+  r = selftests_ecc_wc_fips (report, extended, 1,
+                     ed448_sample_secret_key,
+                     ed448_sample_public_key,
+                     ed448_sample_data, ed448_sample_data_bad,
+                     ed448_data_tmpl,
+                     ed448_sample_data_string, ed448_sample_data_bad_string,
+                     ed448_signature_r, ed448_signature_s,
+                     GPG_ERR_NOT_SUPPORTED);
+  if (r != GPG_ERR_NOT_SUPPORTED) {
+    return GPG_ERR_SELFTEST_FAILED;
+  }
+  else {
+    r = 0; /* Successfully ran the test, but it is not supported */
+  }
+  return r;
+}
+
+#else
 
 static gpg_err_code_t
 selftests_ecc (selftest_report_func_t report, int extended, int is_eddsa,
@@ -3042,6 +3599,7 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
                      ed448_signature_r, ed448_signature_s);
   return r;
 }
+#endif
 
 #ifdef HAVE_WOLFSSL
 gcry_pk_spec_t _gcry_pubkey_spec_ecc =
@@ -3057,7 +3615,11 @@ gcry_pk_spec_t _gcry_pubkey_spec_ecc =
     ecc_sign,
     ecc_verify,
     ecc_get_nbits,
+#if defined(ENABLED_WOLFSSL_FIPS)
+    run_selftests_wc_fips,
+#else
     run_selftests,
+#endif
     compute_keygrip,
     _gcry_ecc_get_curve,
     _gcry_ecc_get_param_sexp

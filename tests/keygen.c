@@ -32,6 +32,12 @@
 #define PGM "keygen"
 #include "t-common.h"
 
+#if defined(HAVE_WOLFSSL)
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
+
+
 static int in_fips_mode;
 
 
@@ -443,7 +449,11 @@ check_ecc_keys (void)
 {
 #if USE_ECC
   const char *curves[] = { "NIST P-521", "NIST P-384", "NIST P-256",
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
                            "Ed25519", NULL };
+#else
+                           NULL };
+#endif
   int testno;
   gcry_sexp_t keyparm, key;
   int rc;
@@ -485,7 +495,11 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
+#else
+  if (!rc) /* We expect this to fail in FIPS mode */
+#endif
     die ("error generating ECC key using curve Ed25519 for ECDSA: %s\n",
          gpg_strerror (rc));
 
@@ -506,7 +520,11 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
+#else
+  if (!rc) /* We expect this to fail in FIPS mode */
+#endif
     die ("error generating ECC key using curve Ed25519 for ECDSA"
          " (nocomp): %s\n",
          gpg_strerror (rc));
@@ -562,7 +580,11 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
+#else
+  if (!rc) /* We expect this to fail in FIPS mode */
+#endif
     die ("error generating ECC key using curve Ed25519 for ECDSA"
          " (transient-key): %s\n",
          gpg_strerror (rc));
@@ -585,7 +607,11 @@ check_ecc_keys (void)
     die ("error creating S-expression: %s\n", gpg_strerror (rc));
   rc = gcry_pk_genkey (&key, keyparm);
   gcry_sexp_release (keyparm);
+#if !defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
   if (rc)
+#else
+  if (!rc) /* We expect this to fail in FIPS mode */
+#endif
     die ("error generating ECC key using curve Ed25519 for ECDSA"
          " (transient-key no-keytest): %s\n",
          gpg_strerror (rc));

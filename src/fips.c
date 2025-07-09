@@ -40,6 +40,11 @@
 #include "cipher-proto.h"
 #include "../random/random.h"
 
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#endif
+
 /* The states of the finite state machine used in fips mode.  */
 enum module_states
   {
@@ -360,14 +365,30 @@ _gcry_fips_indicator_cipher (va_list arg_ptr)
         {
         case GCRY_CIPHER_MODE_ECB:
         case GCRY_CIPHER_MODE_CBC:
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
         case GCRY_CIPHER_MODE_CFB:
+#else
+        #warning "FIPS version of wolfcrypt does not support CFB"
+#endif
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
         case GCRY_CIPHER_MODE_CFB8:
+#else
+        #warning "FIPS version of wolfcrypt does not support CFB8"
+#endif
         case GCRY_CIPHER_MODE_OFB:
         case GCRY_CIPHER_MODE_CTR:
         case GCRY_CIPHER_MODE_CCM:
         case GCRY_CIPHER_MODE_GCM:
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_XTS)
         case GCRY_CIPHER_MODE_XTS:
+#else
+        #warning "FIPS version of wolfcrypt does not support XTS"
+#endif
+#if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
         case GCRY_CIPHER_MODE_AESWRAP:
+#else
+        #warning "FIPS version of wolfcrypt does not support AESWRAP"
+#endif
           return GPG_ERR_NO_ERROR;
         default:
           return GPG_ERR_NOT_SUPPORTED;
@@ -390,8 +411,12 @@ _gcry_fips_indicator_mac (va_list arg_ptr)
     case GCRY_MAC_HMAC_SHA256:
     case GCRY_MAC_HMAC_SHA384:
     case GCRY_MAC_HMAC_SHA512:
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MAC_HMAC_SHA512_224:
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MAC_HMAC_SHA512_256:
+#endif
     case GCRY_MAC_HMAC_SHA3_224:
     case GCRY_MAC_HMAC_SHA3_256:
     case GCRY_MAC_HMAC_SHA3_384:
@@ -414,16 +439,26 @@ _gcry_fips_indicator_md (va_list arg_ptr)
     case GCRY_MD_SHA256:
     case GCRY_MD_SHA384:
     case GCRY_MD_SHA512:
+#ifndef WOLFSSL_NOSHA512_224
     case GCRY_MD_SHA512_224:
+#endif
+#ifndef WOLFSSL_NOSHA512_256
     case GCRY_MD_SHA512_256:
+#endif
     case GCRY_MD_SHA3_224:
     case GCRY_MD_SHA3_256:
     case GCRY_MD_SHA3_384:
     case GCRY_MD_SHA3_512:
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE128)
     case GCRY_MD_SHAKE128:
+#endif
+#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SHAKE256)
     case GCRY_MD_SHAKE256:
+#endif
+#if !defined(ENABLED_WOLFSSL_FIPS)
     case GCRY_MD_CSHAKE128:
     case GCRY_MD_CSHAKE256:
+#endif
       return GPG_ERR_NO_ERROR;
     default:
       return GPG_ERR_NOT_SUPPORTED;

@@ -215,9 +215,13 @@ available_ciphers="$available_ciphers camellia idea salsa20 gost28147 chacha20"
 available_ciphers="$available_ciphers sm4 aria"
 enabled_ciphers=""
 
+available_wc_ciphers_fips="aes"
+
 # Definitions for public-key ciphers.
 available_pubkey_ciphers="dsa elgamal rsa ecc"
 enabled_pubkey_ciphers=""
+
+available_wc_pubkey_fips="rsa ecc"
 
 # Definitions for message digests.
 available_digests="crc gostr3411-94 md2 md4 md5 rmd160 sha1 sha256 sha512"
@@ -225,9 +229,13 @@ available_digests="$available_digests sha3 tiger whirlpool stribog blake2"
 available_digests="$available_digests sm3"
 enabled_digests=""
 
+available_wc_digests_fips="sha1 sha256 sha512 sha3"
+
 # Definitions for kdfs (optional ones)
 available_kdfs="s2k pkdf2 scrypt"
 enabled_kdfs=""
+
+available_wc_kdfs_fips="pkdf2"
 
 # Definitions for random modules.
 available_random_modules="getentropy linux egd unix"
@@ -752,6 +760,27 @@ AC_ARG_ENABLE(amd64-as-feature-detection,
 	      amd64_as_feature_detection=$enableval,
               amd64_as_feature_detection=yes)
 AC_MSG_RESULT($amd64_as_feature_detection)
+
+
+# Implementation of the --enable-wolfssl-fips switch.
+AC_MSG_CHECKING([whether WolfSSL FIPS mode is requested])
+AC_ARG_ENABLE(wolfssl-fips,
+              AS_HELP_STRING([--enable-wolfssl-fips],
+                             [Enable WolfSSL FIPS mode with restricted algorithm set (default: disabled)]),
+              [enable_wolfssl_fips=$enableval],
+              [enable_wolfssl_fips=no])
+AC_MSG_RESULT($enable_wolfssl_fips)
+
+# If WolfSSL FIPS mode is enabled, override defaults to use FIPS-compliant subsets
+if test "x$enable_wolfssl_fips" = "xyes"; then
+  enabled_ciphers="$available_wc_ciphers_fips"
+  enabled_pubkey_ciphers="$available_wc_pubkey_fips"
+  enabled_digests="$available_wc_digests_fips"
+  enabled_kdfs="$available_wc_kdfs_fips"
+  AC_DEFINE([ENABLED_WOLFSSL_FIPS], [1], [Define to 1 if wolfssl is using FIPS])
+
+  AC_MSG_NOTICE([WolfSSL FIPS mode enabled - using restricted algorithm set and disabling hardware acceleration])
+fi
 
 
 AC_DEFINE_UNQUOTED(PRINTABLE_OS_NAME, "$PRINTABLE_OS_NAME",
