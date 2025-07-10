@@ -1,7 +1,7 @@
 Source: libgcrypt20
 Section: libs
 Priority: optional
-Maintainer: Alex Lanzano <alex@wolfssl.com>
+Maintainer: wolfSSL <support@wolfssl.com>
 Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
@@ -31,6 +31,14 @@ Description: LGPL Crypto library with wolfCrypt - development files
  SHA3-512, SHAKE128, SHAKE256, Tiger, Whirlpool, DSA, DSA2, ElGamal, RSA, ECC
  (Curve25519, sec256k1, GOST R 34.10-2001 and GOST R 34.10-2012, etc.)
  .
+ The following algorithms will use the wolfCrypt implementation inplace of the
+ libgcrypt implementation:
+ .
+ AES-128, AES-192, AES-256, AES-CBC, AES-CCM, AES-CTR, AES-ECB, AES-GCM, AES-OFB,
+ AES-CMAC, ECDSA NIST Curves, HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384,
+ HMAC-SHA512, HMAC-SHA3-224, HMAC-SHA3-256, HMAC-SHA3-384, HMAC-SHA3-512,
+ RSA (Chinese Remainder Theorem)
+ .
  This package contains header files and libraries for static linking.
 
 
@@ -50,3 +58,11 @@ Description: LGPL Crypto library with wolfCrypt - runtime library
  RIPE-MD160, SM3, SHA-1, SHA-256, SHA-512, SHA3-224, SHA3-256, SHA3-384,
  SHA3-512, SHAKE128, SHAKE256, Tiger, Whirlpool, DSA, DSA2, ElGamal, RSA, ECC
  (Curve25519, sec256k1, GOST R 34.10-2001 and GOST R 34.10-2012, etc.)
+ .
+ The following algorithms will use the wolfCrypt implementation inplace of the
+ libgcrypt implementation:
+ .
+ AES-128, AES-192, AES-256, AES-CBC, AES-CCM, AES-CTR, AES-ECB, AES-GCM, AES-OFB,
+ AES-CMAC, ECDSA NIST Curves, HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384,
+ HMAC-SHA512, HMAC-SHA3-224, HMAC-SHA3-256, HMAC-SHA3-384, HMAC-SHA3-512,
+ RSA (Chinese Remainder Theorem)
