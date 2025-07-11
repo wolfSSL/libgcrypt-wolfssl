@@ -37,6 +37,7 @@ Description: LGPL Crypto library with wolfCrypt - development files
  AES-128, AES-192, AES-256, AES-CBC, AES-CCM, AES-CTR, AES-ECB, AES-GCM, AES-OFB,
  AES-CMAC, ECDSA NIST Curves, HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384,
  HMAC-SHA512, HMAC-SHA3-224, HMAC-SHA3-256, HMAC-SHA3-384, HMAC-SHA3-512,
+ SHA-1, SHA-256, SHA-512, SHA3-224, SHA3-256, SHA3-384, SHA3-512,
  RSA (Chinese Remainder Theorem)
  .
  This package contains header files and libraries for static linking.
@@ -65,4 +66,5 @@ Description: LGPL Crypto library with wolfCrypt - runtime library
  AES-128, AES-192, AES-256, AES-CBC, AES-CCM, AES-CTR, AES-ECB, AES-GCM, AES-OFB,
  AES-CMAC, ECDSA NIST Curves, HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384,
  HMAC-SHA512, HMAC-SHA3-224, HMAC-SHA3-256, HMAC-SHA3-384, HMAC-SHA3-512,
+ SHA-1, SHA-256, SHA-512, SHA3-224, SHA3-256, SHA3-384, SHA3-512,
  RSA (Chinese Remainder Theorem)
