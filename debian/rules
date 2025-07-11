@@ -1,0 +1,39 @@
+#!/usr/bin/make -f
+
+# See debhelper(7) (uncomment to enable).
+# Output every command that modifies files on the build system.
+#export DH_VERBOSE = 1
+
+
+# See FEATURE AREAS in dpkg-buildflags(1).
+#export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# See ENVIRONMENT in dpkg-buildflags(1).
+# Package maintainers to append CFLAGS.
+#export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
+# Package maintainers to append LDFLAGS.
+#export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
+export LIBGCRYPT_FORCE_FIPS_MODE=1
+
+%:
+	dh $@  --builddirectory=build
+
+debian/tmp/usr/include/gcrypt.h:
+	dh_auto_install --verbose --builddirectory=build
+
+override_dh_auto_install-indep:	debian/tmp/usr/include/gcrypt.h
+	find debian/tmp -name libgcrypt.la -type f -delete
+
+override_dh_auto_install-arch:
+	mkdir -p debian/libgcrypt20/usr/share/libgcrypt20/
+	dh_auto_install --arch --verbose --builddirectory=build
+	install -m755 debian/clean-up-unmanaged-libraries \
+		debian/libgcrypt20/usr/share/libgcrypt20/
+	find debian/tmp -name libgcrypt.la -type f -delete
+
+override_dh_auto_configure:
+	./autogen.sh
+	dh_auto_configure --verbose --builddirectory=build -- \
+		--with-wolfssl=/usr/ --disable-doc --enable-wolfssl-fips \
+		--enable-static --enable-noexecstack

@@ -1,0 +1,5 @@
+libgcrypt20 (1.11.0) UNRELEASED; urgency=medium
+
+  * Initial release.
+
+ -- Alex Lanzano <alex@wolfssl.com>  Wed, 09 Jul 2025 17:21:06 +0000

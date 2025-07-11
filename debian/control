@@ -1,0 +1,70 @@
+Source: libgcrypt20
+Section: libs
+Priority: optional
+Maintainer: wolfSSL <support@wolfssl.com>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ autotools-dev,
+ libgpg-error-dev,
+ libwolfssl-dev
+Standards-Version: 4.6.2
+Homepage: https://directory.fsf.org/project/libgcrypt/
+Vcs-Browser: https://github.com/wolfSSL/libgcrypt-wolfssl
+Vcs-Git: https://github.com/wolfSSL/libgcrypt-wolfssl.git
+
+Package: libgcrypt20-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends:
+ libgcrypt20 (= ${binary:Version}),
+ ${misc:Depends},
+Description: LGPL Crypto library with wolfCrypt - development files
+ libgcrypt contains cryptographic functions.  Many important free
+ ciphers, hash algorithms and public key signing algorithms have been
+ implemented:
+ .
+ Arcfour, Blowfish, CAST5, DES, AES, Twofish, Serpent, rfc2268 (rc2), SEED,
+ Poly1305, Camellia, ChaCha20, IDEA, Salsa, SM4, Blake-2, CRC, MD2, MD4, MD5,
+ RIPE-MD160, SM3, SHA-1, SHA-256, SHA-512, SHA3-224, SHA3-256, SHA3-384,
+ SHA3-512, SHAKE128, SHAKE256, Tiger, Whirlpool, DSA, DSA2, ElGamal, RSA, ECC
+ (Curve25519, sec256k1, GOST R 34.10-2001 and GOST R 34.10-2012, etc.)
+ .
+ The following algorithms will use the wolfCrypt implementation inplace of the
+ libgcrypt implementation:
+ .
+ AES-128, AES-192, AES-256, AES-CBC, AES-CCM, AES-CTR, AES-ECB, AES-GCM, AES-OFB,
+ AES-CMAC, ECDSA NIST Curves, HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384,
+ HMAC-SHA512, HMAC-SHA3-224, HMAC-SHA3-256, HMAC-SHA3-384, HMAC-SHA3-512,
+ SHA-1, SHA-256, SHA-512, SHA3-224, SHA3-256, SHA3-384, SHA3-512,
+ RSA (Chinese Remainder Theorem)
+ .
+ This package contains header files and libraries for static linking.
+
+
+Package: libgcrypt20
+Architecture: any
+Multi-Arch: same
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: LGPL Crypto library with wolfCrypt - runtime library
+ libgcrypt contains cryptographic functions.  Many important free
+ ciphers, hash algorithms and public key signing algorithms have been
+ implemented:
+ .
+ Arcfour, Blowfish, CAST5, DES, AES, Twofish, Serpent, rfc2268 (rc2), SEED,
+ Poly1305, Camellia, ChaCha20, IDEA, Salsa, SM4, Blake-2, CRC, MD2, MD4, MD5,
+ RIPE-MD160, SM3, SHA-1, SHA-256, SHA-512, SHA3-224, SHA3-256, SHA3-384,
+ SHA3-512, SHAKE128, SHAKE256, Tiger, Whirlpool, DSA, DSA2, ElGamal, RSA, ECC
+ (Curve25519, sec256k1, GOST R 34.10-2001 and GOST R 34.10-2012, etc.)
+ .
+ The following algorithms will use the wolfCrypt implementation inplace of the
+ libgcrypt implementation:
+ .
+ AES-128, AES-192, AES-256, AES-CBC, AES-CCM, AES-CTR, AES-ECB, AES-GCM, AES-OFB,
+ AES-CMAC, ECDSA NIST Curves, HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384,
+ HMAC-SHA512, HMAC-SHA3-224, HMAC-SHA3-256, HMAC-SHA3-384, HMAC-SHA3-512,
+ SHA-1, SHA-256, SHA-512, SHA3-224, SHA3-256, SHA3-384, SHA3-512,
+ RSA (Chinese Remainder Theorem)

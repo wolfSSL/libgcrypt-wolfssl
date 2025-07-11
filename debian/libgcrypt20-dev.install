@@ -1,0 +1,6 @@
+usr/bin/*
+usr/include/*
+usr/lib/*/lib*.a
+usr/lib/*/lib*.so
+usr/lib/*/pkgconfig/libgcrypt.pc
+usr/share/aclocal/*
