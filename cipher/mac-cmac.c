@@ -96,7 +96,7 @@ cmac_open (gcry_mac_hd_t h)
   return 0;
 }
 
-
+#ifndef ENABLED_WOLFSSL_FIPS
 static void
 cmac_close (gcry_mac_hd_t h)
 {
@@ -140,7 +140,7 @@ cmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 {
   return _gcry_cipher_cmac_check_tag (h->u.cmac.ctx, buf, buflen);
 }
-
+#endif
 
 static unsigned int
 cmac_get_maclen (int algo)
@@ -442,7 +442,7 @@ cmac_selftest (int algo, int extended, selftest_report_func_t report)
   return ec;
 }
 
-
+#ifndef ENABLED_WOLFSSL_FIPS
 static gcry_mac_spec_ops_t cmac_ops = {
   cmac_open,
   cmac_close,
@@ -457,6 +457,7 @@ static gcry_mac_spec_ops_t cmac_ops = {
   NULL,
   cmac_selftest
 };
+#endif
 
 #ifdef HAVE_WOLFSSL
 
@@ -477,7 +478,7 @@ wc_aes_cmac_close (gcry_mac_hd_t h)
 #if !defined(ENABLED_WOLFSSL_FIPS) || FIPS_VERSION3_GE(6,0,0)
   wc_CmacFree(&h->aesCmac);
 #else
-  wc_AesFree(&h->aesCmac);
+  wc_AesFree((Aes *)&h->aesCmac);
   wipememory(&h->aesCmac, sizeof(h->aesCmac));
 #endif
 
@@ -514,7 +515,7 @@ wc_aes_cmac_reset (gcry_mac_hd_t h)
 #if !defined(ENABLED_WOLFSSL_FIPS) || FIPS_VERSION3_GE(6,0,0)
   wc_CmacFree(&h->aesCmac);
 #else
-  wc_AesFree(&h->aesCmac);
+  wc_AesFree((Aes *)&h->aesCmac);
   wipememory(&h->aesCmac, sizeof(h->aesCmac));
 #endif
   return wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL);
@@ -545,7 +546,7 @@ wc_aes_cmac_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
     *outlen = h->authTag_len;
 
   if (h->authTagUpdated) {
-    wc_CmacFinal(&h->aesCmac, h->authTag, &h->authTag_len);
+    wc_CmacFinal(&h->aesCmac, h->authTag, (word32 *)&h->authTag_len);
     h->authTagUpdated = 0;
   }
   memcpy(outbuf, h->authTag, *outlen);
@@ -568,7 +569,7 @@ wc_aes_cmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 
   }
 
-  wc_CmacFinal(&h->aesCmac, h->authTag, &h->authTag_len);
+  wc_CmacFinal(&h->aesCmac, h->authTag, (word32 *)&h->authTag_len);
   h->authTagUpdated = 0;
 
   return buf_eq_const(buf, h->authTag, buflen) ?

@@ -1099,6 +1099,7 @@ keccak_init (int algo, void *context, unsigned int flags)
 #endif
 }
 
+#ifndef HAVE_WOLFSSL
 static void
 sha3_224_init (void *context, unsigned int flags)
 {
@@ -1122,6 +1123,7 @@ sha3_512_init (void *context, unsigned int flags)
 {
   keccak_init (GCRY_MD_SHA3_512, context, flags);
 }
+#endif
 
 static void
 shake128_init (void *context, unsigned int flags)
@@ -1397,7 +1399,7 @@ _gcry_sha3_hash_buffers (void *outbuf, size_t nbytes, const gcry_buffer_t *iov,
     do_keccak_extract (&hd, outbuf, nbytes);
 }
 
-
+#ifndef HAVE_WOLFSSL
 static void
 _gcry_sha3_224_hash_buffers (void *outbuf, size_t nbytes,
 			     const gcry_buffer_t *iov, int iovcnt)
@@ -1429,6 +1431,7 @@ _gcry_sha3_512_hash_buffers (void *outbuf, size_t nbytes,
   _gcry_sha3_hash_buffers (outbuf, nbytes, iov, iovcnt,
 			   &_gcry_digest_spec_sha3_512);
 }
+#endif
 
 static void
 _gcry_shake128_hash_buffers (void *outbuf, size_t nbytes,
@@ -1445,7 +1448,6 @@ _gcry_shake256_hash_buffers (void *outbuf, size_t nbytes,
   _gcry_sha3_hash_buffers (outbuf, nbytes, iov, iovcnt,
 			   &_gcry_digest_spec_shake256);
 }
-
 
 static unsigned int
 cshake_input_n (KECCAK_CONTEXT *ctx, const void *n, unsigned int n_len)

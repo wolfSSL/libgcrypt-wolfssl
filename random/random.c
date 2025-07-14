@@ -68,8 +68,9 @@ static struct
 
 /* This is the lock we use to protect the buffer used by the nonce
    generation.  */
+#ifndef HAVE_WOLFSSL
 GPGRT_LOCK_DEFINE (nonce_buffer_lock);
-
+#endif
 
 
 /* ---  Functions  --- */

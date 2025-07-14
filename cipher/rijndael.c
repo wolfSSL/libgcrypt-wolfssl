@@ -1550,38 +1550,11 @@ _gcry_aes_xts_crypt (void *context, unsigned char *tweak,
 
 #ifdef HAVE_WOLFSSL
 
-
-
-
-static void
-wc_prepare_decryption(RIJNDAEL_context *ctx)
-{
-  int ret;
-  if (ctx->decryption_prepared)
-    return;
-
-  ctx->decryption_prepared = 1;
-}
-
-
-static void
-wc_prepare_encryption(RIJNDAEL_context *ctx)
-{
-  int ret;
-  if (ctx->decryption_prepared == 0)
-    return;
-  ctx->decryption_prepared = 0;
-}
-
-
-
-
-
 static unsigned int
 wc_do_encrypt (const RIJNDAEL_context *ctx,
             unsigned char *bx, const unsigned char *ax)
 {
-  wc_AesEncryptDirect(&ctx->wc_aes_enc, bx, ax);
+  wc_AesEncryptDirect((Aes*)&ctx->wc_aes_enc, bx, ax);
   return WC_AES_BLOCK_SIZE;
 }
 
@@ -1591,14 +1564,9 @@ static unsigned int
 wc_do_decrypt (const RIJNDAEL_context *ctx, unsigned char *bx,
             const unsigned char *ax)
 {
-  wc_AesDecryptDirect(&ctx->wc_aes_dec, bx, ax);
+  wc_AesDecryptDirect((Aes*)&ctx->wc_aes_dec, bx, ax);
   return WC_AES_BLOCK_SIZE;
 }
-
-
-
-
-
 
 static void
 _wc_aes_ecb_enc (RIJNDAEL_context *ctx, unsigned char *dst,
@@ -1627,10 +1595,27 @@ _wc_aes_ecb_enc (RIJNDAEL_context *ctx, unsigned char *dst,
 }
 
 
+/* Wrapper functions for cipher spec interface (void* context) */
+static unsigned int
+wc_encrypt_wrapper(void *context, unsigned char *b, const unsigned char *a)
+{
+  return wc_do_encrypt((const RIJNDAEL_context *)context, b, a);
+}
 
+static unsigned int
+wc_decrypt_wrapper(void *context, unsigned char *b, const unsigned char *a)
+{
+  return wc_do_decrypt((const RIJNDAEL_context *)context, b, a);
+}
 
-
-
+/* Wrapper function for ECB bulk operations */
+static void
+wc_ecb_crypt_wrapper(void *context, void *outbuf_arg, const void *inbuf_arg,
+                     size_t nblocks, int encrypt)
+{
+  _wc_aes_ecb_enc((RIJNDAEL_context *)context, (unsigned char *)outbuf_arg,
+                  (const unsigned char *)inbuf_arg, nblocks, encrypt);
+}
 
 
 static void
@@ -1642,7 +1627,6 @@ _wc_aes_cbc_enc (void *context, unsigned char *iv,
   RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
   unsigned char *outbuf = outbuf_arg;
   const unsigned char *inbuf = inbuf_arg;
-  unsigned char tmpbuf[WC_AES_BLOCK_SIZE];
   unsigned char *ivp = iv;
   if (nblocks == 0)
     return;
@@ -1719,11 +1703,6 @@ _wc_aes_cbc_dec (void *context, unsigned char *iv,
 }
 
 
-
-
-
-
-
 static void
 _wc_aes_ofb_enc (void *context, unsigned char *iv,
                    void *outbuf_arg, const void *inbuf_arg,
@@ -1748,17 +1727,6 @@ _wc_aes_ofb_enc (void *context, unsigned char *iv,
 
   return;
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 static void
@@ -1787,86 +1755,6 @@ _wc_aes_ctr_enc (void *context, unsigned char *ctr,
 
 
 
-
-
-
-
-
-#if 1
-static size_t
-_wc_aes_gcm_crypt (gcry_cipher_hd_t c, void *outbuf_arg,
-                   const void *inbuf_arg, size_t nblocks, int encrypt)
-{
-  int ret = 0;
-  RIJNDAEL_context *ctx = (RIJNDAEL_context *)(&c->context.c);
-
-  /* Map function parameters properly */
-  byte* out = (byte*)outbuf_arg;
-  byte* in = (byte*)inbuf_arg;
-  word32 sz = nblocks * WC_AES_BLOCK_SIZE;
-
-  /* IV from libgcrypt */
-  //const byte *iv = c->u_mode.gcm.tagiv;
-  byte *iv = (byte*)c->u_mode.gcm.tagiv;
-  word32 ivSz = MAX_BLOCKSIZE; /* Standard GCM IV size */
-
-  /* Authentication tag */
-  //byte *authTag = c->u_mode.gcm.u_tag.tag;
-  byte *authTag = (byte*)c->u_mode.gcm.u_tag.tag;
-  word32 authTagSz = MAX_BLOCKSIZE; /* 16-byte auth tag */
-
-  /* AAD data */
-  byte *authIn = (byte*)c->u_mode.gcm.macbuf;
-  word32 authInSz = sizeof(c->u_mode.gcm.macbuf)*sizeof(byte);
-
-  if (encrypt) {
-    /* For encryption, authTag is output parameter */
-    ret = wc_AesGcmEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz,
-                          iv, WC_AES_BLOCK_SIZE,
-                          authTag, authTagSz,
-                          authIn, authInSz);
-    if (ret != 0) {
-      printf("wc_AesGcmEncrypt failed: %d\n", ret);
-    }
-  }
-  else {
-    /* For decryption, authTag is input parameter for verification */
-    ret = wc_AesGcmDecrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz,
-                          iv, WC_AES_BLOCK_SIZE,
-                          authTag, authTagSz,
-                          authIn, authInSz);
-    if (ret != 0) {
-      printf("wc_AesGcmDecrypt failed: %d\n", ret);
-    }
-  }
-}
-#endif
-
-
-
-
-
-static void
-wc_aes_setiv (void *context, const byte *iv, size_t ivlen)
-{
-  int ret = 0;
-  (void)ivlen;
-  RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
-  ret = wc_AesSetIV(&ctx->wc_aes_enc, iv);
-  if (ret != 0) {
-    printf("wc_AesSetIV failed: %d\n", ret);
-  }
-  ret = wc_AesSetIV(&ctx->wc_aes_dec, iv);
-  if (ret != 0) {
-    printf("wc_AesSetIV failed: %d\n", ret);
-  }
-
-  return;
-}
-
-
-
-
 /* Perform the key setup.  */
 static gcry_err_code_t
 wc_do_setkey (RIJNDAEL_context *ctx, const byte *key, const unsigned keylen,
@@ -1874,9 +1762,7 @@ wc_do_setkey (RIJNDAEL_context *ctx, const byte *key, const unsigned keylen,
 {
   static int initialized = 0;
   static const char *selftest_failed = 0;
-  void (*hw_setkey)(RIJNDAEL_context *ctx, const byte *key) = NULL;
   int rounds;
-  unsigned int KC;
   unsigned int hwfeatures;
 
   /* The on-the-fly self tests are only run in non-fips mode. In fips
@@ -1899,17 +1785,14 @@ wc_do_setkey (RIJNDAEL_context *ctx, const byte *key, const unsigned keylen,
   if( keylen == 128/8 )
     {
       rounds = 10;
-      KC = 4;
     }
   else if ( keylen == 192/8 )
     {
       rounds = 12;
-      KC = 6;
     }
   else if ( keylen == 256/8 )
     {
       rounds = 14;
-      KC = 8;
     }
   else
     return GPG_ERR_INV_KEYLEN;
@@ -1922,21 +1805,12 @@ wc_do_setkey (RIJNDAEL_context *ctx, const byte *key, const unsigned keylen,
   /* Setup default bulk encryption routines.  */
   memset (bulk_ops, 0, sizeof(*bulk_ops));
 
-  bulk_ops->ecb_crypt = _wc_aes_ecb_enc;
+  bulk_ops->ecb_crypt = wc_ecb_crypt_wrapper;
 
-  #if 0
   bulk_ops->cbc_enc = _wc_aes_cbc_enc;
   bulk_ops->cbc_dec = _wc_aes_cbc_dec;
   bulk_ops->ofb_enc = _wc_aes_ofb_enc;
   bulk_ops->ctr_enc = _wc_aes_ctr_enc;
-  bulk_ops->gcm_crypt = _wc_aes_gcm_crypt;
-  #else
-  bulk_ops->cbc_enc = _wc_aes_cbc_enc;
-  bulk_ops->cbc_dec = _wc_aes_cbc_dec;
-  bulk_ops->ofb_enc = _wc_aes_ofb_enc;
-  bulk_ops->ctr_enc = _wc_aes_ctr_enc;
-  //bulk_ops->gcm_crypt = _wc_aes_gcm_crypt;
-  #endif
 
 
 
@@ -1988,33 +1862,6 @@ wc_aes_setkey(void *context, const byte *key, const unsigned keylen,
     return ret;
   }
   ret = wc_do_setkey (ctx, key, keylen, bulk_ops);
-  return ret;
-}
-
-
-
-
-static unsigned int
-wc_aes_encrypt (void *context, byte *b, const byte *a)
-{
-  unsigned int ret = 0;
-
-  RIJNDAEL_context *ctx = context;
-
-  ret = ctx->encrypt_fn (ctx, b, a);
-
-  return ret;
-}
-
-static unsigned int
-wc_aes_decrypt (void *context, byte *b, const byte *a)
-{
-  unsigned int ret = 0;
-  RIJNDAEL_context *ctx = context;
-
-
-  ret = ctx->decrypt_fn (ctx, b, a);
-
   return ret;
 }
 
@@ -2458,7 +2305,7 @@ gcry_cipher_spec_t _gcry_cipher_spec_aes =
     GCRY_CIPHER_AES, {0, 1},
     "AES", rijndael_names, rijndael_oids, 16, 128,
     sizeof (RIJNDAEL_context),
-    wc_aes_setkey, wc_do_encrypt, wc_do_decrypt,
+    wc_aes_setkey, wc_encrypt_wrapper, wc_decrypt_wrapper,
     NULL, NULL,
     run_selftests
   };
@@ -2499,7 +2346,7 @@ gcry_cipher_spec_t _gcry_cipher_spec_aes192 =
     GCRY_CIPHER_AES192, {0, 1},
     "AES192", rijndael192_names, rijndael192_oids, 16, 192,
     sizeof (RIJNDAEL_context),
-    wc_aes_setkey, wc_do_encrypt, wc_do_decrypt,
+    wc_aes_setkey, wc_encrypt_wrapper, wc_decrypt_wrapper,
     NULL, NULL,
     run_selftests
   };
@@ -2540,7 +2387,7 @@ gcry_cipher_spec_t _gcry_cipher_spec_aes256 =
     GCRY_CIPHER_AES256, {0, 1},
     "AES256", rijndael256_names, rijndael256_oids, 16, 256,
     sizeof (RIJNDAEL_context),
-    wc_aes_setkey, wc_do_encrypt, wc_do_decrypt,
+    wc_aes_setkey, wc_encrypt_wrapper, wc_decrypt_wrapper,
     NULL, NULL,
     run_selftests
   };

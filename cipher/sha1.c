@@ -628,6 +628,7 @@ sha1_final(void *context)
   _gcry_burn_stack (burn);
 }
 
+#ifndef HAVE_WOLFSSL
 static unsigned char *
 sha1_read( void *context )
 {
@@ -635,6 +636,7 @@ sha1_read( void *context )
 
   return hd->bctx.buf;
 }
+#endif
 
 /****************
  * Shortcut functions which puts the hash value of the supplied buffer iov
