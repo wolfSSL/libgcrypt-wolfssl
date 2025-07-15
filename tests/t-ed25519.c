@@ -60,7 +60,7 @@ show_note (const char *format, ...)
   va_end (arg_ptr);
 }
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 show_sexp (const char *prefix, gcry_sexp_t a)
 {
@@ -77,7 +77,7 @@ show_sexp (const char *prefix, gcry_sexp_t a)
   fprintf (stderr, "%.*s", (int)size, buf);
   gcry_free (buf);
 }
-
+#endif
 
 /* Prepend FNAME with the srcdir environment variable's value and
  * return an allocated filename.  */
@@ -207,6 +207,15 @@ one_test (int testno, const char *sk, const char *pk,
   unsigned char *sig_s = NULL;
   char *sig_rs_string = NULL;
   size_t sig_r_len, sig_s_len;
+
+  #if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED25519)
+  (void)sig_r_len;
+  (void)sig_s_len;
+  (void)s_tmp;
+  (void)s_tmp2;
+  (void)i;
+  (void)p;
+  #endif
 
   if (verbose > 1)
     info ("Running test %d\n", testno);
@@ -339,7 +348,7 @@ one_test (int testno, const char *sk, const char *pk,
     }
 #endif
 
-  if (!no_verify)
+  if (!no_verify) {
     if ((err = gcry_pk_hash_verify (s_sig, data_tmpl, s_pk, NULL, ctx))) {
         #if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED25519)
         if (strncmp(gpg_strerror(err), "Invalid object", 15) != 0) {
@@ -350,6 +359,7 @@ one_test (int testno, const char *sk, const char *pk,
               testno, gpg_strerror (err));
         #endif
       }
+  }
 
  leave:
   gcry_ctx_release (ctx);
