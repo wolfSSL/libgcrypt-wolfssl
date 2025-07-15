@@ -206,6 +206,7 @@ _gcry_pk_util_get_nbits (gcry_sexp_t list, unsigned int *r_nbits)
    length of the buffer is returned at R_LENGTH.  The string is
    delimited by end of string.  The function returns NULL on
    error.  */
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void *
 data_from_hex (const char *string, size_t *r_length)
 {
@@ -224,7 +225,6 @@ data_from_hex (const char *string, size_t *r_length)
   *r_length = length;
   return buffer;
 }
-
 
 static void
 extract_cmp_data (gcry_sexp_t sexp, const char *name, const char *expected)
@@ -252,7 +252,7 @@ extract_cmp_data (gcry_sexp_t sexp, const char *name, const char *expected)
   gcry_free (b);
   gcry_sexp_release (l1);
 }
-
+#endif
 
 #if USE_RSA || USE_ELGAMAL
 static void

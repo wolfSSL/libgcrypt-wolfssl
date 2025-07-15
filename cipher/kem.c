@@ -76,6 +76,7 @@ static const char *kem_names[] =
 
 
 /* Helper for sntrup761.  */
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 sntrup761_random (void *ctx, size_t length, uint8_t *dst)
 {
@@ -83,7 +84,7 @@ sntrup761_random (void *ctx, size_t length, uint8_t *dst)
 
   _gcry_randomize (dst, length, GCRY_STRONG_RANDOM);
 }
-
+#endif
 
 gcry_err_code_t
 _gcry_kem_keypair (int algo,

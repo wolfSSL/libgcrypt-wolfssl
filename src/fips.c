@@ -368,12 +368,12 @@ _gcry_fips_indicator_cipher (va_list arg_ptr)
 #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
         case GCRY_CIPHER_MODE_CFB:
 #else
-        #warning "FIPS version of wolfcrypt does not support CFB"
+        #pragma message "FIPS version of wolfcrypt does not support CFB"
 #endif
 #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
         case GCRY_CIPHER_MODE_CFB8:
 #else
-        #warning "FIPS version of wolfcrypt does not support CFB8"
+        #pragma message "FIPS version of wolfcrypt does not support CFB8"
 #endif
         case GCRY_CIPHER_MODE_OFB:
         case GCRY_CIPHER_MODE_CTR:
@@ -382,12 +382,12 @@ _gcry_fips_indicator_cipher (va_list arg_ptr)
 #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_XTS)
         case GCRY_CIPHER_MODE_XTS:
 #else
-        #warning "FIPS version of wolfcrypt does not support XTS"
+        #pragma message "FIPS version of wolfcrypt does not support XTS"
 #endif
 #if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
         case GCRY_CIPHER_MODE_AESWRAP:
 #else
-        #warning "FIPS version of wolfcrypt does not support AESWRAP"
+        #pragma message "FIPS version of wolfcrypt does not support AESWRAP"
 #endif
           return GPG_ERR_NO_ERROR;
         default:
