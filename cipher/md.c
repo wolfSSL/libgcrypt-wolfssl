@@ -1982,8 +1982,8 @@ _gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm)
 {
 
   struct gcry_wc_md_context *wc = hd->ctx->wc_c;
-  GcryWcDigestEntry *entry;
-  GcryWcDigestEntry *last_list_entry;
+  GcryWcDigestEntry *entry = NULL;
+  GcryWcDigestEntry *last_list_entry = NULL;
   int rc;
 
   if (!digest_is_supported(algorithm))
@@ -2015,7 +2015,8 @@ _gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm)
   rc = wc_HmacInit(&entry->hmac, NULL, 0);
   if (rc != 0) {
     free(entry);
-    last_list_entry->next = NULL;
+    if (last_list_entry)
+        last_list_entry->next = NULL;
     return GPG_ERR_GENERAL;
   }
 
