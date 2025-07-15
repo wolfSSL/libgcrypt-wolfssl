@@ -54,7 +54,7 @@ show_note (const char *format, ...)
   va_end (arg_ptr);
 }
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 show_sexp (const char *prefix, gcry_sexp_t a)
 {
@@ -71,7 +71,7 @@ show_sexp (const char *prefix, gcry_sexp_t a)
   fprintf (stderr, "%.*s", (int)size, buf);
   gcry_free (buf);
 }
-
+#endif
 
 /* Prepend FNAME with the srcdir environment variable's value and
  * return an allocated filename.  */
@@ -298,7 +298,7 @@ one_test (int testno, int ph, const char *sk, const char *pk,
     }
 
   err = gcry_pk_hash_sign (&s_sig, data_tmpl, s_sk, NULL, ctx);
-  #if !defined(HAVE_ED448)
+  #if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED448)
   if (strncmp(gpg_strerror(err), "Not supported", 14) != 0) {
     fail("Should fail for ed448: %s", gpg_strerror(err));
   }
@@ -355,9 +355,18 @@ one_test (int testno, int ph, const char *sk, const char *pk,
     }
 #endif
 
-  if (!no_verify)
+
+  (void)sig_s_len;
+  (void)sig_r_len;
+  (void)s_tmp;
+  (void)s_tmp2;
+  (void)p;
+  (void)i;
+
+
+  if (!no_verify) {
     if ((err = gcry_pk_hash_verify (s_sig, data_tmpl, s_pk, NULL, ctx))) {
-        #if !defined(HAVE_ED448)
+        #if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED448)
         if (strncmp(gpg_strerror(err), "Invalid object", 15) != 0) {
             fail("Should fail for ed448: %s", gpg_strerror(err));
         }
@@ -366,6 +375,7 @@ one_test (int testno, int ph, const char *sk, const char *pk,
               testno, gpg_strerror (err));
         #endif
     }
+  }
 
 
  leave:

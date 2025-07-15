@@ -439,14 +439,14 @@ _wc_cipher_aes_ccm_close(gcry_cipher_hd_t c)
 
   wc_AesFree(aesCcmEnc);
   wc_AesFree(aesCcmDec);
+
+  return GPG_ERR_NO_ERROR;
 }
 
 gcry_err_code_t
 _wc_cipher_aes_ccm_reset(gcry_cipher_hd_t c)
 {
-  int ret;
   Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
-  Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
   unsigned int marks_key, marks_allow_weak_key;
   byte key[aesCcmEnc->keylen];
   size_t keylen = aesCcmEnc->keylen;
@@ -680,7 +680,7 @@ _wc_cipher_aes_ccm_encrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
 
   ret = wc_AesCcmEncrypt(aesCcm, wc_c->cryptbuf,
                          wc_c->databuf, wc_c->databuf_len,
-                         aesCcm->reg, aesCcm->nonceSz,
+                         (byte *)aesCcm->reg, aesCcm->nonceSz,
                          wc_c->authtag, wc_c->authtag_len,
                          aadbuf, wc_c->aadbuf_len);
   if (ret != 0)
@@ -719,7 +719,7 @@ _wc_cipher_aes_ccm_decrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
 
   ret = wc_AesCcmDecrypt(aesCcmDec, wc_c->cryptbuf,
                          wc_c->databuf, wc_c->databuf_len,
-                         aesCcmDec->reg, aesCcmDec->nonceSz,
+                         (byte *)aesCcmDec->reg, aesCcmDec->nonceSz,
                          wc_c->authtag, wc_c->authtag_len,
                          aadbuf, wc_c->aadbuf_len);
 
@@ -728,7 +728,7 @@ _wc_cipher_aes_ccm_decrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
       /* Get the authtag by encrypting the plaintext again */
       ret = wc_AesCcmEncrypt(aesCcmEnc, wc_c->databuf,
                              wc_c->cryptbuf, wc_c->databuf_len,
-                             aesCcmEnc->reg, aesCcmEnc->nonceSz,
+                             (byte *)aesCcmEnc->reg, aesCcmEnc->nonceSz,
                              wc_c->authtag, wc_c->authtag_len,
                              aadbuf, wc_c->aadbuf_len);
   }

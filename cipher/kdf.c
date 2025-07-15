@@ -34,7 +34,9 @@
 #endif
 
 #ifndef USE_BLAKE2
+#ifndef ENABLED_WOLFSSL_FIPS /* Shouldnt be using Blake anyways since its not in FIPs*/
 #warning "USE_BLAKE2 is not defined, need for Argon2"
+#endif
 #endif
 
 /* Transform a passphrase into a suitable key of length KEYSIZE and
@@ -405,7 +407,6 @@ beswap64_block (u64 *dst)
 #endif
 }
 
-
 static gpg_err_code_t
 argon2_fill_first_blocks (argon2_ctx_t a)
 {
@@ -492,9 +493,11 @@ argon2_fill_first_blocks (argon2_ctx_t a)
 #endif
       beswap64_block (&a->block[(i*a->lane_length+1)*ARGON2_WORDS_IN_BLOCK]);
     }
+  (void)iov;
   return 0;
 }
 
+#if defined(USE_BLAKE2)
 static gpg_err_code_t
 argon2_init (argon2_ctx_t a, unsigned int parallelism,
              unsigned int m_cost, unsigned int t_cost)
@@ -543,7 +546,7 @@ argon2_init (argon2_ctx_t a, unsigned int parallelism,
   a->thread_data = thread_data;
   return 0;
 }
-
+#endif
 
 static u64 fBlaMka (u64 x, u64 y)
 {
@@ -843,6 +846,7 @@ argon2_close (argon2_ctx_t a)
   xfree (a);
 }
 
+#if defined(USE_BLAKE2)
 static gpg_err_code_t
 argon2_open (gcry_kdf_hd_t *hd, int subalgo,
              const unsigned long *param, unsigned int paramlen,
@@ -920,6 +924,7 @@ argon2_open (gcry_kdf_hd_t *hd, int subalgo,
   *hd = (void *)a;
   return 0;
 }
+#endif
 
 typedef struct balloon_context *balloon_ctx_t;
 

@@ -95,10 +95,10 @@ static void
 global_init (void)
 {
   gcry_error_t err = 0;
+#if defined (HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
   static int is_wolfssl_on = 0;
 
 /* add wolfSSL initialization here */
-#if defined (HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
   if (is_wolfssl_on == 0) {
     is_wolfssl_on = 1;
     if (wc_SetSeed_Cb(wc_GenerateSeed) != 0) {

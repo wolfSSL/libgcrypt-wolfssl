@@ -1413,6 +1413,7 @@ my_kdf_derive (int parallel,
   return err;
 }
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_argon2 (void)
 {
@@ -1554,7 +1555,7 @@ check_argon2 (void)
 #endif
     }
 }
-
+#endif
 
 static void
 check_balloon (void)

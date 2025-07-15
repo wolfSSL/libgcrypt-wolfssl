@@ -211,10 +211,14 @@ static struct
 
 
 /* ---  Prototypes  --- */
+#ifndef HAVE_WOLFSSL
 static void read_pool (byte *buffer, size_t length, int level );
+#endif
 static void add_randomness (const void *buffer, size_t length,
                             enum random_origins origin);
+#ifndef HAVE_WOLFSSL
 static void random_poll (void);
+#endif
 static void do_fast_random_poll (void);
 static int (*getfnc_gather_random (void))(void (*)(const void*, size_t,
                                                    enum random_origins),
@@ -222,9 +226,10 @@ static int (*getfnc_gather_random (void))(void (*)(const void*, size_t,
 static void (*getfnc_fast_random_poll (void))(void (*)(const void*, size_t,
                                                        enum random_origins),
                                               enum random_origins);
+#ifndef HAVE_WOLFSSL
 static void read_random_source (enum random_origins origin,
                                 size_t length, int level);
-
+#endif
 
 
 /* ---  Functions  --- */
@@ -766,7 +771,7 @@ lock_seed_file (int fd, const char *fname, int for_write)
   return 0;
 }
 
-
+#ifndef HAVE_WOLFSSL
 /* Read in a seed from the random_seed file and return true if this
    was successful.
 
@@ -886,7 +891,7 @@ read_seed_file (void)
   allow_seed_file_update = 1;
   return 1;
 }
-
+#endif
 
 void
 _gcry_rngcsprng_update_seed_file (void)
@@ -966,7 +971,7 @@ _gcry_rngcsprng_update_seed_file (void)
   unlock_pool ();
 }
 
-
+#ifndef HAVE_WOLFSSL
 /* Read random out of the pool.  This function is the core of the
    public random functions.  Note that Level GCRY_WEAK_RANDOM is not
    anymore handled special and in fact is an alias in the API for
@@ -1113,7 +1118,7 @@ read_pool (byte *buffer, size_t length, int level)
       goto retry;
     }
 }
-
+#endif
 
 
 /* Add LENGTH bytes of randomness from buffer to the pool.  ORIGIN is
@@ -1155,14 +1160,14 @@ add_randomness (const void *buffer, size_t length, enum random_origins origin)
 }
 
 
-
+#ifndef HAVE_WOLFSSL
 static void
 random_poll (void)
 {
   rndstats.slowpolls++;
   read_random_source (RANDOM_ORIGIN_SLOWPOLL, POOLSIZE/5, GCRY_STRONG_RANDOM);
 }
-
+#endif
 
 /* Runtime determination of the slow entropy gathering module.  */
 static int (*
@@ -1331,8 +1336,7 @@ _gcry_rngcsprng_fast_poll (void)
   unlock_pool ();
 }
 
-
-
+#ifndef HAVE_WOLFSSL
 static void
 read_random_source (enum random_origins origin, size_t length, int level)
 {
@@ -1342,3 +1346,4 @@ read_random_source (enum random_origins origin, size_t length, int level)
   if (slow_gather_fnc (add_randomness, origin, length, level) < 0)
     log_fatal ("No way to gather entropy for the RNG\n");
 }
+#endif

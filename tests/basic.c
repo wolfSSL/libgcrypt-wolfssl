@@ -41,7 +41,7 @@
 #define PGM "basic"
 #include "t-common.h"
 
-#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+#if defined(HAVE_WOLFSSL)
 #include "wolfssl/options.h"
 #include "wolfssl/wolfcrypt/settings.h"
 #endif
@@ -100,6 +100,7 @@ mismatch (const void *expected, size_t expectedlen,
    representation and return it as an allocated buffer. The valid
    length of the buffer is returned at R_LENGTH.  The string is
    delimited by end of string.  The function terminates on error.  */
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void *
 hex2buffer (const char *string, size_t *r_length)
 {
@@ -118,7 +119,7 @@ hex2buffer (const char *string, size_t *r_length)
   *r_length = length;
   return buffer;
 }
-
+#endif
 
 static void
 show_sexp (const char *prefix, gcry_sexp_t a)
@@ -2745,6 +2746,7 @@ check_ctr_cipher (void)
     fprintf (stderr, "  Completed CTR cipher checks.\n");
 }
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_cfb_cipher (void)
 {
@@ -3269,6 +3271,7 @@ check_cfb_cipher (void)
   if (verbose)
     fprintf (stderr, "  Completed CFB checks.\n");
 }
+#endif
 
 static void
 check_ofb_cipher (void)
@@ -4790,6 +4793,7 @@ check_gcm_cipher (void)
 }
 
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 _check_eax_cipher (unsigned int step)
 {
@@ -5306,8 +5310,9 @@ _check_eax_cipher (unsigned int step)
   if (verbose)
     fprintf (stderr, "  Completed EAX checks.\n");
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_eax_cipher (void)
 {
@@ -5320,8 +5325,10 @@ check_eax_cipher (void)
   /* Split input to 16 byte buffers. */
   _check_eax_cipher(16);
 }
+#endif
 
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_siv_cipher (void)
 {
@@ -5739,8 +5746,9 @@ check_siv_cipher (void)
   if (verbose)
     fprintf (stderr, "  Completed SIV checks.\n");
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_gcm_siv_cipher (void)
 {
@@ -7215,8 +7223,9 @@ check_gcm_siv_cipher (void)
   if (verbose)
     fprintf (stderr, "  Completed GCM-SIV checks.\n");
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 _check_poly1305_cipher (unsigned int step)
 {
@@ -7718,8 +7727,9 @@ _check_poly1305_cipher (unsigned int step)
   if (verbose)
     fprintf (stderr, "  Completed POLY1305 checks.\n");
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_poly1305_cipher (void)
 {
@@ -7732,7 +7742,7 @@ check_poly1305_cipher (void)
   /* Split input to 16 byte buffers. */
   _check_poly1305_cipher(16);
 }
-
+#endif
 
 static void
 check_ccm_cipher (void)
@@ -8555,6 +8565,7 @@ check_ccm_cipher (void)
 }
 
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 do_check_ocb_cipher (int inplace)
 {
@@ -9058,8 +9069,9 @@ do_check_ocb_cipher (int inplace)
   if (verbose)
     fprintf (stderr, "  Completed OCB checks.\n");
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_ocb_cipher_largebuf_split (int algo, int keylen, const char *tagexpect,
 				 unsigned int splitpos)
@@ -9282,8 +9294,9 @@ out_free:
   xfree(outbuf);
   xfree(inbuf);
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_ocb_cipher_checksum (int algo, int keylen)
 {
@@ -9463,8 +9476,9 @@ out_free:
   xfree(inbuf);
   xfree(outbuf);
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_ocb_cipher_largebuf (int algo, int keylen, const char *tagexpect)
 {
@@ -9477,8 +9491,9 @@ check_ocb_cipher_largebuf (int algo, int keylen, const char *tagexpect)
 
   check_ocb_cipher_checksum(algo, keylen);
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_ocb_cipher_splitaad (void)
 {
@@ -9717,8 +9732,9 @@ check_ocb_cipher_splitaad (void)
   xfree (plain);
   xfree (key);
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_ocb_cipher (void)
 {
@@ -9772,9 +9788,10 @@ check_ocb_cipher (void)
   /* Check that the AAD data is correctly buffered.  */
   check_ocb_cipher_splitaad ();
 }
+#endif
 
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 do_check_xts_cipher (int inplace)
 {
@@ -10097,8 +10114,9 @@ next_tv:
   if (verbose)
     fprintf (stderr, "  Completed XTS checks.\n");
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_xts_cipher (void)
 {
@@ -10109,8 +10127,9 @@ check_xts_cipher (void)
   /* Check XTS cipher with inplace encrypt/decrypt. */
   do_check_xts_cipher(1);
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_gost28147_cipher_basic (enum gcry_cipher_algos algo)
 {
@@ -10300,14 +10319,18 @@ check_gost28147_cipher_basic (enum gcry_cipher_algos algo)
   (void) algo;
 #endif
 }
+#endif
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_gost28147_cipher (void)
 {
 	check_gost28147_cipher_basic (GCRY_CIPHER_GOST28147);
 	check_gost28147_cipher_basic (GCRY_CIPHER_GOST28147_MESH);
 }
+#endif
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_stream_cipher (void)
 {
@@ -10988,8 +11011,9 @@ check_stream_cipher (void)
   if (verbose)
     fprintf (stderr, "  Completed stream cipher checks.\n");
 }
+#endif
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 check_stream_cipher_large_block (void)
 {
@@ -11442,7 +11466,7 @@ check_stream_cipher_large_block (void)
   if (verbose)
     fprintf (stderr, "  Completed large block stream cipher checks.\n");
 }
-
+#endif
 
 
 /* Check that our bulk encryption functions work properly.  */
@@ -11459,7 +11483,7 @@ check_bulk_cipher_modes (void)
     int ivlen;
     char t1_hash[20];
   } tv[] = {
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
     { GCRY_CIPHER_AES, GCRY_CIPHER_MODE_CFB,
       "abcdefghijklmnop", 16,
       "1234567890123456", 16,
@@ -11566,7 +11590,7 @@ check_bulk_cipher_modes (void)
       { 0x2d, 0x71, 0x54, 0xb9, 0xc5, 0x28, 0x76, 0xff, 0x76, 0xb5,
         0x99, 0x37, 0x99, 0x9d, 0xf7, 0x10, 0x6d, 0x86, 0x4f, 0x3f }
     },
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_XTS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_XTS)
     { GCRY_CIPHER_AES128, GCRY_CIPHER_MODE_XTS,
       "abcdefghijklmnopABCDEFGHIJKLMNOP", 32,
       "1234567890123456", 16,
@@ -12806,7 +12830,7 @@ cipher_cbc_bulk_test (int cipher_algo)
   return -1;
 }
 
-
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 buf_xor_2dst(void *vdst1, void *vdst2, const void *vsrc, size_t len)
 {
@@ -12817,7 +12841,9 @@ buf_xor_2dst(void *vdst1, void *vdst2, const void *vsrc, size_t len)
   for (; len; len--)
     *dst1++ = (*dst2++ ^= *src++);
 }
+#endif
 
+#if !defined(ENABLED_WOLFSSL_FIPS)
 /* Run the tests for <block cipher>-CFB-<block size>, tests bulk CFB
    decryption.  Returns NULL on success. */
 static int
@@ -13044,7 +13070,7 @@ cipher_cfb_bulk_test (int cipher_algo)
   xfree(mem);
   return -1;
 }
-
+#endif
 
 /* Run the tests for <block cipher>-CTR-<block size>, tests IV increment
    of bulk CTR encryption.  Returns NULL on success. */
@@ -13492,7 +13518,7 @@ check_ciphers (void)
 		 gcry_cipher_map_name (gcry_cipher_algo_name (algos[i])));
 
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_ECB, 0);
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CFB, 0);
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CFB8, 0);
 #endif
@@ -13500,18 +13526,18 @@ check_ciphers (void)
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CBC, 0);
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CBC, GCRY_CIPHER_CBC_CTS);
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_CTR, 0);
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_EAX)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_EAX)
       check_one_cipher (algos[i], GCRY_CIPHER_MODE_EAX, 0);
 #endif
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_CCM_BLOCK_LEN)
         check_one_cipher (algos[i], GCRY_CIPHER_MODE_CCM, 0);
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_GCM_BLOCK_LEN)
         check_one_cipher (algos[i], GCRY_CIPHER_MODE_GCM, 0);
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_OCB)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_OCB)
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_OCB_BLOCK_LEN)
         check_one_cipher (algos[i], GCRY_CIPHER_MODE_OCB, 0);
 #endif
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_XTS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_XTS)
       if (gcry_cipher_get_algo_blklen (algos[i]) == GCRY_XTS_BLOCK_LEN)
         check_one_cipher (algos[i], GCRY_CIPHER_MODE_XTS, 0);
 #endif
@@ -13519,7 +13545,7 @@ check_ciphers (void)
       if (gcry_cipher_get_algo_blklen (algos[i]) >= 8)
         {
           cipher_cbc_bulk_test (algos[i]);
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
           cipher_cfb_bulk_test (algos[i]);
 #endif
           cipher_ctr_bulk_test (algos[i]);
@@ -13572,7 +13598,7 @@ check_cipher_modes(void)
   check_aes128_cbc_cts_cipher ();
   check_cbc_mac_cipher ();
   check_ctr_cipher ();
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
   check_cfb_cipher ();
 #endif
   check_ofb_cipher ();
@@ -13583,29 +13609,29 @@ check_cipher_modes(void)
        * as late as in gcry_cipher_gettag, but we want to allow it in the end */
       check_gcm_cipher ();
     }
-#if !defined(HAVE_WOLFSSL) || defined(HAVE_POLY1305)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(HAVE_POLY1305)
   check_poly1305_cipher ();
 #endif
-#if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(ENABLED_WOLFSSL_FIPS)
   check_ocb_cipher ();
 #endif
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_XTS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_XTS)
   check_xts_cipher ();
 #endif
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_EAX)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_EAX)
   check_eax_cipher ();
 #endif
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_SIV)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_SIV)
   check_siv_cipher ();
   check_gcm_siv_cipher ();
 #endif
-#if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(ENABLED_WOLFSSL_FIPS)
   check_gost28147_cipher ();
 #endif
-#if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(ENABLED_WOLFSSL_FIPS)
   check_stream_cipher ();
 #endif
-#if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(ENABLED_WOLFSSL_FIPS)
   check_stream_cipher_large_block ();
 #endif
   if (verbose)
@@ -13696,6 +13722,7 @@ alex_hkdf()
     if (memcmp(output, expected_key, 16) != 0){
         printf("ALEX: Keys do not equal\n");
     }
+  (void)gcry;
 }
 
 static void
@@ -14408,7 +14435,7 @@ check_digests (void)
         "\x74\xee\x78\xeb\x79\x1f\x94\x38\x5b\x73\xef\xf8\xfd\x5d\x74\xd8"
         "\x51\x36\xfe\x63\x52\xde\x07\x70\x95\xd6\x78\x2b\x7b\x46\x8a\x2c"
         "\x30\x0f\x48\x0c\x74\x43\x06\xdb\xa3\x8d\x64\x3d\xe9\xa1\xa7\x72" },
-#if !defined(HAVE_WOLFSSL) || !defined(WOLFSSL_NOSHA512_256)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(WOLFSSL_NOSHA512_256)
       { GCRY_MD_SHA512_256, "abc",
 	"\x53\x04\x8E\x26\x81\x94\x1E\xF9\x9B\x2E\x29\xB7\x6B\x4C\x7D\xAB"
 	"\xE4\xC2\xD0\xC6\x34\xFC\x6D\x46\xE0\xE2\xF1\x31\x07\xE7\xAF\x23" },
@@ -14416,7 +14443,7 @@ check_digests (void)
 	"\x9a\x59\xa0\x52\x93\x01\x87\xa9\x70\x38\xca\xe6\x92\xf3\x07\x08"
 	"\xaa\x64\x91\x92\x3e\xf5\x19\x43\x94\xdc\x68\xd5\x6c\x74\xfb\x21" },
 #endif
-#if !defined(HAVE_WOLFSSL) || !defined(WOLFSSL_NOSHA512_224)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(WOLFSSL_NOSHA512_224)
       { GCRY_MD_SHA512_224, "abc",
 	"\x46\x34\x27\x0F\x70\x7B\x6A\x54\xDA\xAE\x75\x30\x46\x08\x42\xE2"
 	"\x0E\x37\xED\x26\x5C\xEE\xE9\xA4\x3E\x89\x24\xAA" },
@@ -15781,7 +15808,7 @@ check_hmac (void)
     const char *expect;
   } algos[] =
     {
-#if !defined(HAVE_WOLFSSL) || !defined(NO_MD5)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(NO_MD5)
       { GCRY_MD_MD5, "what do ya want for nothing?", "Jefe",
 	"\x75\x0c\x78\x3e\x6a\xb0\xb5\x03\xea\xa8\x6e\x31\x0a\x5d\xb7\x38" },
       { GCRY_MD_MD5,
@@ -16292,7 +16319,7 @@ check_mac (void)
     unsigned int klen;
   } algos[] =
     {
-#if !defined(HAVE_WOLFSSL) || !defined(NO_MD5)
+#if !defined(ENABLED_WOLFSSL_FIPS) || !defined(NO_MD5)
       { GCRY_MAC_HMAC_MD5, "what do ya want for nothing?", "Jefe",
         "\x75\x0c\x78\x3e\x6a\xb0\xb5\x03\xea\xa8\x6e\x31\x0a\x5d\xb7\x38" },
       { GCRY_MAC_HMAC_MD5,
@@ -17451,7 +17478,7 @@ check_pubkey_sign_ecdsa (int n, gcry_sexp_t skey, gcry_sexp_t pkey,
         /* */          "000102030405060708090A0B0C0D0E0F#))",
         0
       },
-#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS)
       { 256,
         "(data (flags gost)\n"
         " (value #00112233445566778899AABBCCDDEEFF"
@@ -17477,7 +17504,7 @@ check_pubkey_sign_ecdsa (int n, gcry_sexp_t skey, gcry_sexp_t pkey,
         0
       },
 #endif
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_SM2)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_SM2)
       { 256,
         "(data (flags sm2)\n"
         " (hash sm3 #112233445566778899AABBCCDDEEFF00"

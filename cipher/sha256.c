@@ -691,7 +691,7 @@ wolfssl_sha224_transform_generic (void *ctx, const unsigned char *data, size_t n
   int ret = 0;
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)ctx;
 
-  ret = wc_Sha224Update(&hd->wc_sha2, data, 64 * nblks);
+  ret = wc_Sha224Update((wc_Sha224*)&hd->wc_sha2, data, 64 * nblks);
   if (ret != 0) {
     printf("Error libgcrypt (wolfssl_sha224_transform_generic): wc_Sha224Update failed\n");
     printf("Return: %d\n", ret);
@@ -706,7 +706,7 @@ wolfssl_sha256_transform_generic (void *ctx, const unsigned char *data, size_t n
   int ret = 0;
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)ctx;
 
-  ret = wc_Sha256Update(&hd->wc_sha2, data, 64 * nblks);
+  ret = wc_Sha256Update((wc_Sha256*)&hd->wc_sha2, data, 64 * nblks);
   if (ret != 0) {
     printf("Error libgcrypt (wolfssl_sha256_transform_generic): wc_Sha256Update failed\n");
     printf("Return: %d\n", ret);
@@ -748,43 +748,12 @@ wolfssl_sha256_common_init (SHA256_CONTEXT *hd)
 }
 
 static void
-wolfssl_sha256_digest_alloc(void* context, int algorithm)
-{
-  SHA256_CONTEXT *hd = context;
-
-  hd = (SHA256_CONTEXT*)XMALLOC(sizeof(SHA256_CONTEXT), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-  if (hd == NULL) {
-    printf("Error libgcrypt (wolfssl_sha256_init): malloc failed\n");
-    return;
-  }
-  return;
-}
-
-/* Deallocate a context for the wolfSSL digest context */
-/* to be used by libgcrypt */
-static void
-wolfssl_sha256_digest_free(void* context, int algorithm)
-{
-  SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
-
-  if (hd != NULL) {
-    XFREE(hd, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    hd = NULL;
-  }
-  else {
-    printf("Error libgcrypt (wolfssl_sha256_deinit): wc_sha2 is already NULL\n");
-  }
-
-  return;
-}
-
-static void
-wolfssl_sha224_init(void* context, int flags)
+wolfssl_sha224_init(void* context, unsigned int flags)
 {
   int ret = 0;
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
   (void)flags;
-  ret = wc_InitSha224(&hd->wc_sha2);
+  ret = wc_InitSha224((wc_Sha224*)&hd->wc_sha2);
   if (ret != 0) {
     printf("Error libgcrypt (sha224_init): wc_InitSha224 failed\n");
     printf("Return: %d\n", ret);
@@ -795,13 +764,13 @@ wolfssl_sha224_init(void* context, int flags)
 
 
 static void
-wolfssl_sha256_init(void* context, int flags)
+wolfssl_sha256_init(void* context, unsigned int flags)
 {
   int ret = 0;
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha256(&hd->wc_sha2);
+  ret = wc_InitSha256((wc_Sha256*)&hd->wc_sha2);
   if (ret != 0) {
     printf("Error libgcrypt (sha256_init): wc_InitSha256 failed\n");
     printf("Return: %d\n", ret);
@@ -836,14 +805,14 @@ wolfssl_sha224_final(void *context)
   byte temp_buffer[WC_SHA224_DIGEST_SIZE];
 
   if (hd->bctx.count > 0) {
-    ret = wc_Sha224Update(&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
+    ret = wc_Sha224Update((wc_Sha224*)&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
     if (ret != 0) {
       printf("Error libgcrypt (wolfssl_sha224_final): wc_Sha224Update failed\n");
       printf("Return: %d\n", ret);
     }
   }
 
-  ret = wc_Sha224Final(&hd->wc_sha2, temp_buffer);
+  ret = wc_Sha224Final((wc_Sha224*)&hd->wc_sha2, temp_buffer);
   if (ret != 0) {
     printf("Error libgcrypt (wolfssl_sha224_final): wc_Sha224Final failed\n");
     printf("Return: %d\n", ret);
@@ -865,7 +834,7 @@ wolfssl_sha256_final(void *context)
 
   /* First update with any remaining bytes in the buffer */
   if (hd->bctx.count > 0) {
-    ret = wc_Sha256Update(&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
+    ret = wc_Sha256Update((wc_Sha256*)&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
     if (ret != 0) {
       printf("Error libgcrypt (sha256_final): wc_Sha256Update failed\n");
       printf("Return: %d\n", ret);
@@ -873,7 +842,7 @@ wolfssl_sha256_final(void *context)
   }
   /* Might need to use wc_Sha256GetHash instead of wc_Sha256Final */
   /* This is due to sha256_final does not necassarly mean the hash is ready */
-  ret = wc_Sha256Final(&hd->wc_sha2, temp_buffer);
+  ret = wc_Sha256Final((wc_Sha256*)&hd->wc_sha2, temp_buffer);
   if (ret != 0) {
     printf("Error libgcrypt (sha256_final): wc_Sha256Final failed\n");
     printf("Return: %d\n", ret);
@@ -1100,8 +1069,6 @@ const gcry_md_spec_t _gcry_digest_spec_sha224 =
     _gcry_wolfssl_sha224_hash_buffers,
     sizeof(SHA256_CONTEXT),
     run_selftests
-    //wolfssl_sha224_digest_alloc,
-    //wolfssl_sha224_digest_free,
   };
 
 const gcry_md_spec_t _gcry_digest_spec_sha256 =
@@ -1112,8 +1079,6 @@ const gcry_md_spec_t _gcry_digest_spec_sha256 =
     _gcry_wolfssl_sha256_hash_buffers,
     sizeof(SHA256_CONTEXT),
     run_selftests
-    //wolfssl_sha256_digest_alloc,
-    //wolfssl_sha256_digest_free,
   };
 #endif /* HAVE_WOLFSSL */
 

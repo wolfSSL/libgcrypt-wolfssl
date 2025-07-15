@@ -106,7 +106,7 @@ unlock_rng (void)
                gpg_strerror (rc));
 }
 
-
+#ifndef HAVE_WOLFSSL
 /* Helper variables for read_cb().
 
    The _gcry_rnd*_gather_random interface does not allow to provide a
@@ -117,8 +117,9 @@ unlock_rng (void)
 static unsigned char *read_cb_buffer;   /* The buffer.  */
 static size_t         read_cb_size;     /* Size of the buffer.  */
 static size_t         read_cb_len;      /* Used length.  */
+#endif
 
-
+#ifndef HAVE_WOLFSSL
 /* Callback for _gcry_rnd*_gather_random.  */
 static void
 read_cb (const void *buffer, size_t length, enum random_origins origin)
@@ -137,6 +138,7 @@ read_cb (const void *buffer, size_t length, enum random_origins origin)
       read_cb_buffer[read_cb_len++] = *p++;
     }
 }
+#endif
 
 
 /* Fill BUFFER with LENGTH bytes of random at quality LEVEL.  The

@@ -2187,11 +2187,11 @@ static int wc_gcrypt_CalcDX(mp_int* y, mp_int* x, mp_int* d)
 }
 #endif
 
-int wc_gcrypt_RsaPrivateKeyDecodeRaw(const byte* n, word32 nSz,
-        const byte* e, word32 eSz, const byte* d, word32 dSz,
-        const byte* u, word32 uSz, const byte* p, word32 pSz,
-        const byte* q, word32 qSz, const byte* dP, word32 dPSz,
-        const byte* dQ, word32 dQSz, RsaKey* key)
+int wc_gcrypt_RsaPrivateKeyDecodeRaw(byte* n, word32 nSz,
+        byte* e, word32 eSz, byte* d, word32 dSz,
+        byte* u, word32 uSz, byte* p, word32 pSz,
+        byte* q, word32 qSz, byte* dP, word32 dPSz,
+        byte* dQ, word32 dQSz, RsaKey* key)
 {
     int err = MP_OKAY;
     /* Needed for swapping p and q if p < q */
@@ -2561,29 +2561,6 @@ _libgcrypt_hash_length(int gcry_hash_algo)
 }
 
 
-/* Custom Compare function to compare data */
-static int
-_wc_gcrypt_compare_data(byte* expectedData, size_t expectedDataLen, byte* myData, size_t myDataLen)
-{
-
-  /* Calculate the offset, we need to do this because libgcrypt */
-  /* creates big buffers for the expected data, even if it does not fill */
-  /* the whole buffer. */
-
-  if (myDataLen > expectedDataLen) {
-    return 0;
-  }
-
-  /* Compare the data with offset*/
-  if (memcmp(myData, expectedData + (expectedDataLen - myDataLen), myDataLen) != 0) {
-    return 0;
-  }
-
-  return 1;
-}
-
-
-
 /* Function to pass libgcrypt key to wolfssl to get usable key for wolfssl rsa functions */
 /* Public key */
 static int
@@ -2621,11 +2598,11 @@ _gcryp_rsa_key_to_wolfssl_rsa_key(RSA_public_key *pk, RsaKey *wcRsaKey)
 
  leave:
   /* Wipe then free buffers */
-  if (myKey_mod_len != NULL) {
+  if (myKey_mod_len != 0) {
     wipememory(myKey_mod, myKey_mod_len);
     _gcry_free(myKey_mod);
   }
-  if (myKey_exp_len != NULL) {
+  if (myKey_exp_len != 0) {
     wipememory(myKey_exp, myKey_exp_len);
     _gcry_free(myKey_exp);
   }
@@ -2795,27 +2772,27 @@ if (ret != 0) {
 leave:
 
 /* Wipe then Free everything when done */
-if (myKey_mod_n_len != NULL) {
+if (myKey_mod_n_len != 0) {
   wipememory(myKey_mod_n, myKey_mod_n_len);
   _gcry_free(myKey_mod_n);
 }
-if (myKey_exp_e_len != NULL) {
+if (myKey_exp_e_len != 0) {
   wipememory(myKey_exp_e, myKey_exp_e_len);
   _gcry_free(myKey_exp_e);
 }
-if (myKey_exp_d_len != NULL) {
+if (myKey_exp_d_len != 0) {
   wipememory(myKey_exp_d, myKey_exp_d_len);
   _gcry_free(myKey_exp_d);
 }
-if (myKey_prime_p_len != NULL) {
+if (myKey_prime_p_len != 0) {
   wipememory(myKey_prime_p, myKey_prime_p_len);
   _gcry_free(myKey_prime_p);
 }
-if (myKey_prime_q_len != NULL) {
+if (myKey_prime_q_len != 0) {
   wipememory(myKey_prime_q, myKey_prime_q_len);
   _gcry_free(myKey_prime_q);
 }
-if (myKey_u_len != NULL) {
+if (myKey_u_len != 0) {
   wipememory(myKey_u, myKey_u_len);
   _gcry_free(myKey_u);
 }
@@ -2940,7 +2917,6 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
   if (deriveparms || (flags & PUBKEY_FLAG_USE_X931))
     {
-      int swapped;
       if (fips_mode ())
         {
           sexp_release (deriveparms);
@@ -3203,7 +3179,7 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   }
 
   rc = _gcry_mpi_print(GCRYMPI_FMT_USG, inputDataBlock, (size_t)sizeof(inputDataBlock),
-                       &inputDataBlockLen, data);
+                       (size_t *)&inputDataBlockLen, data);
   if (rc) {
     goto leave_wolf;
   }
@@ -3353,7 +3329,7 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   }
 
   rc = _gcry_mpi_print(GCRYMPI_FMT_USG, inputDataBlock, (size_t)sizeof(inputDataBlock),
-                       &inputDataBlockLen, data);
+                       (size_t *)&inputDataBlockLen, data);
   if (rc) {
     goto leave_wolf;
   }
@@ -3458,7 +3434,6 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
   /* wolfssl variables */
   int ret = 0;
-  int wolf = 0;
   RsaKey wcRsaKey;
 
   byte mySig[RSA_MAX_SIZE] = {0};
@@ -3476,7 +3451,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   unsigned int hashValue = 0;
 
   int isRaw = 1; /* Assume raw data for pss */
-  unsigned char *hash_value = NULL;
+  const char *hash_value = NULL;
   size_t hash_len = 0;
   gcry_sexp_t hash_param = NULL;
 
@@ -3544,11 +3519,11 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   }
 
   /* Shift the signature to be right aligned if needed */
-  shiftRight(mySig, &mySigLen, (nbits/8));
+  shiftRight(mySig, (word32 *)&mySigLen, (nbits/8));
 
   /* Expected data so we can compare */
   rc = _gcry_mpi_print(GCRYMPI_FMT_USG, expectedData, (size_t)sizeof(expectedData),
-                       &expectedDataLen, data);
+                       (size_t *)&expectedDataLen, data);
   if (rc) {
     goto leave_wolf;
   }
@@ -3626,11 +3601,12 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     case PUBKEY_ENC_PKCS1_RAW:
     case PUBKEY_ENC_PKCS1:
     case PUBKEY_ENC_RAW:
+    case PUBKEY_ENC_OAEP:
       /* Allocate a buffer for the output */
       myDataLen = mySigLen;
 
       /* Perform raw RSA verification using wolfSSL's direct RSA function */
-      ret = wc_RsaDirect(mySig, mySigLen, myData, &myDataLen,
+      ret = wc_RsaDirect(mySig, mySigLen, myData, (word32 *)&myDataLen,
                         &wcRsaKey, RSA_PUBLIC_DECRYPT, NULL);
       if (ret < 0) {
           rc = GPG_ERR_BAD_SIGNATURE;
@@ -3642,6 +3618,9 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       rc = mpi_cmp (result, data) ? GPG_ERR_BAD_SIGNATURE : 0;
 
     break;
+    default:
+      rc = GPG_ERR_BAD_SIGNATURE;
+      break;
   }
 
  leave_wolf:
@@ -3677,11 +3656,9 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   struct pk_encoding_ctx ctx;
   gcry_mpi_t data = NULL;
   RSA_secret_key sk = {NULL, NULL, NULL, NULL, NULL, NULL};
-  RSA_public_key pk;
   gcry_mpi_t sig = NULL;
   gcry_mpi_t result = NULL;
   unsigned int nbits = rsa_get_nbits (keyparms);
-  gcry_mpi_t myMpiSig = NULL;
 
   /* wolfssl variables */
 
@@ -3776,7 +3753,7 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   #endif
 
   /* Shift the input data to be right aligned if needed */
-  shiftRight(inputDataBlock, &inputDataBlockLen, (nbits/8));
+  shiftRight(inputDataBlock, (word32 *)&inputDataBlockLen, (nbits/8));
 
   #ifdef GCRY_WC_RSA_DEBUG
   printf("Input data block[%d]:\n", inputDataBlockLen);
@@ -3799,7 +3776,7 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     case PUBKEY_ENC_OAEP:
       /* Comes prepadded and encoded/hashed */
       ret = wc_RsaDirect(inputDataBlock, inputDataBlockLen,
-                          outputSig, &outputSigLen,
+                          outputSig, (word32 *)&outputSigLen,
                           &wcRsaKey, RSA_PRIVATE_ENCRYPT,
                           &rng);
       if (ret < 0) {
@@ -3879,48 +3856,6 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   if (DBG_CIPHER)
     log_debug ("rsa_sign      => %s\n", gpg_strerror (rc));
   return rc;
-}
-
-static unsigned int
-wc_rsa_get_nbits (gcry_sexp_t parms)
-{
-  gcry_sexp_t l1;
-  gcry_mpi_t n;
-  unsigned int nbits;
-
-  l1 = sexp_find_token (parms, "n", 1);
-  if (!l1)
-    return 0; /* Parameter N not found.  */
-
-  n = sexp_nth_mpi (l1, 1, GCRYMPI_FMT_USG);
-  sexp_release (l1);
-  nbits = n? mpi_get_nbits (n) : 0;
-  _gcry_mpi_release (n);
-  return nbits;
-}
-
-static gpg_err_code_t
-wc_compute_keygrip (gcry_md_hd_t md, gcry_sexp_t keyparam)
-{
-  gcry_sexp_t l1;
-  const char *data;
-  size_t datalen;
-
-  l1 = sexp_find_token (keyparam, "n", 1);
-  if (!l1)
-    return GPG_ERR_NO_OBJ;
-
-  data = sexp_nth_data (l1, 1, &datalen);
-  if (!data)
-    {
-      sexp_release (l1);
-      return GPG_ERR_NO_OBJ;
-    }
-
-  _gcry_md_write (md, data, datalen);
-  sexp_release (l1);
-
-  return 0;
 }
 
 #endif
