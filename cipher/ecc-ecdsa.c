@@ -416,6 +416,8 @@ _wc_mpi_to_libgcrypt_mpi(mp_int *wc_mpi, gcry_mpi_t gcry_mpi)
   /* to avoid and copy issues */
   _gcry_mpi_set(gcry_mpi, temp_mpi);
 
+  /* Free the temporary MPI to prevent memory leak */
+  _gcry_mpi_release(temp_mpi);
 
   return ret;
 }
@@ -517,6 +519,8 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
   /* will grab from libgcrypt */
   byte* wc_hash = NULL;
   word32 wc_hash_len = 0;
+  size_t hash_buflen = 0;
+  size_t k_buflen = 0;
 
 
   wc_curve_id = wc_name_to_curve_id(ec->name);
@@ -624,14 +628,15 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     /* LIBGCRYPT CODE -- END: */
 
   if (k != NULL) {
-    ret = _gcry_mpi_print(GCRYMPI_FMT_USG, (unsigned char *)&wc_k,
-                                    WC_MAX_CURVE_SIZE, (size_t *)&wc_k_len, k);
+    k_buflen = 0;
+    ret = _gcry_mpi_print(GCRYMPI_FMT_USG, wc_k, WC_MAX_CURVE_SIZE, &k_buflen, k);
     if (ret != 0) {
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
       goto leave;
     }
+    wc_k_len = k_buflen;
   }
     /* Right align the key */
     /* libgcrypt wont extend to full length, so we need to do it manually */
@@ -658,14 +663,42 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     }
   }
     /* Get the hash */
-    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, (unsigned char **)&wc_hash,
-                                (size_t *)&wc_hash_len, hash);
+    /* Use _gcry_mpi_print instead of _gcry_mpi_aprint to avoid corrupting the source MPI */
+    /* First call: get required buffer size */
+    ret = _gcry_mpi_print(GCRYMPI_FMT_USG, NULL, 0, &hash_buflen, hash);
     if (ret != 0) {
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
       goto leave;
     }
+
+    /* Allocate buffer (secure if source MPI is secure) */
+    size_t alloc_size = hash_buflen ? hash_buflen : 1;
+    if (mpi_is_secure(hash)) {
+      wc_hash = _gcry_malloc_secure(alloc_size);
+    }
+    else {
+      wc_hash = _gcry_malloc(alloc_size);
+    }
+    if (!wc_hash) {
+      rc = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      wc_FreeRng(&rng);
+      goto leave;
+    }
+
+    /* Second call: fill the buffer */
+    ret = _gcry_mpi_print(GCRYMPI_FMT_USG, wc_hash, alloc_size, &hash_buflen, hash);
+    if (ret != 0) {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      _gcry_free(wc_hash);
+      wc_hash = NULL;
+      wc_ecc_free(&wc_key);
+      wc_FreeRng(&rng);
+      goto leave;
+    }
+    wc_hash_len = hash_buflen;
 
     ret = mp_init(&wc_r_mpi);
     if (ret != 0) {
@@ -848,14 +881,14 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     mpi_free (k_1);
     mpi_free (sum);
     mpi_free (dr);
-    if (!k_supplied)
-        mpi_free (k);
-    if (hash != input)
-        mpi_free (hash);
-    mpi_free (hash_computed_internally);
 
   }
-
+  if (!k_supplied)
+    mpi_free (k);
+  if (hash != input) {
+    mpi_free (hash);
+  }
+  mpi_free (hash_computed_internally);
   return rc;
 }
 
@@ -896,10 +929,12 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   mp_int wc_s_mpi;
 
   int is_valid_signature = 0;
+  size_t hash_buflen = 0;
 
   /* wc_hash */
   byte* wc_hash = NULL;
   word32 wc_hash_len = 0;
+  size_t alloc_size = 0;
 
   wc_curve_id = wc_name_to_curve_id(ec->name);
 
@@ -1020,14 +1055,43 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
         goto leave;
     }
 
-    /* Get the hash value */
-    ret = _gcry_mpi_aprint(GCRYMPI_FMT_USG, (unsigned char **)&wc_hash,
-                                (size_t *)&wc_hash_len, hash);
+    /* Convert MPI to byte buffer for wolfSSL.
+     * Use _gcry_mpi_print instead of _gcry_mpi_aprint to avoid corrupting the source MPI.
+     * _gcry_mpi_aprint has internal behavior that makes the source MPI unsafe to free afterward,
+     * causing segfaults. _gcry_mpi_print is read-only and leaves the source MPI untouched. */
+
+    /* First call: get required buffer size */
+    ret = _gcry_mpi_print(GCRYMPI_FMT_USG, NULL, 0, &hash_buflen, hash);
     if (ret != 0) {
       err = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       goto leave;
     }
+
+    /* Allocate buffer (secure if source MPI is secure) */
+    alloc_size = hash_buflen ? hash_buflen : 1;
+    if (mpi_is_secure(hash)) {
+      wc_hash = _gcry_malloc_secure(alloc_size);
+    }
+    else {
+      wc_hash = _gcry_malloc(alloc_size);
+    }
+
+    if (!wc_hash) {
+      err = GPG_ERR_ENOMEM;
+      wc_ecc_free(&wc_key);
+      goto leave;
+    }
+
+    /* Second call: extract MPI data to buffer */
+    ret = _gcry_mpi_print(GCRYMPI_FMT_USG, wc_hash, hash_buflen, &hash_buflen, hash);
+    if (ret != 0) {
+      err = GPG_ERR_BROKEN_PUBKEY;
+      _gcry_free(wc_hash);
+      wc_ecc_free(&wc_key);
+      goto leave;
+    }
+    wc_hash_len = (word32)hash_buflen;
 
     /* Verify the signature using wolfSSL */
     ret = wc_ecc_verify_hash_ex(&wc_r_mpi, &wc_s_mpi,
@@ -1051,8 +1115,11 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
     }
 
 
-    /* Cleanup */
-    _gcry_free(wc_hash);
+
+    mp_clear(&wc_r_mpi);
+    mp_clear(&wc_s_mpi);
+    if (wc_hash != NULL)
+      _gcry_free(wc_hash);
     wc_ecc_free(&wc_key);
   }
   else {
@@ -1112,13 +1179,15 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
     mpi_free (h2);
     mpi_free (h1);
     mpi_free (h);
-    if (hash != input)
-      mpi_free (hash);
-    mpi_free (hash_computed_internally);
+
   }
 leave:
+  if (hash != input) {
+    mpi_free (hash);
+  }
+  mpi_free (hash_computed_internally);
 
-return err;
+  return err;
 }
 
 #endif
