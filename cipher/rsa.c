@@ -2956,12 +2956,15 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
       /* Initialize Key */
       ec = wc_InitRsaKey(&rsaKey, NULL);
       if (ec) {
+        wc_FreeRng(&rng);
         return ec;
       }
 
       /* WolfSSL Key Generation */
       ec = wc_MakeRsaKey(&rsaKey, bits, e, &rng);
       if (ec) {
+        wc_FreeRsaKey(&rsaKey);
+        wc_FreeRng(&rng);
         return ec;
       }
 
@@ -2983,11 +2986,15 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
                             wc_q, &wc_q_len);
       PRIVATE_KEY_LOCK();
       if (ec) {
+        wc_FreeRsaKey(&rsaKey);
+        wc_FreeRng(&rng);
         return ec;
       }
 
       ec = mp_to_unsigned_bin(&rsaKey.u, wc_u);
       if (ec) {
+        wc_FreeRsaKey(&rsaKey);
+        wc_FreeRng(&rng);
         return ec;
       }
 
@@ -2998,6 +3005,10 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
       _gcry_mpi_scan(&sk.p, GCRYMPI_FMT_USG, wc_q, wc_q_len, NULL); /* libgcrypt puts q into p */
       _gcry_mpi_scan(&sk.q, GCRYMPI_FMT_USG, wc_p, wc_p_len, NULL); /* libgcrypt puts p into q */
       _gcry_mpi_scan(&sk.u, GCRYMPI_FMT_USG, wc_u, wc_u_len, NULL);
+
+      /* Free wolfSSL resources */
+      wc_FreeRsaKey(&rsaKey);
+      wc_FreeRng(&rng);
 
       sexp_release (deriveparms);
     }
@@ -3096,12 +3107,9 @@ wc_rsa_check_secret_key (gcry_sexp_t keyparms)
 
  leave_wolf:
   wc_FreeRsaKey(&wcRsaKey);
-
  leave_wolf_rng:
   wc_FreeRng(&rng);
-
  leave:
-
   _gcry_mpi_release (sk.n);
   _gcry_mpi_release (sk.e);
   _gcry_mpi_release (sk.d);
@@ -3161,8 +3169,7 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       log_mpidump ("rsa_encrypt    e", pk.e);
     }
 
-  /* Do RSA computation and build result.  */
-  ciph = mpi_new (0);
+  /* Do RSA computation and build result - ciph will be allocated by _gcry_mpi_scan */
 
   /* wolfSSL takes over here */
 
@@ -3223,7 +3230,6 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Free wolfssl rsa key */
  leave_wolf:
   wc_FreeRsaKey(&wcRsaKey);
-
  leave:
   /* Wipe the stack buffers */
   wipememory(inputDataBlock, sizeof(inputDataBlock));
@@ -3311,10 +3317,6 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   mpi_normalize (data);
   mpi_fdiv_r (data, data, sk.n);
 
-  /* Allocate MPI for the plaintext.  */
-  plain = mpi_snew (nbits);
-
-
   /* wolfSSL takes over here */
   ret = wc_InitRsaKey(&wcRsaKey, NULL);
   if (ret != 0) {
@@ -3393,7 +3395,6 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
  leave_wolf:
   wc_FreeRsaKey(&wcRsaKey);
-
  leave:
 
   /* Wipe the stack buffers */
@@ -3613,7 +3614,6 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
           goto leave_wolf;
       }
 
-      result = mpi_new (0);
       _gcry_mpi_scan(&result, GCRYMPI_FMT_USG, myData, myDataLen, NULL);
       rc = mpi_cmp (result, data) ? GPG_ERR_BAD_SIGNATURE : 0;
 
@@ -3626,9 +3626,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
  leave_wolf:
   /* Free wolfssl rsa key */
   wc_FreeRsaKey(&wcRsaKey);
-
  leave:
-
   /* Wipe the stack buffers */
   wipememory(mySig, sizeof(mySig));
   wipememory(myData, sizeof(myData));
@@ -3766,8 +3764,7 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* output signature */
   outputSigLen = (nbits/8);
 
-  /* set mpi for sig */
-  sig = mpi_new (0);
+  /* set mpi for sig - will be allocated by _gcry_mpi_scan */
   switch(ctx.encoding) {
     case PUBKEY_ENC_PKCS1:
     case PUBKEY_ENC_PKCS1_RAW:
@@ -3829,14 +3826,10 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     rc = GPG_ERR_BAD_SIGNATURE;
   }
 
-
-
  leave_wolf:
   wc_FreeRsaKey(&wcRsaKey);
-
  leave_wolf_rng:
   wc_FreeRng(&rng);
-
  leave:
   /* Wipe the stack buffers */
   wipememory(inputDataBlock, sizeof(inputDataBlock));

@@ -1679,6 +1679,7 @@ ecc_bench (int iterations, int print_header)
             exit (1);
         }
         printf (" not supported with fips ");
+        gcry_sexp_release (key_spec);
         continue;
       }
       #endif
