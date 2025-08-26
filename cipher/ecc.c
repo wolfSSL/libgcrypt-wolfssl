@@ -2123,9 +2123,6 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   byte wc_QY[ECC_MAXSIZE];
   byte wc_D[ECC_MAXSIZE];
 
-  word32 wc_X_len = 0;
-  word32 wc_Y_len = 0;
-  word32 wc_Z_len = 0;
   word32 wc_D_len = 0;
   word32 wc_QX_len = 0;
   word32 wc_QY_len = 0;
@@ -2188,9 +2185,6 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
       }
 
       /* After generation allocate memory for the public key */
-      wc_X_len = (word32)mp_unsigned_bin_size(wc_key.pubkey.x);
-      wc_Y_len = (word32)mp_unsigned_bin_size(wc_key.pubkey.y);
-      wc_Z_len = (word32)mp_unsigned_bin_size(wc_key.pubkey.z);
       wc_D_len = (word32)wc_ecc_get_curve_size_from_id(wc_curve_id);
       wc_QX_len = wc_D_len;
       wc_QY_len = wc_D_len;
