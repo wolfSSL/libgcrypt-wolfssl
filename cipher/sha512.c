@@ -1754,7 +1754,7 @@ static const gcry_md_oid_spec_t oid_spec_sha512_256[] =
 
 const gcry_md_spec_t _gcry_digest_spec_sha512_256 =
   {
-    #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_NOSHA512_256)
+    #if !defined(HAVE_WOLFSSL) || !defined(WOLFSSL_NOSHA512_256)
     GCRY_MD_SHA512_256, {0, 1},
     #else
     GCRY_MD_SHA512_256, {0, 0}, /* Turn off FIPS mode for SHA512_256 */
@@ -1789,7 +1789,7 @@ static const gcry_md_oid_spec_t oid_spec_sha512_224[] =
 
 const gcry_md_spec_t _gcry_digest_spec_sha512_224 =
   {
-    #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_NOSHA512_224)
+    #if !defined(HAVE_WOLFSSL) || !defined(WOLFSSL_NOSHA512_224)
     GCRY_MD_SHA512_224, {0, 1},
     #else
     GCRY_MD_SHA512_224, {0, 0}, /* Turn off FIPS mode for SHA512_224 */
