@@ -29,6 +29,10 @@
 #include "bufhelp.h"
 #include "cipher.h"
 
+#if defined(HAVE_WOLFSSL)
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#endif
 
 static int
 map_mac_algo_to_md (int mac_algo)
@@ -1341,12 +1345,20 @@ const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha384 = {
 };
 
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_256 = {
+  #if !defined(HAVE_WOLFSSL) || !defined(WOLFSSL_NOSHA512_256)
   GCRY_MAC_HMAC_SHA512_256, {0, 1}, "HMAC_SHA512_256",
+  #else
+  GCRY_MAC_HMAC_SHA512_256, {0, 0}, "HMAC_SHA512_256",
+  #endif
   &hmac_ops
 };
 
 const gcry_mac_spec_t _gcry_mac_type_spec_hmac_sha512_224 = {
+  #if !defined(HAVE_WOLFSSL) || !defined(WOLFSSL_NOSHA512_224)
   GCRY_MAC_HMAC_SHA512_224, {0, 1}, "HMAC_SHA512_224",
+  #else
+  GCRY_MAC_HMAC_SHA512_224, {0, 0}, "HMAC_SHA512_224",
+  #endif
   &hmac_ops
 };
 
