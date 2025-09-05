@@ -2746,7 +2746,7 @@ check_ctr_cipher (void)
     fprintf (stderr, "  Completed CTR cipher checks.\n");
 }
 
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
 static void
 check_cfb_cipher (void)
 {
@@ -12830,7 +12830,7 @@ cipher_cbc_bulk_test (int cipher_algo)
   return -1;
 }
 
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
 static void
 buf_xor_2dst(void *vdst1, void *vdst2, const void *vsrc, size_t len)
 {
@@ -12843,7 +12843,7 @@ buf_xor_2dst(void *vdst1, void *vdst2, const void *vsrc, size_t len)
 }
 #endif
 
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
 /* Run the tests for <block cipher>-CFB-<block size>, tests bulk CFB
    decryption.  Returns NULL on success. */
 static int
