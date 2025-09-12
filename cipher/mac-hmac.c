@@ -358,6 +358,28 @@ selftests_sha1 (int extended, selftest_report_func_t report)
 }
 
 
+#ifdef HAVE_WOLFSSL
+/* If returning 0, then assume all key lengths are allowed */
+/* Any other value is lenght in bytes that is allowed */
+int wc_HamcKeyAllowed(int algo) {
+    switch (algo) {
+        case GCRY_MD_SHA1:
+        case GCRY_MD_SHA224:
+        case GCRY_MD_SHA256:
+        case GCRY_MD_SHA384:
+        case GCRY_MD_SHA512:
+            return 20;
+        case GCRY_MD_SHA3_224:
+        case GCRY_MD_SHA3_256:
+        case GCRY_MD_SHA3_384:
+        case GCRY_MD_SHA3_512:
+            return 64;
+        default:
+            return 0;
+    }
+}
+#endif
+
 
 static gpg_err_code_t
 selftests_sha224 (int extended, selftest_report_func_t report)
@@ -377,7 +399,6 @@ selftests_sha224 (int extended, selftest_report_func_t report)
           0x45, 0x69, 0x0f, 0x3a, 0x7e, 0x9e, 0x6d, 0x0f,
           0x8b, 0xbe, 0xa2, 0xa3, 0x9e, 0x61, 0x48, 0x00,
           0x8f, 0xd0, 0x5e, 0x44 } },
-
       { "data-9 key-20",
         "Hi There",
 	"\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
@@ -458,8 +479,14 @@ selftests_sha224 (int extended, selftest_report_func_t report)
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
+    #ifdef HAVE_WOLFSSL
+      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA224) && errtxt)
+    #else
       if (errtxt)
+    #endif
+      {
         goto failed;
+      }
       if (!extended)
         break;
     }
@@ -572,8 +599,11 @@ selftests_sha256 (int extended, selftest_report_func_t report)
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
+    #ifdef HAVE_WOLFSSL
+      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA256) && errtxt)
+    #else
       if (errtxt)
-        goto failed;
+    #endif
       if (!extended)
         break;
     }
@@ -698,7 +728,11 @@ selftests_sha384 (int extended, selftest_report_func_t report)
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
+    #ifdef HAVE_WOLFSSL
+      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA384) && errtxt)
+    #else
       if (errtxt)
+    #endif
         goto failed;
       if (!extended)
         break;
@@ -836,8 +870,11 @@ selftests_sha512 (int extended, selftest_report_func_t report)
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
+    #ifdef HAVE_WOLFSSL
+      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA512) && errtxt)
+    #else
       if (errtxt)
-        goto failed;
+    #endif
       if (!extended)
         break;
     }
@@ -1243,8 +1280,11 @@ selftests_sha3 (int hashalgo, int extended, selftest_report_func_t report)
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           expect, nexpect, !!tv[tvidx].trunc);
+    #ifdef HAVE_WOLFSSL
+      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(hashalgo) && errtxt)
+    #else
       if (errtxt)
-        goto failed;
+    #endif
       if (!extended)
         break;
     }

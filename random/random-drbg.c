@@ -1930,12 +1930,12 @@ _gcry_rngdrbg_randomize (void *buffer, size_t length,
   int ret;
   ret = wc_InitRng(&rng);
   if (ret != 0) {
-    printf("do_randomize: wc_InitRng failed %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRng failed with ret=%d\n", ret);
     return;
   }
   ret = wc_RNG_GenerateBlock(&rng, buffer, length);
   if (ret != 0) {
-    printf("do_randomize: wc_RNG_GenerateBlock failed %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_RNG_GenerateBlock failed with ret=%d\n", ret);
     return;
   }
   wc_FreeRng(&rng);

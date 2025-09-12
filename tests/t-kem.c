@@ -404,7 +404,11 @@ test_kem_raw_x25519 (int testno)
   err = gcry_kem_keypair (GCRY_KEM_RAW_X25519,
                           pubkey, GCRY_KEM_ECC_X25519_PUBKEY_LEN,
                           seckey, GCRY_KEM_ECC_X25519_SECKEY_LEN);
+  #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+  if (1)
+  #else
   if (in_fips_mode)
+  #endif
     {
       if (!err)
         fail ("gcry_kem_keypair is not expected to work in FIPS mode for test %d",
@@ -481,7 +485,11 @@ test_kem_dhkem_x25519 (int testno)
   err = gcry_kem_keypair (GCRY_KEM_DHKEM25519,
                           pubkey, GCRY_KEM_DHKEM25519_PUBKEY_LEN,
                           seckey, GCRY_KEM_DHKEM25519_SECKEY_LEN);
+  #if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+  if (1)
+  #else
   if (in_fips_mode)
+  #endif
     {
       if (!err)
         fail ("gcry_kem_keypair is not expected to work in FIPS mode for test %d",

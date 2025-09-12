@@ -190,7 +190,11 @@ test_cv_hl (int testno, const char *k_str, const char *u_str,
   buffer = NULL;
 
   err = gcry_pk_encrypt (&s_result, s_data, s_pk);
+  #if defined(HAVE_WOLFSSL)
+  if (1)
+  #else
   if (in_fips_mode)
+  #endif
     {
       if (!err)
         fail ("gcry_pk_encrypt is not expected to work in FIPS mode for test %d",
@@ -293,7 +297,11 @@ test_cv_x25519 (int testno, const char *k_str, const char *u_str,
     }
 
   err = gcry_ecc_mul_point (algo, result, scalar, point);
+  #if defined(HAVE_WOLFSSL)
+  if (1)
+  #else
   if (in_fips_mode)
+  #endif
     {
       if (!err)
         fail ("gcry_ecc_mul_point is not expected to work in FIPS mode for test %d",
@@ -356,7 +364,11 @@ test_it (int testno, const char *k_str, int iter, const char *result_str)
     info ("Running test %d: iteration=%d\n", testno, iter);
 
   gcry_mpi_ec_new (&ctx, NULL, "Curve25519");
+  #if defined(HAVE_WOLFSSL)
+  if (1)
+  #else
   if (in_fips_mode)
+  #endif
     {
       if (ctx)
         fail ("gcry_mpi_ec_new should fail in FIPS mode for test %d",

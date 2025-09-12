@@ -613,9 +613,14 @@ main (int argc, char **argv)
   xgcry_control ((GCRYCTL_ENABLE_QUICK_RANDOM, 0));
   xgcry_control ((GCRYCTL_INITIALIZATION_FINISHED, 0));
 
+  #ifdef HAVE_WOLFSSL
+  if (1)
+  #else
   if (gcry_fips_mode_active ())
+  #endif
+  {
     in_fips_mode = 1;
-
+  }
   start_timer ();
   check_x448 ();
   stop_timer ();

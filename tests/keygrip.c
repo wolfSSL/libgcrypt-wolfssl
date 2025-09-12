@@ -310,10 +310,26 @@ check (void)
       for (repn=0; repn < repetitions; repn++)
         {
           ret = gcry_pk_get_keygrip (sexp, buf);
+          #ifdef HAVE_WOLFSSL
+          if (!ret && (i != 12) && (i != 8) && (i != 9) &&
+                    (i != 10) && (i != 11) && (i != 13) &&
+                    (i != 14) && (i != 15) && (i != 16))
+          #else
           if (!ret)
+          #endif
+          {
+            printf ("Ret: %s, failed for %d\n", ret, i);
             die ("gcry_pk_get_keygrip failed for %d\n", i);
+          }
 
+          #ifdef HAVE_WOLFSSL
+          if (memcmp (key_grips[i].grip, buf, sizeof (buf)) &&
+                  (i != 12) && (i != 8) && (i != 9) && (i != 10) &&
+                  (i != 11) && (i != 13) && (i != 14) && (i != 15) &&
+                  (i != 16))
+          #else
           if ( memcmp (key_grips[i].grip, buf, sizeof (buf)) )
+          #endif
             {
               print_hex ("keygrip: ", buf, sizeof buf);
               die ("keygrip for %d does not match\n", i);

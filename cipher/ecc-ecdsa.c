@@ -384,6 +384,7 @@ _wc_mpi_to_libgcrypt_mpi(mp_int *wc_mpi, gcry_mpi_t gcry_mpi)
 
   ret = mp_unsigned_bin_size(wc_mpi);
   if (ret <= 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] mp_unsigned_bin_size failed with ret=%d\n", ret);
     return GPG_ERR_ENOMEM;
   }
   else {
@@ -399,6 +400,7 @@ _wc_mpi_to_libgcrypt_mpi(mp_int *wc_mpi, gcry_mpi_t gcry_mpi)
 
   ret = mp_to_unsigned_bin(wc_mpi, mpi_bin);
   if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] mp_to_unsigned_bin failed with ret=%d\n", ret);
     XFREE(mpi_bin, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     return ret;
   }
@@ -462,6 +464,9 @@ _libgcrypt_mpi_to_wc_mpi(gcry_mpi_t gcry_mpi, mp_int *wc_mpi, word32 wc_mpi_len)
 
   ret = mp_read_unsigned_bin(wc_mpi, mpi_bin_rightAligned,
                                 mpi_bin_rightAligned_len);
+  if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] mp_read_unsigned_bin failed with ret=%d\n", ret);
+  }
 
   /* Only free if we allocated the right aligned buffer */
   if (wc_mpi_len > 0 && mpi_bin_rightAligned != mpi_bin) {
@@ -703,6 +708,7 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 
     ret = mp_init(&wc_r_mpi);
     if (ret != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] mp_init(wc_r_mpi) failed with ret=%d\n", ret);
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
@@ -711,6 +717,7 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 
     ret = mp_init(&wc_s_mpi);
     if (ret != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] mp_init(wc_s_mpi) failed with ret=%d\n", ret);
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
@@ -723,6 +730,7 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
                             &rng, &wc_key,
                             &wc_r_mpi, &wc_s_mpi);
     if (ret != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_ecc_sign_hash_ex failed with ret=%d\n", ret);
       rc = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);

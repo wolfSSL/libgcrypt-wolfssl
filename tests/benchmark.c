@@ -1609,10 +1609,12 @@ ecc_bench (int iterations, int print_header)
       int is_ed25519;
       int is_ed448;
       int is_gost;
+      int is_192;
 
       is_ed25519 = !strcmp (p_sizes[testno], "Ed25519");
       is_ed448 = !strcmp (p_sizes[testno], "Ed448");
       is_gost = !strncmp (p_sizes[testno], "gost", 4);
+      is_192 = !strcmp (p_sizes[testno], "192");
 
       /* Only P-{224,256,384,521} and EdDSA curves are allowed in fips mode */
       if (gcry_fips_mode_active()
@@ -1666,6 +1668,9 @@ ecc_bench (int iterations, int print_header)
       err = gcry_pk_genkey (&key_pair, key_spec);
       #if defined(HAVE_WOLFSSL)
       if (
+          #ifdef HAVE_WOLFSSL
+          is_192 || is_gost ||
+          #endif
           #if !defined(HAVE_ED25519)
           is_ed25519 ||
           #endif
@@ -1673,7 +1678,7 @@ ecc_bench (int iterations, int print_header)
           is_ed448 ||
           #endif
           0) {
-        if (strncmp(gpg_strerror(err), "Not supported", 13) != 0) {
+        if (strncmp(gpg_strerror(err), "Not supported", 13) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 22) != 0) {
             fprintf (stderr, PGM ": Not expected error for `%s' : error %s\n",
             p_sizes[testno], gpg_strerror(err));
             exit (1);

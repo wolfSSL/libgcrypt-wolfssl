@@ -355,12 +355,12 @@ do_randomize (void *buffer, size_t length, enum gcry_random_level level)
   int ret;
   ret = wc_InitRng(&rng);
   if (ret != 0) {
-    printf("do_randomize: wc_InitRng failed %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRng failed with ret=%d\n", ret);
     return;
   }
   ret = wc_RNG_GenerateBlock(&rng, buffer, length);
   if (ret != 0) {
-    printf("do_randomize: wc_RNG_GenerateBlock failed %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_RNG_GenerateBlock failed with ret=%d\n", ret);
     return;
   }
   wc_FreeRng(&rng);
@@ -495,11 +495,11 @@ _gcry_create_nonce (void *buffer, size_t length)
   int ret;
   ret = wc_InitRng(&rng);
   if (ret != 0) {
-    printf("failed to initialize rng\n");
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRng failed with ret=%d\n", ret);
   }
   ret = wc_RNG_GenerateBlock(&rng, buffer, length);
   if (ret != 0) {
-    printf("failed to generate block\n");
+    fprintf(stderr, "[WOLFSSL ERROR] wc_RNG_GenerateBlock failed with ret=%d\n", ret);
   }
   wc_FreeRng(&rng);
 }

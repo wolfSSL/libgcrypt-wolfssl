@@ -3077,6 +3077,7 @@ wc_rsa_check_secret_key (gcry_sexp_t keyparms)
   /* Initialize wolfssl rng */
   ret = wc_InitRng(&rng);
   if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRng failed with ret=%d\n", ret);
     rc = GPG_ERR_BAD_SECKEY;
     goto leave;
   }
@@ -3084,8 +3085,8 @@ wc_rsa_check_secret_key (gcry_sexp_t keyparms)
   /* Initialize wolfssl rsa key */
   ret = wc_InitRsaKey(&wcRsaKey, NULL);
   if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRsaKey failed with ret=%d\n", ret);
     rc = GPG_ERR_BAD_SECKEY;
-    printf("Error initializing wolfssl rsa key\n");
     goto leave_wolf_rng;
   }
 
@@ -3100,6 +3101,7 @@ wc_rsa_check_secret_key (gcry_sexp_t keyparms)
   /* Now we check the key with wolfSSL */
   ret = wc_CheckRsaKey(&wcRsaKey);
   if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_CheckRsaKey failed with ret=%d\n", ret);
     rc = GPG_ERR_BAD_SECKEY;
   }
 
@@ -3182,6 +3184,7 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Pass to general function to get wolfssl rsa key */
   rc = _gcryp_rsa_key_to_wolfssl_rsa_key(&pk, &wcRsaKey);
   if (rc) {
+    fprintf(stderr, "[WOLFSSL ERROR] _gcryp_rsa_key_to_wolfssl_rsa_key failed with rc=%d\n", rc);
     goto leave_wolf;
   }
 
@@ -3201,6 +3204,7 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   ret = wc_RsaDirect(inputDataBlock, inputDataBlockLen, cipherData,
                         &cipherDataLen, &wcRsaKey, RSA_PUBLIC_ENCRYPT, NULL);
   if (ret != (nbits/8)) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_RsaDirect (encrypt) failed with ret=%d (expected=%d)\n", ret, (nbits/8));
     rc = GPG_ERR_INV_OBJ;
     goto leave_wolf;
   }
@@ -3345,6 +3349,7 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Decrypt the data */
   ret = wc_RsaDirect(inputDataBlock, inputDataBlockLen, plainData, &plainDataLen, &wcRsaKey, RSA_PRIVATE_DECRYPT, NULL);
   if (ret != (nbits/8)) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_RsaDirect (decrypt) failed with ret=%d (expected=%d)\n", ret, (nbits/8));
     rc = GPG_ERR_INV_OBJ;
     goto leave_wolf;
   }
@@ -3500,8 +3505,8 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Initialize wolfssl rsa key */
   ret = wc_InitRsaKey(&wcRsaKey, 0);
   if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRsaKey failed with ret=%d\n", ret);
     rc = GPG_ERR_INV_OBJ;
-    //printf("Error initializing wolfssl rsa key\n");
     goto leave;
   }
 
@@ -3539,6 +3544,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     case PUBKEY_ENC_PSS:
       digestLen = wc_HashGetDigestSize(_libgcrypt_to_wc_hash(ctx.hash_algo));
       if (digestLen < 0) {
+        fprintf(stderr, "[WOLFSSL ERROR] wc_HashGetDigestSize failed with ret=%d\n", digestLen);
         rc = GPG_ERR_INV_OBJ;
         goto leave_wolf;
       }
@@ -3572,6 +3578,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
         ret = _wc_create_digest(expectedData, expectedDataLen, digest,
                               digestLen, _libgcrypt_to_wc_hash(ctx.hash_algo));
         if (ret != 0) {
+          fprintf(stderr, "[WOLFSSL ERROR] _wc_create_digest failed with ret=%d\n", ret);
           rc = GPG_ERR_DIGEST_ALGO;
           goto leave_wolf;
         }
@@ -3583,6 +3590,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
                                       _libgcrypt_to_wc_mgf(ctx.hash_algo),
                                       ctx.saltlen, &wcRsaKey);
       if (ret < 0) {
+        fprintf(stderr, "[WOLFSSL ERROR] wc_RsaPSS_Verify_ex failed with ret=%d\n", ret);
         rc = GPG_ERR_BAD_SIGNATURE;
         goto leave_wolf;
       }
@@ -3592,6 +3600,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
                                       _libgcrypt_to_wc_hash(ctx.hash_algo),
                                       ctx.saltlen, nbits);
       if (ret < 0) {
+        fprintf(stderr, "[WOLFSSL ERROR] wc_RsaPSS_CheckPadding_ex failed with ret=%d\n", ret);
         rc = GPG_ERR_BAD_SIGNATURE;
         goto leave_wolf;
       }
@@ -3610,6 +3619,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       ret = wc_RsaDirect(mySig, mySigLen, myData, (word32 *)&myDataLen,
                         &wcRsaKey, RSA_PUBLIC_DECRYPT, NULL);
       if (ret < 0) {
+          fprintf(stderr, "[WOLFSSL ERROR] wc_RsaDirect (verify) failed with ret=%d\n", ret);
           rc = GPG_ERR_BAD_SIGNATURE;
           goto leave_wolf;
       }
@@ -3717,6 +3727,7 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Initialize wolfssl rng */
   ret = wc_InitRng(&rng);
   if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRng failed with ret=%d\n", ret);
     rc = GPG_ERR_INV_OBJ;
     goto leave;
   }
@@ -3724,6 +3735,7 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   /* Initialize wolfssl rsa key */
   ret = wc_InitRsaKey(&wcRsaKey, 0);
   if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRsaKey failed with ret=%d\n", ret);
     rc = GPG_ERR_INV_OBJ;
     goto leave_wolf_rng;
   }
@@ -3777,6 +3789,7 @@ wc_rsa_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
                           &wcRsaKey, RSA_PRIVATE_ENCRYPT,
                           &rng);
       if (ret < 0) {
+        fprintf(stderr, "[WOLFSSL ERROR] wc_RsaDirect (sign) failed with ret=%d\n", ret);
         rc = GPG_ERR_BAD_SIGNATURE;
         goto leave_wolf;
       }

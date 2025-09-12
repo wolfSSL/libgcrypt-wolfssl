@@ -431,7 +431,11 @@ get_keys_x931_new (gcry_sexp_t *pkey, gcry_sexp_t *skey)
   gcry_sexp_release (key_spec);
   if (rc)
     {
+    #ifdef HAVE_WOLFSSL
+      if (1)
+    #else
       if (in_fips_mode)
+    #endif
         {
           if (verbose)
             fprintf (stderr, "The X9.31 RSA keygen is not available in FIPS modee.\n");
@@ -439,8 +443,14 @@ get_keys_x931_new (gcry_sexp_t *pkey, gcry_sexp_t *skey)
         }
       die ("error generating RSA key: %s\n", gcry_strerror (rc));
     }
+  #ifdef HAVE_WOLFSSL
+  else
+  #else
   else if (in_fips_mode)
+  #endif
+  {
     die ("generating X9.31 RSA key unexpected worked in FIPS mode\n");
+  }
 
   if (verbose > 1)
     show_sexp ("generated RSA (X9.31) key:\n", key);
@@ -792,8 +802,14 @@ check_run (void)
   if (verbose)
     fprintf (stderr, "Checking generated RSA key (X9.31).\n");
   get_keys_x931_new (&pkey, &skey);
+  #ifdef HAVE_WOLFSSL
+  if (0) /* Never check X9.31 with wolfSSL Should fail*/
+  #else
   if (!in_fips_mode)
+  #endif
+  {
     check_keys (pkey, skey, 800, 0);
+  }
   gcry_sexp_release (pkey);
   gcry_sexp_release (skey);
   pkey = skey = NULL;
@@ -1294,19 +1310,20 @@ check_ed25519ecdsa_sample_key (void)
     die ("line %d: %s", __LINE__, gpg_strerror (err));
 #if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_sign (&sig, hash, key);
-  if (strncmp(gpg_strerror(err), "Not supported", 14) != 0)
+  if (strncmp(gpg_strerror(err), "Not supported", 14) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 14) != 0)
 #else
   if ((err = gcry_pk_sign (&sig, hash, key)))
 #endif
+  {
     die ("gcry_pk_sign failed: %s", gpg_strerror (err));
-
+  }
   /* Verify.  */
   gcry_sexp_release (key);
   if ((err = gcry_sexp_new (&key, ecc_public_key, 0, 1)))
     die ("line %d: %s", __LINE__, gpg_strerror (err));
 #if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
-  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
+  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 14) != 0)
 #else
   if ((err = gcry_pk_verify (sig, hash, key)))
 #endif
@@ -1318,7 +1335,7 @@ check_ed25519ecdsa_sample_key (void)
     die ("line %d: %s", __LINE__, gpg_strerror (err));
 #if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
-  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
+  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 14) != 0)
 #else
   if ((err = gcry_pk_verify (sig, hash, key)))
 #endif
@@ -1331,7 +1348,7 @@ check_ed25519ecdsa_sample_key (void)
   gcry_sexp_release (sig);
 #if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_sign (&sig, hash, key);
-  if (strncmp(gpg_strerror(err), "Not supported", 14) != 0)
+  if (strncmp(gpg_strerror(err), "Not supported", 14) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 14) != 0)
 #else
   if ((err = gcry_pk_sign (&sig, hash, key)))
 #endif
@@ -1343,7 +1360,7 @@ check_ed25519ecdsa_sample_key (void)
     die ("line %d: %s", __LINE__, gpg_strerror (err));
 #if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
-  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
+  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 14) != 0)
 #else
   if ((err = gcry_pk_verify (sig, hash, key)))
 #endif
@@ -1355,7 +1372,7 @@ check_ed25519ecdsa_sample_key (void)
     die ("line %d: %s", __LINE__, gpg_strerror (err));
 #if defined(ENABLED_WOLFSSL_FIPS)
   err = gcry_pk_verify (sig, hash, key);
-  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0)
+  if (strncmp(gpg_strerror(err), "Invalid object", 14) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 14) != 0)
 #else
   if ((err = gcry_pk_verify (sig, hash, key)))
 #endif

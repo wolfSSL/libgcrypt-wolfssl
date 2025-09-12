@@ -1035,8 +1035,7 @@ wolfssl_sha384_transform_generic (void *ctx, const unsigned char *data, size_t n
 
   ret = wc_Sha384Update((wc_Sha384*)&hd->wc_sha512, data, 128 * nblks);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha384_transform_generic): wc_Sha384Update failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha384Update failed with ret=%d\n", ret);
   }
 
   return 0;
@@ -1050,8 +1049,7 @@ wolfssl_sha512_transform_generic (void *ctx, const unsigned char *data, size_t n
 
   ret = wc_Sha512Update((wc_Sha512*)&hd->wc_sha512, data, 128 * nblks);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_transform_generic): wc_Sha512Update failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512Update failed with ret=%d\n", ret);
   }
 
   return 0;
@@ -1065,8 +1063,7 @@ wolfssl_sha512_224_transform_generic (void *ctx, const unsigned char *data, size
 
   ret = wc_Sha512_224Update((wc_Sha512_224*)&hd->wc_sha512, data, 128 * nblks);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_224_transform_generic): wc_Sha512_224Update failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_224Update failed with ret=%d\n", ret);
   }
 
   return 0;
@@ -1082,8 +1079,7 @@ wolfssl_sha512_256_transform_generic (void *ctx, const unsigned char *data, size
 
   ret = wc_Sha512_256Update((wc_Sha512_256*)&hd->wc_sha512, data, 128 * nblks);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_256_transform_generic): wc_Sha512_256Update failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_256Update failed with ret=%d\n", ret);
   }
 
   return 0;
@@ -1159,8 +1155,7 @@ wolfssl_sha384_init(void* context, unsigned int flags)
 
   ret = wc_InitSha384((wc_Sha384*)&hd->wc_sha512);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha384_init): wc_InitSha384 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha384 failed with ret=%d\n", ret);
   }
 
   wolfssl_sha384_common_init(hd);
@@ -1175,8 +1170,7 @@ wolfssl_sha512_init(void* context, unsigned int flags)
 
   ret = wc_InitSha512((wc_Sha512*)&hd->wc_sha512);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_init): wc_InitSha512 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha512 failed with ret=%d\n", ret);
   }
 
   wolfssl_sha512_common_init(hd);
@@ -1192,8 +1186,7 @@ wolfssl_sha512_224_init(void* context, unsigned int flags)
 
   ret = wc_InitSha512_224((wc_Sha512_224*)&hd->wc_sha512);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_224_init): wc_InitSha512_224 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha512_224 failed with ret=%d\n", ret);
   }
 
   wolfssl_sha512_224_common_init(hd);
@@ -1210,8 +1203,7 @@ wolfssl_sha512_256_init(void* context, unsigned int flags)
 
   ret = wc_InitSha512_256((wc_Sha512_256*)&hd->wc_sha512);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_256_init): wc_InitSha512_256 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha512_256 failed with ret=%d\n", ret);
   }
 
   wolfssl_sha512_256_common_init(hd);
@@ -1235,15 +1227,13 @@ wolfssl_sha384_final(void *context)
   if (hd->bctx.count > 0) {
     ret = wc_Sha384Update((wc_Sha384*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
     if (ret != 0) {
-      printf("Error libgcrypt (wolfssl_sha384_final): wc_Sha384Update failed\n");
-      printf("Return: %d\n", ret);
+      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha384Update failed with ret=%d\n", ret);
     }
   }
 
   ret = wc_Sha384Final((wc_Sha384*)&hd->wc_sha512, temp_buffer);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha384_final): wc_Sha384Final failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha384Final failed with ret=%d\n", ret);
   }
   memcpy(hd->bctx.buf, temp_buffer, WC_SHA384_DIGEST_SIZE);
   hd->bctx.count = 0;
@@ -1261,15 +1251,13 @@ wolfssl_sha512_final(void *context)
   if (hd->bctx.count > 0) {
     ret = wc_Sha512Update((wc_Sha512*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
     if (ret != 0) {
-      printf("Error libgcrypt (wolfssl_sha512_final): wc_Sha512Update failed\n");
-      printf("Return: %d\n", ret);
+      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512Update failed with ret=%d\n", ret);
     }
   }
 
   ret = wc_Sha512Final((wc_Sha512*)&hd->wc_sha512, temp_buffer);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_final): wc_Sha512Final failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512Final failed with ret=%d\n", ret);
   }
   memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_DIGEST_SIZE);
   hd->bctx.count = 0;
@@ -1288,15 +1276,13 @@ wolfssl_sha512_224_final(void *context)
   if (hd->bctx.count > 0) {
     ret = wc_Sha512_224Update((wc_Sha512_224*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
     if (ret != 0) {
-      printf("Error libgcrypt (wolfssl_sha512_224_final): wc_Sha512_224Update failed\n");
-      printf("Return: %d\n", ret);
+      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_224Update failed with ret=%d\n", ret);
     }
   }
 
   ret = wc_Sha512_224Final((wc_Sha512_224*)&hd->wc_sha512, temp_buffer);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_224_final): wc_Sha512_224Final failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_224Final failed with ret=%d\n", ret);
   }
   memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_224_DIGEST_SIZE);
   hd->bctx.count = 0;
@@ -1316,15 +1302,13 @@ wolfssl_sha512_256_final(void *context)
   if (hd->bctx.count > 0) {
     ret = wc_Sha512_256Update((wc_Sha512_256*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
     if (ret != 0) {
-      printf("Error libgcrypt (wolfssl_sha512_256_final): wc_Sha512_256Update failed\n");
-      printf("Return: %d\n", ret);
+      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_256Update failed with ret=%d\n", ret);
     }
   }
 
   ret = wc_Sha512_256Final((wc_Sha512_256*)&hd->wc_sha512, temp_buffer);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha512_256_final): wc_Sha512_256Final failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_256Final failed with ret=%d\n", ret);
   }
   memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_256_DIGEST_SIZE);
   hd->bctx.count = 0;

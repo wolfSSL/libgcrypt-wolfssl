@@ -1605,8 +1605,7 @@ wolfssl_sha3_224_init(void *context, unsigned int flags)
 
   ret = wc_InitSha3_224(hd->wc_sha3, NULL, INVALID_DEVID);
   if (ret != 0) {
-    printf("Error libgcrypt (sha3_224_init): wc_InitSha3_224 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] sha3_224_init: wc_InitSha3_224 failed: %d\n", ret);
   }
 
   hd->count = 0;
@@ -1627,8 +1626,7 @@ wolfssl_sha3_256_init(void *context, unsigned int flags)
 
   ret = wc_InitSha3_256(hd->wc_sha3, NULL, INVALID_DEVID);
   if (ret != 0) {
-    printf("Error libgcrypt (sha3_256_init): wc_InitSha3_256 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] sha3_256_init: wc_InitSha3_256 failed: %d\n", ret);
   }
 
   hd->count = 0;
@@ -1649,8 +1647,7 @@ wolfssl_sha3_384_init(void *context, unsigned int flags)
 
   ret = wc_InitSha3_384(hd->wc_sha3, NULL, INVALID_DEVID);
   if (ret != 0) {
-    printf("Error libgcrypt (sha3_384_init): wc_InitSha3_384 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] sha3_384_init: wc_InitSha3_384 failed: %d\n", ret);
   }
 
   hd->count = 0;
@@ -1671,8 +1668,7 @@ wolfssl_sha3_512_init(void *context, unsigned int flags)
 
   ret = wc_InitSha3_512(hd->wc_sha3, NULL, INVALID_DEVID);
   if (ret != 0) {
-    printf("Error libgcrypt (sha3_512_init): wc_InitSha3_512 failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] sha3_512_init: wc_InitSha3_512 failed: %d\n", ret);
   }
 
   hd->count = 0;
@@ -1706,13 +1702,12 @@ wolfssl_keccak_write(void *context, const void *inbuf_arg, size_t inlen)
       ret = wc_Sha3_512_Update(hd->wc_sha3, inbuf, inlen);
       break;
     default:
-      printf("Error libgcrypt (wolfssl_keccak_write): Unknown SHA3 variant\n");
+      fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_write: Unknown SHA3 variant\n");
       return;
   }
 
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_keccak_write): Update failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_write: Update failed: %d\n", ret);
   }
 
   hd->count += inlen;
@@ -1741,13 +1736,12 @@ wolfssl_keccak_final(void *context)
       ret = wc_Sha3_512_Final(hd->wc_sha3, digest);
       break;
     default:
-      printf("Error libgcrypt (wolfssl_keccak_final): Unknown SHA3 variant\n");
+      fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_final: Unknown SHA3 variant\n");
       return;
   }
 
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_keccak_final): Final failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_final: Final failed: %d\n", ret);
   }
 
   /* Copy digest to the state for keccak_read to access */
@@ -1798,12 +1792,11 @@ _gcry_wolfssl_sha3_hash_buffer(int algo, void *outbuf, size_t nbytes,
       wc_Sha3_512_Final(&sha3, outbuf);
       break;
     default:
-      printf("Error libgcrypt (_gcry_wolfssl_sha3_hash_buffer): Unknown algorithm\n");
+      fprintf(stderr, "[WOLFSSL ERROR] _gcry_wolfssl_sha3_hash_buffer: Unknown algorithm\n");
   }
 
   if (ret != 0) {
-    printf("Error libgcrypt (_gcry_wolfssl_sha3_hash_buffer): Init failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] _gcry_wolfssl_sha3_hash_buffer: Init failed: %d\n", ret);
   }
 }
 

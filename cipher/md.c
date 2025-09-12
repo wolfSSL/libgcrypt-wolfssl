@@ -104,10 +104,17 @@ static const gcry_md_spec_t * const digest_list[] =
      &_gcry_digest_spec_sha3_256,
      &_gcry_digest_spec_sha3_384,
      &_gcry_digest_spec_sha3_512,
+#if !defined(HAVE_WOLFSSL)
      &_gcry_digest_spec_shake128,
      &_gcry_digest_spec_shake256,
      &_gcry_digest_spec_cshake128,
      &_gcry_digest_spec_cshake256,
+#else
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+#endif
 #endif
 #if USE_GOST_R_3411_94
      &_gcry_digest_spec_gost3411_94,
@@ -130,6 +137,8 @@ static const gcry_md_spec_t * const digest_list[] =
 #endif
 #if USE_MD5
      &_gcry_digest_spec_md5,
+#else
+     NULL,
 #endif
 #if USE_MD4
      &_gcry_digest_spec_md4,
@@ -254,8 +263,13 @@ static const gcry_md_spec_t * const digest_list_algo301[] =
     &_gcry_digest_spec_sha3_256,
     &_gcry_digest_spec_sha3_384,
     &_gcry_digest_spec_sha3_512,
+#if !defined(HAVE_WOLFSSL)
     &_gcry_digest_spec_shake128,
     &_gcry_digest_spec_shake256,
+#else
+    NULL,
+    NULL,
+#endif
 #else
     NULL,
     NULL,
@@ -295,7 +309,7 @@ static const gcry_md_spec_t * const digest_list_algo301[] =
     NULL,
     NULL,
 #endif
-#if USE_SHA3
+#if USE_SHA3 && !defined(HAVE_WOLFSSL)
     &_gcry_digest_spec_cshake128,
     &_gcry_digest_spec_cshake256
 #else
@@ -461,6 +475,59 @@ search_oid (const char *oid, gcry_md_oid_spec_t *oid_spec)
 }
 
 
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+/* Because we disable a bunch of algorithms in wolfSSL, we need to map the name to the algo */
+/* Return 0 if the algorithm is not in this list */
+/* These should only contain algos that get compiled out with the fips mode configure*/
+int _gcry_md_map_name_wolfssl (const char *string)
+{
+  if (strcmp(string, "MD5") == 0)
+    return GCRY_MD_MD5;
+  if (strcmp(string, "MD2") == 0)
+    return GCRY_MD_MD2;
+  if (strcmp(string, "MD4") == 0)
+    return GCRY_MD_MD4;
+  if (strcmp(string, "RIPEMD160") == 0 || strcmp(string, "RMD160") == 0)
+    return GCRY_MD_RMD160;
+  if (strcmp(string, "TIGER") == 0)
+    return GCRY_MD_TIGER;
+  if (strcmp(string, "WHIRLPOOL") == 0)
+    return GCRY_MD_WHIRLPOOL;
+  if (strcmp(string, "STRIBOG256") == 0)
+    return GCRY_MD_STRIBOG256;
+  if (strcmp(string, "STRIBOG512") == 0)
+    return GCRY_MD_STRIBOG512;
+  if (strcmp(string, "BLAKE2B_512") == 0)
+    return GCRY_MD_BLAKE2B_512;
+  if (strcmp(string, "BLAKE2B_384") == 0)
+    return GCRY_MD_BLAKE2B_384;
+  if (strcmp(string, "BLAKE2B_256") == 0)
+    return GCRY_MD_BLAKE2B_256;
+  if (strcmp(string, "BLAKE2B_160") == 0)
+    return GCRY_MD_BLAKE2B_160;
+  if (strcmp(string, "BLAKE2S_256") == 0)
+    return GCRY_MD_BLAKE2S_256;
+  if (strcmp(string, "BLAKE2S_224") == 0)
+    return GCRY_MD_BLAKE2S_224;
+  if (strcmp(string, "BLAKE2S_160") == 0)
+    return GCRY_MD_BLAKE2S_160;
+  if (strcmp(string, "BLAKE2S_128") == 0)
+    return GCRY_MD_BLAKE2S_128;
+  if (strcmp(string, "SM3") == 0)
+    return GCRY_MD_SM3;
+  if (strcmp(string, "CRC32") == 0)
+    return GCRY_MD_CRC32;
+  if (strcmp(string, "CRC32_RFC1510") == 0)
+    return GCRY_MD_CRC32_RFC1510;
+  if (strcmp(string, "CRC24_RFC2440") == 0)
+    return GCRY_MD_CRC24_RFC2440;
+  if (strcmp(string, "GOSTR3411_94") == 0)
+    return GCRY_MD_GOSTR3411_94;
+  return 0;
+}
+#endif
+
+
 /****************
  * Map a string to the digest algo
  */
@@ -468,6 +535,11 @@ int
 _gcry_md_map_name (const char *string)
 {
   const gcry_md_spec_t *spec;
+
+#if defined(HAVE_WOLFSSL) && defined(ENABLED_WOLFSSL_FIPS)
+  if (_gcry_md_map_name_wolfssl(string) != 0)
+    return _gcry_md_map_name_wolfssl(string);
+#endif
 
   if (!string)
     return 0;
@@ -2014,6 +2086,7 @@ _gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm)
   entry->algo = algorithm;
   rc = wc_HmacInit(&entry->hmac, NULL, 0);
   if (rc != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_HmacInit failed with rc=%d\n", rc);
     free(entry);
     if (last_list_entry)
         last_list_entry->next = NULL;
@@ -2149,7 +2222,10 @@ _gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
   GcryWcDigestEntry *entry;
 
   for (entry = wc->list; entry; entry = entry->next) {
-    wc_HmacUpdate(&entry->hmac, inbuf, inlen);
+    int ret = wc_HmacUpdate(&entry->hmac, inbuf, inlen);
+    if (ret != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_HmacUpdate failed with ret=%d\n", ret);
+    }
   }
   hd->bufpos = 0;
 }
@@ -2164,10 +2240,17 @@ _gcry_wc_md_final (gcry_md_hd_t a)
     return;
 
   for (entry = wc->list; entry; entry = entry->next) {
-    if (a->bufpos)
-      wc_HmacUpdate(&entry->hmac, a->buf, a->bufpos);
+    if (a->bufpos) {
+      int ret = wc_HmacUpdate(&entry->hmac, a->buf, a->bufpos);
+      if (ret != 0) {
+        fprintf(stderr, "[WOLFSSL ERROR] wc_HmacUpdate failed with ret=%d\n", ret);
+      }
+    }
 
-    wc_HmacFinal(&entry->hmac, entry->digest);
+    int ret = wc_HmacFinal(&entry->hmac, entry->digest);
+    if (ret != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_HmacFinal failed with ret=%d\n", ret);
+    }
   }
 
   a->ctx->flags.finalized = 1;
@@ -2212,6 +2295,7 @@ _gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
     int wc_algo = map_algo_to_wc_algo(entry->algo);
     rc = wc_HmacSetKey(&entry->hmac, wc_algo, key, keylen);
     if (rc) {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_HmacSetKey failed with rc=%d\n", rc);
       return GPG_ERR_GENERAL;
     }
   }
