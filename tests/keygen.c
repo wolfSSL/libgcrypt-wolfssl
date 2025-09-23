@@ -715,8 +715,12 @@ check_kem_keys (void)
         die ("error creating S-expression: %s\n", gpg_strerror (rc));
       rc = gcry_pk_genkey (&key, keyparm);
       gcry_sexp_release (keyparm);
+      #if defined(HAVE_WOLFSSL)
+      if (1)
+      #else
       if (in_fips_mode && (tv[testno].flags & TEST_NOFIPS))
-        {
+      #endif
+      {
           if (!rc)
             die ("KEM: creating %s key should have failed in fips mode\n",
                  tv[testno].algonames);

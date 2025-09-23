@@ -56,7 +56,11 @@ static gcry_pk_spec_t * const pubkey_list[] =
 #if USE_ELGAMAL
     &_gcry_pubkey_spec_elg,
 #endif
+#if HAVE_WOLFSSL
     &_gcry_pubkey_spec_kem,
+#else
+    NULL,
+#endif
     NULL
   };
 

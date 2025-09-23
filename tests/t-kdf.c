@@ -1117,7 +1117,11 @@ check_pbkdf2 (void)
                              GCRY_KDF_PBKDF2, tv[tvidx].hashalgo,
                              tv[tvidx].salt, tv[tvidx].saltlen,
                              tv[tvidx].c, tv[tvidx].dklen, outbuf);
+      #ifdef HAVE_WOLFSSL
+      if (tvidx > 7)
+      #else
       if (in_fips_mode && tvidx > 7)
+      #endif
         {
           if (!err)
             fail ("pbkdf2 test %d unexpectedly passed in FIPS mode: %s\n",
@@ -1126,7 +1130,11 @@ check_pbkdf2 (void)
         }
       if (err)
         {
+          #ifdef HAVE_WOLFSSL
+          if (tv[tvidx].plen < 14 || tv[tvidx].dklen < 14)
+          #else
           if (in_fips_mode && (tv[tvidx].plen < 14 || tv[tvidx].dklen < 14))
+          #endif
             {
               if (verbose)
                 fprintf (stderr,
@@ -1233,7 +1241,11 @@ check_scrypt (void)
                              tv[tvidx].parm_p, tv[tvidx].dklen, outbuf);
       if (err)
         {
+          #ifdef HAVE_WOLFSSL
+          if (tv[tvidx].plen < 14)
+          #else
           if (in_fips_mode && tv[tvidx].plen < 14)
+          #endif
             {
               if (verbose)
                 fprintf (stderr,

@@ -148,6 +148,7 @@ typedef struct
 /* This static table defines all available curves.  */
 static const ecc_domain_parms_t domain_parms[] =
   {
+    #ifndef HAVE_WOLFSSL
     {
       /* (-x^2 + y^2 = 1 + dx^2y^2) */
       "Ed25519", 255, 1,
@@ -210,6 +211,7 @@ static const ecc_domain_parms_t domain_parms[] =
       "8DF3F6EDB8027E2346430D211312C4B150677AF76FD7223D457B5B1A",
       4,
     },
+    #endif
 #if 0 /* No real specs yet found.  */
     {
       /* x^2 + y^2 = 1 + 3617x^2y^2 mod 2^414 - 17 */
@@ -228,7 +230,11 @@ static const ecc_domain_parms_t domain_parms[] =
     },
 #endif /*0*/
     {
+      #ifndef HAVE_WOLFSSL
+      "NIST P-192", 192, 1,
+      #else
       "NIST P-192", 192, 0,
+      #endif
       MPI_EC_WEIERSTRASS, ECC_DIALECT_STANDARD,
       "0xfffffffffffffffffffffffffffffffeffffffffffffffff",
       "0xfffffffffffffffffffffffffffffffefffffffffffffffc",
@@ -300,6 +306,7 @@ static const ecc_domain_parms_t domain_parms[] =
       1
     },
 
+    #ifndef HAVE_WOLFSSL
     { "brainpoolP160r1", 160, 0,
       MPI_EC_WEIERSTRASS, ECC_DIALECT_STANDARD,
       "0xe95e4a5f737059dc60dfc7ad95b3d8139515620f",
@@ -542,7 +549,7 @@ static const ecc_domain_parms_t domain_parms[] =
       "0xbc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
       1
     },
-
+    #endif
     { NULL, 0, 0, 0, 0, NULL, NULL, NULL, NULL, NULL }
   };
 
@@ -644,9 +651,14 @@ _gcry_ecc_fill_in_curve (unsigned int nbits, const char *name,
   /* In fips mode we only support NIST curves.  Note that it is
      possible to bypass this check by specifying the curve parameters
      directly.  */
+  #if defined(HAVE_WOLFSSL)
+  if (!domain_parms[idx].fips)
+  #else
   if (fips_mode () && !domain_parms[idx].fips )
+  #endif
+  {
     return GPG_ERR_NOT_SUPPORTED;
-
+  }
   switch (domain_parms[idx].model)
     {
     case MPI_EC_WEIERSTRASS:

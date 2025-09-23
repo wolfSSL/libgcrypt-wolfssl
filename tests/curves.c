@@ -33,7 +33,11 @@
 #include "t-common.h"
 
 /* Number of curves defined in ../cipher/ecc-curves.c */
+#ifdef HAVE_WOLFSSL
+#define N_CURVES 5
+#else
 #define N_CURVES 27
+#endif
 
 #ifdef HAVE_WOLFSSL
 #include "wolfssl/options.h"
@@ -118,7 +122,11 @@ check_matching (void)
 
   gcry_sexp_release (key);
 
+  #ifdef HAVE_WOLFSSL
+  if (0)
+  #else
   if (!in_fips_mode)
+  #endif
     {
       err = gcry_sexp_new (&key, sample_key_2, 0, 1);
       if (err)
@@ -149,25 +157,54 @@ check_get_params (void)
     int flags;
   } tv[] =
       {
+       #ifdef HAVE_WOLFSSL
+       { GCRY_PK_ECC, "Ed25519", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.6.1.4.1.11591.15.1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.101.112", TEST_ERROR_EXPECTED },
+       #else
        { GCRY_PK_ECC, "Ed25519" },
        { GCRY_PK_ECC, "1.3.6.1.4.1.11591.15.1" },
        { GCRY_PK_ECC, "1.3.101.112" },
+       #endif
 
+       #ifdef HAVE_WOLFSSL
+       { GCRY_PK_ECC, "Curve25519", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.6.1.4.1.3029.1.5.1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.101.110", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "X25519", TEST_ERROR_EXPECTED },
+       #else
        { GCRY_PK_ECC, "Curve25519", TEST_NOFIPS },
        { GCRY_PK_ECC, "1.3.6.1.4.1.3029.1.5.1", TEST_NOFIPS },
        { GCRY_PK_ECC, "1.3.101.110", TEST_NOFIPS },
        { GCRY_PK_ECC, "X25519", TEST_NOFIPS },
+       #endif
 
+       #ifdef HAVE_WOLFSSL
+       { GCRY_PK_ECC, "Ed448", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.101.113", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "X448", TEST_ERROR_EXPECTED  },
+       { GCRY_PK_ECC, "1.3.101.111", TEST_ERROR_EXPECTED },
+       #else
        { GCRY_PK_ECC, "Ed448" },
        { GCRY_PK_ECC, "1.3.101.113" },
        { GCRY_PK_ECC, "X448", TEST_NOFIPS  },
        { GCRY_PK_ECC, "1.3.101.111", TEST_NOFIPS },
+       #endif
 
+
+       #ifdef HAVE_WOLFSSL
+       { GCRY_PK_ECC, "NIST P-192", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.840.10045.3.1.1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "prime192v1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "secp192r1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "nistp192", TEST_ERROR_EXPECTED },
+       #else
        { GCRY_PK_ECC, "NIST P-192", TEST_NOFIPS },
        { GCRY_PK_ECC, "1.2.840.10045.3.1.1", TEST_NOFIPS },
        { GCRY_PK_ECC, "prime192v1", TEST_NOFIPS },
        { GCRY_PK_ECC, "secp192r1", TEST_NOFIPS },
        { GCRY_PK_ECC, "nistp192", TEST_NOFIPS },
+       #endif
 
        { GCRY_PK_ECC, "NIST P-224" },
        { GCRY_PK_ECC, "secp224r1"  },
@@ -190,6 +227,78 @@ check_get_params (void)
        { GCRY_PK_ECC, "1.3.132.0.35" },
        { GCRY_PK_ECC, "nistp521"   },
 
+
+       #ifdef HAVE_WOLFSSL
+       { GCRY_PK_ECC, "brainpoolP160r1",       TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.1",  TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "brainpoolP192r1",       TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.3",  TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "brainpoolP224r1",       TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.5",  TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "brainpoolP256r1",       TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.7",  TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "brainpoolP320r1",       TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.9",  TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "brainpoolP384r1",       TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.11", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "brainpoolP512r1",       TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.13", TEST_ERROR_EXPECTED },
+
+       { GCRY_PK_ECC, "GOST2001-test", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.2.2.35.0", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.2.2.35.1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-B", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.2.2.35.2", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-C", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.2.2.35.3", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-XchA", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-C", TEST_ERROR_EXPECTED },
+        { GCRY_PK_ECC, "GOST2001-CryptoPro-XchB", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.2.2.36.0", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-C", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.2.2.36.1", TEST_ERROR_EXPECTED },
+
+       /* Noet that GOST2012-256-tc26-A" is only in the curve alias
+        * list but has no parameter entry.  */
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.7.1.2.1.1.2", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-256-tc26-B", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-B", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.7.1.2.1.1.3", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-B", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-256-tc26-C", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-C", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.7.1.2.1.1.4", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2001-CryptoPro-C", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-256-tc26-D", TEST_ERROR_EXPECTED },
+
+       { GCRY_PK_ECC, "GOST2012-512-test", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-test", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-512-test", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.7.1.2.1.2.0", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-512-tc26-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-tc26-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-512-tc26-B", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-tc26-B", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-512-tc26-A", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.7.1.2.1.2.1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-512-tc26-B", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.7.1.2.1.2.2", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "GOST2012-512-tc26-C", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.643.7.1.2.1.2.3", TEST_ERROR_EXPECTED },
+
+       { GCRY_PK_ECC, "secp256k1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.3.132.0.10", TEST_ERROR_EXPECTED },
+
+       { GCRY_PK_ECC, "sm2p256v1", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECC, "1.2.156.10197.1.301", TEST_ERROR_EXPECTED },
+
+
+       #else
        { GCRY_PK_ECC, "brainpoolP160r1",       TEST_NOFIPS },
        { GCRY_PK_ECC, "1.3.36.3.3.2.8.1.1.1",  TEST_NOFIPS },
        { GCRY_PK_ECC, "brainpoolP192r1",       TEST_NOFIPS },
@@ -258,18 +367,26 @@ check_get_params (void)
        { GCRY_PK_ECC, "sm2p256v1", TEST_NOFIPS },
        { GCRY_PK_ECC, "1.2.156.10197.1.301", TEST_NOFIPS },
 
+       #endif
        /* Check also the ECC algo mapping.  */
-       { GCRY_PK_ECDSA, "Ed25519" },
        #if !defined(HAVE_WOLFSSL) || !defined(HAVE_ED25519)
+       { GCRY_PK_ECDSA, "Ed25519", TEST_ERROR_EXPECTED },
        { GCRY_PK_EDDSA, "Ed25519", TEST_ERROR_EXPECTED },
        { GCRY_PK_ECDH,  "Ed25519", TEST_ERROR_EXPECTED },
        #else
+       { GCRY_PK_ECDSA, "Ed25519" },
        { GCRY_PK_EDDSA, "Ed25519" },
        { GCRY_PK_ECDH,  "Ed25519" },
        #endif
+       #if defined(HAVE_WOLFSSL) || defined(HAVE_ED25519)
+       { GCRY_PK_ECDSA, "Curve25519", TEST_ERROR_EXPECTED },
+       { GCRY_PK_EDDSA, "Curve25519", TEST_ERROR_EXPECTED },
+       { GCRY_PK_ECDH,  "Curve25519", TEST_ERROR_EXPECTED },
+       #else
        { GCRY_PK_ECDSA, "Curve25519", TEST_NOFIPS },
        { GCRY_PK_EDDSA, "Curve25519", TEST_NOFIPS },
        { GCRY_PK_ECDH,  "Curve25519", TEST_NOFIPS },
+       #endif
        { GCRY_PK_ECC,   "NoSuchCurve", TEST_ERROR_EXPECTED },
        { GCRY_PK_RSA,   "rsa", TEST_ERROR_EXPECTED },
        { GCRY_PK_ELG,   "elg", TEST_ERROR_EXPECTED },
@@ -292,7 +409,11 @@ check_get_params (void)
 
   gcry_sexp_release (param);
 
+  #ifdef HAVE_WOLFSSL
+  if (0)
+  #else
   if (!in_fips_mode)
+  #endif
     {
       param = gcry_pk_get_param (GCRY_PK_ECDSA, sample_key_2_curve);
       if (!param)

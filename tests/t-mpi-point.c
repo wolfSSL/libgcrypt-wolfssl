@@ -39,6 +39,7 @@ static const struct
   const char *h;              /* Cofactor.  */
 } test_curve[] =
   {
+#ifndef HAVE_WOLFSSL
     {
       "NIST P-192",
       "0xfffffffffffffffffffffffffffffffeffffffffffffffff",
@@ -50,6 +51,7 @@ static const struct
       "0x07192b95ffc8da78631011ed6b24cdd573f977a11e794811",
       "0x01"
     },
+#endif
     {
       "NIST P-224",
       "0xffffffffffffffffffffffffffffffff000000000000000000000001",
@@ -106,6 +108,7 @@ static const struct
       "62c97ee72995ef42640c550b9013fad0761353c7086a272c24088be94769fd16650",
       "0x01"
     },
+#ifndef HAVE_WOLFSSL
     {
       "Ed25519",
       "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED",
@@ -116,6 +119,7 @@ static const struct
       "0x6666666666666666666666666666666666666666666666666666666666666658",
       "0x08"
     },
+#endif
     { NULL, NULL, NULL, NULL, NULL, NULL }
   };
 
@@ -597,7 +601,11 @@ context_param (void)
     }
 
   /* Skipping Ed25519 if in FIPS mode (it isn't supported) */
+  #ifdef HAVE_WOLFSSL
+  if (1)
+  #else
   if (gcry_fips_mode_active())
+  #endif
     goto cleanup;
 
   info ("checking sample public key (Ed25519)\n");
@@ -1314,6 +1322,7 @@ check_ec_mul (void)
     const char *qx;
     const char *qy;
   } tv[] = {
+    #ifndef HAVE_WOLFSSL
     /* NIST EC test vectors from http://point-at-infinity.org/ecc/nisttv */
     { /* tv 0 */
       "NIST P-192",
@@ -1627,6 +1636,7 @@ check_ec_mul (void)
       "188DA80EB03090F67CBF20EB43A18800F4FF0AFD82FF1012",
       "F8E6D46A003725879CEFEE1294DB32298C06885EE186B7EE"
     },
+    #endif
     { /* tv 52 */
       "NIST P-224",
       "1",
@@ -3203,7 +3213,7 @@ check_ec_mul (void)
       "00E7C6D6958765C43FFBA375A04BD382E426670ABBB6A864BB97E85042E8D8C199D3"
       "68118D66A10BD9BF3AAF46FEC052F89ECAC38F795D8D3DBF77416B89602E99AF"
     },
-
+    #ifndef HAVE_WOLFSSL
     /* secp256k1 test-vectors from
        https://chuckbatson.wordpress.com/2014/11/26/secp256k1-test-vectors/ */
     { /* tv 260 */
@@ -3499,7 +3509,7 @@ check_ec_mul (void)
       "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798",
       "B7C52588D95C3B9AA25B0403F1EEF75702E84BB7597AABE663B82F6F04EF2777"
     },
-
+    #endif
     { NULL, NULL, NULL, NULL }
   };
   gpg_error_t err;
@@ -3602,7 +3612,7 @@ check_ec_mul_reduction (void)
   } tv[] =
   {
     /* --- NIST P-192 --- */
-
+#ifndef HAVE_WOLFSSL
     /* Bug report: https://dev.gnupg.org/T5510 */
     {
       "NIST P-192",
@@ -3702,7 +3712,7 @@ check_ec_mul_reduction (void)
       "06D9D789820A2C19237C96AD4B8D86B87FB49D4D6C728B84F",
       "0000000000000000000000000000000000000000000000001"
     },
-
+#endif
     /* --- NIST P-224 --- */
 
     /* Test #1 for NIST P-224 fast reduction */
@@ -4223,7 +4233,7 @@ check_ec_mul_reduction (void)
     },
 
     /* --- secp256k1 --- */
-
+#ifndef HAVE_WOLFSSL
     /* Test #1 for secp256k1 fast reduction */
     {
       "secp256k1",
@@ -4283,7 +4293,7 @@ check_ec_mul_reduction (void)
       "0A7E45D967E07558AE405F7F571ADD1ACF966F3619FD4F2A9708EEB766B98F423",
       "080000000000000000000000000000000000000000000000000000001000003D1"
     },
-
+#endif
     { NULL, NULL, NULL, NULL, NULL, NULL }
   };
   gpg_error_t err;
@@ -4426,7 +4436,11 @@ main (int argc, char **argv)
 
   /* The tests are for P-192 and ed25519 which are not supported in
      FIPS mode.  */
+  #ifdef HAVE_WOLFSSL
+  if (0)
+  #else
   if (!gcry_fips_mode_active())
+  #endif
     {
       basic_ec_math_simplified ();
       twistededwards_math ();

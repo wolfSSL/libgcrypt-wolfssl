@@ -688,8 +688,7 @@ wolfssl_sha1_transform_generic (void *ctx, const unsigned char *data, size_t nbl
 
   ret = wc_ShaUpdate(&hd->wc_sha1, data, 64 * nblks);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha1_transform_generic): wc_ShaUpdate failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_ShaUpdate failed with ret=%d\n", ret);
   }
 
   return 0;
@@ -719,8 +718,7 @@ wolfssl_sha1_init(void* context, unsigned int flags)
   (void)flags;
   ret = wc_InitSha(&hd->wc_sha1);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha1_init): wc_InitSha failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha failed with ret=%d\n", ret);
   }
 
   wolfssl_sha1_common_init(hd);
@@ -737,15 +735,13 @@ wolfssl_sha1_final(void *context)
   if (hd->bctx.count > 0) {
     ret = wc_ShaUpdate(&hd->wc_sha1, hd->bctx.buf, hd->bctx.count);
     if (ret != 0) {
-      printf("Error libgcrypt (wolfssl_sha1_final): wc_ShaUpdate failed\n");
-      printf("Return: %d\n", ret);
+      fprintf(stderr, "[WOLFSSL ERROR] wc_ShaUpdate failed with ret=%d\n", ret);
     }
   }
 
   ret = wc_ShaFinal(&hd->wc_sha1, temp_buffer);
   if (ret != 0) {
-    printf("Error libgcrypt (wolfssl_sha1_final): wc_ShaFinal failed\n");
-    printf("Return: %d\n", ret);
+    fprintf(stderr, "[WOLFSSL ERROR] wc_ShaFinal failed with ret=%d\n", ret);
   }
 
   /* Copy the hash to hd->bctx.buf where libgcrypt expects it */

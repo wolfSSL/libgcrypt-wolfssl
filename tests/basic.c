@@ -4613,8 +4613,9 @@ _check_gcm_cipher (unsigned int step)
           return;
         }
 
-      if (memcmp (tv[i].tag, out, taglen2))
+      if (memcmp (tv[i].tag, out, taglen2)) {
         fail ("aes-gcm, encrypt tag mismatch entry %d\n", i);
+      }
 
       err = gcry_cipher_checktag (hdd, out, taglen2);
       if (err)
@@ -11997,7 +11998,7 @@ check_one_cipher_core (int algo, int mode, int flags,
   err = gcry_cipher_decrypt (hd, in, nplain, out, nplain);
   if (err)
     {
-      fail ("pass %d, algo %d, mode %d, gcry_cipher_decrypt failed: %s\n",
+      fail ("pass %d, algo %d, mode %d, gcry_cipher_decrypt failed here 1: %s\n",
 	    pass, algo, mode, gpg_strerror (err));
       gcry_cipher_close (hd);
       goto err_out_free;
@@ -12009,7 +12010,7 @@ check_one_cipher_core (int algo, int mode, int flags,
       err = gcry_cipher_checktag (hd, tag_result, taglen);
       if (err)
 	{
-	  fail ("pass %d, algo %d, mode %d, gcry_cipher_checktag failed: %s\n",
+	  fail ("pass %d, algo %d, mode %d, gcry_cipher_checktag failed here 1: %s\n",
 		pass, algo, mode, gpg_strerror (err));
 	  gcry_cipher_close (hd);
 	  goto err_out_free;
@@ -12078,7 +12079,7 @@ check_one_cipher_core (int algo, int mode, int flags,
       if (err)
 	{
 	  fail ("pass %d, algo %d, mode %d, in-place, "
-		"gcry_cipher_checktag failed: %s\n",
+		"gcry_cipher_checktag failed here 2: %s\n",
 		pass, algo, mode, gpg_strerror (err));
 	  gcry_cipher_close (hd);
 	  goto err_out_free;
@@ -12174,7 +12175,7 @@ check_one_cipher_core (int algo, int mode, int flags,
       if (err)
 	{
 	  fail ("pass %d, algo %d, mode %d, split-buffer (pos: %d, "
-                "piecelen: %d), gcry_cipher_checktag failed: %s\n",
+                "piecelen: %d), gcry_cipher_checktag failed here 3: %s\n",
 		pass, algo, mode, pos, piecelen, gpg_strerror (err));
 	  gcry_cipher_close (hd);
 	  goto err_out_free;
@@ -15797,6 +15798,29 @@ check_one_hmac (int algo, const char *data, int datalen,
   gcry_md_close (hd2);
 }
 
+#ifdef HAVE_WOLFSSL
+/* If returning 0, then assume all key lengths are allowed */
+/* Any other value is lenght in bytes that is allowed */
+int wc_HamcKeyAllowed(int algo) {
+    switch (algo) {
+        case GCRY_MD_SHA1:
+        case GCRY_MD_SHA224:
+        case GCRY_MD_SHA256:
+        case GCRY_MD_SHA384:
+        case GCRY_MD_SHA512:
+            return 20;
+        case GCRY_MD_SHA3_224:
+        case GCRY_MD_SHA3_256:
+        case GCRY_MD_SHA3_384:
+        case GCRY_MD_SHA3_512:
+            return 64;
+        default:
+            return 0;
+    }
+}
+#endif
+
+
 static void
 check_hmac (void)
 {
@@ -16169,8 +16193,15 @@ check_one_mac (int algo, const char *data, int datalen,
 
   clutter_vector_registers();
   err = gcry_mac_setkey (hd, key, keylen);
+  #ifdef HAVE_WOLFSSL
+  if (keylen != wc_HamcKeyAllowed(algo) && err) {
+    goto out;
+  }
+  else if (err)
+  #else
   if (err)
-    {
+  #endif
+  {
       if (in_fips_mode)
         {
           if (verbose)
@@ -17414,8 +17445,9 @@ check_pubkey_sign (int n, gcry_sexp_t skey, gcry_sexp_t pkey, int algo,
             fail ("gcry_pk_sign did not fail as expected in FIPS mode\n");
           goto next;
         }
-      if (gcry_err_code (rc) != datas[dataidx].expected_rc)
-	fail ("gcry_pk_sign failed: %s\n", gpg_strerror (rc));
+      if (gcry_err_code (rc) != datas[dataidx].expected_rc) {
+        fail ("gcry_pk_sign failed: %s\n", gpg_strerror (rc));
+      }
 
       if (!rc)
 	verify_one_signature (pkey, hash, badhash, sig);
@@ -17547,9 +17579,26 @@ check_pubkey_sign_ecdsa (int n, gcry_sexp_t skey, gcry_sexp_t pkey,
             fail ("gcry_pk_sign did not fail as expected in FIPS mode\n");
           goto next;
         }
-      if (gcry_err_code (rc) != datas[dataidx].expected_rc)
-	fail ("gcry_pk_sign failed: %s\n", gpg_strerror (rc));
+#ifdef HAVE_WOLFSSL
+        /* 9 is GOST, 11 is secp256k1, 12 is sm2p256v1 */
+    int expected_rc = datas[dataidx].expected_rc;
+    if (n == 9 || n == 11 || n == 12) /* secp256k1 and SM2 curves */
+        expected_rc = GPG_ERR_NOT_SUPPORTED;
 
+    if (gcry_err_code (rc) != expected_rc)
+#else
+    if (gcry_err_code (rc) != datas[dataidx].expected_rc)
+#endif
+    {
+        fail ("gcry_pk_sign failed: test %d, signature test %d (%u bit ecdsa): expected %s, got %s\nTest data: %s\n",
+              n, dataidx, nbits,
+#ifdef HAVE_WOLFSSL
+              gpg_strerror (expected_rc),
+#else
+              gpg_strerror (datas[dataidx].expected_rc),
+#endif
+              gpg_strerror (rc), datas[dataidx].data);
+    }
       if (!rc && verbose > 1)
         show_sexp ("ECDSA signature:\n", sig);
 

@@ -154,7 +154,11 @@ check_oaep (void)
       gcry_free (rsa_e);
       gcry_free (rsa_d);
 
+      #if defined(HAVE_WOLFSSL)
+      if (1)
+      #else
       if (in_fips_mode)
+      #endif
         {
           unsigned int nbits = gcry_pk_get_nbits (pub_key);
 
@@ -299,7 +303,11 @@ check_pss (void)
       gcry_free (rsa_e);
       gcry_free (rsa_d);
 
+      #if defined(HAVE_WOLFSSL)
+      if (1)
+      #else
       if (in_fips_mode)
+      #endif
         {
           unsigned int nbits = gcry_pk_get_nbits (pub_key);
 
@@ -440,7 +448,11 @@ check_v15crypt (void)
       gcry_free (rsa_e);
       gcry_free (rsa_d);
 
+      #if defined(HAVE_WOLFSSL)
+      if (1)
+      #else
       if (in_fips_mode)
+      #endif
         {
           unsigned int nbits = gcry_pk_get_nbits (pub_key);
 
@@ -585,7 +597,11 @@ check_v15sign (void)
       gcry_free (rsa_e);
       gcry_free (rsa_d);
 
+      #if defined(HAVE_WOLFSSL)
+      if (1)
+      #else
       if (in_fips_mode)
+      #endif
         {
           unsigned int nbits = gcry_pk_get_nbits (pub_key);
 

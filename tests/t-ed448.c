@@ -299,7 +299,7 @@ one_test (int testno, int ph, const char *sk, const char *pk,
 
   err = gcry_pk_hash_sign (&s_sig, data_tmpl, s_sk, NULL, ctx);
   #if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED448)
-  if (strncmp(gpg_strerror(err), "Not supported", 14) != 0) {
+  if (strncmp(gpg_strerror(err), "Not supported", 13) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 22) != 0) {
     fail("Should fail for ed448: %s", gpg_strerror(err));
   }
   #else
@@ -367,7 +367,7 @@ one_test (int testno, int ph, const char *sk, const char *pk,
   if (!no_verify) {
     if ((err = gcry_pk_hash_verify (s_sig, data_tmpl, s_pk, NULL, ctx))) {
         #if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED448)
-        if (strncmp(gpg_strerror(err), "Invalid object", 15) != 0) {
+        if (strncmp(gpg_strerror(err), "Not supported", 13) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 22) != 0) {
             fail("Should fail for ed448: %s", gpg_strerror(err));
         }
         #else

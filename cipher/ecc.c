@@ -3272,9 +3272,16 @@ selftests_ecc_wc_fips (selftest_report_func_t report, int extended, int is_eddsa
   err = wc_ecc_check_secret_key (skey);
   if (err != success_return_code)
     {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_ecc_check_secret_key failed with err=%d (expected=%d)\n", err, success_return_code);
       errtxt = _gcry_strerror (err);
       goto failed;
     }
+
+  /* Finish the test if the curve is not supported */
+  if (success_return_code == GPG_ERR_UNKNOWN_CURVE)
+  {
+    goto success;
+  }
 
   if (extended)
     {
@@ -3299,7 +3306,7 @@ selftests_ecc_wc_fips (selftest_report_func_t report, int extended, int is_eddsa
                                  success_return_code);
   if (errtxt)
     goto failed;
-
+success:
   sexp_release(pkey);
   sexp_release(skey);
   return err; /* Succeeded. */
@@ -3342,8 +3349,12 @@ run_selftests_wc_fips (int algo, int extended, selftest_report_func_t report)
                      ed25519_data_tmpl,
                      ed25519_sample_data_string, ed25519_sample_data_bad_string,
                      ed25519_signature_r, ed25519_signature_s,
-                     GPG_ERR_NOT_SUPPORTED);
-  if (r != GPG_ERR_NOT_SUPPORTED) {
+                     GPG_ERR_UNKNOWN_CURVE);
+  if (r != GPG_ERR_NOT_SUPPORTED && r != GPG_ERR_UNKNOWN_CURVE) {
+    printf ("ERROR: %d\n", r);
+    printf ("Expected ERROR: %d\n", GPG_ERR_NOT_SUPPORTED);
+    printf ("Expected ERROR: %d\n", GPG_ERR_UNKNOWN_CURVE);
+    printf ("ERROR: %s\n", _gcry_strerror (r));
     return GPG_ERR_SELFTEST_FAILED;
   }
   else {
@@ -3357,8 +3368,8 @@ run_selftests_wc_fips (int algo, int extended, selftest_report_func_t report)
                      ed448_data_tmpl,
                      ed448_sample_data_string, ed448_sample_data_bad_string,
                      ed448_signature_r, ed448_signature_s,
-                     GPG_ERR_NOT_SUPPORTED);
-  if (r != GPG_ERR_NOT_SUPPORTED) {
+                     GPG_ERR_UNKNOWN_CURVE);
+  if (r != GPG_ERR_NOT_SUPPORTED && r != GPG_ERR_UNKNOWN_CURVE) {
     return GPG_ERR_SELFTEST_FAILED;
   }
   else {

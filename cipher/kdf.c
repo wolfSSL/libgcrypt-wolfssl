@@ -151,12 +151,14 @@ _gcry_kdf_pkdf2 (const void *passphrase, size_t passphraselen,
   /* We allow for a saltlen of 0 here to support scrypt.  It is not
      clear whether rfc2898 allows for this this, thus we do a test on
      saltlen > 0 only in gcry_kdf_derive.  */
-  if (!salt || !iterations || !dklen)
+  if (!salt || !iterations || !dklen) {
     return GPG_ERR_INV_VALUE;
+  }
 
   hlen = _gcry_md_get_algo_dlen (hashalgo);
-  if (!hlen)
+  if (!hlen) {
     return GPG_ERR_DIGEST_ALGO;
+  }
 
   secmode = _gcry_is_secure (passphrase) || _gcry_is_secure (keybuffer);
 
@@ -166,8 +168,9 @@ _gcry_kdf_pkdf2 (const void *passphrase, size_t passphraselen,
    * a larger value.  */
 
 #if SIZEOF_UNSIGNED_LONG > 4
-  if (dklen > 0xffffffffU)
+  if (dklen > 0xffffffffU) {
     return GPG_ERR_INV_VALUE;
+  }
 #endif
 
   /* Step 2 */
@@ -178,9 +181,10 @@ _gcry_kdf_pkdf2 (const void *passphrase, size_t passphraselen,
   sbuf = (secmode
           ? xtrymalloc_secure (saltlen + 4 + hlen + hlen)
           : xtrymalloc (saltlen + 4 + hlen + hlen));
-  if (!sbuf)
+  if (!sbuf) {
     return gpg_err_code_from_syserror ();
-  tbuf = sbuf + saltlen + 4;
+  }
+    tbuf = sbuf + saltlen + 4;
   ubuf = tbuf + hlen;
 
   ec = _gcry_md_open (&md, hashalgo, (GCRY_MD_FLAG_HMAC
@@ -2239,7 +2243,11 @@ check_one (int algo, int hash_algo,
                          keysize, key);
   /* In fips mode we have special requirements for the input and
    * output parameters */
+#ifdef HAVE_WOLFSSL
+  if (1) /* Always true in FIPS mode with wolfssl */
+#else
   if (fips_mode ())
+#endif
     {
       if (rv && (passphraselen < 8 || saltlen < 16 ||
                  iterations < 1000 || expectlen < 14))
@@ -2247,8 +2255,9 @@ check_one (int algo, int hash_algo,
       else if (rv)
         return "gcry_kdf_derive unexpectedly failed in FIPS Mode";
     }
-  else if (rv)
+  else if (rv) {
     return "gcry_kdf_derive failed";
+  }
 
   if (memcmp (key, expect, expectlen))
     return "does not match";
@@ -2417,5 +2426,8 @@ _gcry_kdf_selftest (int algo, int extended, selftest_report_func_t report)
       if (report)
         report ("kdf", algo, "module", "algorithm not available");
     }
+  if (ec) {
+    printf("KDF selftest failed: %d\n", ec);
+  }
   return gpg_error (ec);
 }

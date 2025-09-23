@@ -26,6 +26,11 @@
 #include "g10lib.h"
 #include "mac-internal.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
+
 
 /* This is the list of the digest implementations included in
    libgcrypt.  */
@@ -259,7 +264,7 @@ static const gcry_mac_spec_t * const mac_list_algo101[] =
 /* CMAC implementations start with index 201 (enum gcry_mac_algos) */
 static const gcry_mac_spec_t * const mac_list_algo201[] =
   {
-#if USE_AES
+#if defined(USE_AES)
     &_gcry_mac_type_spec_cmac_aes,
 #else
     NULL,
@@ -329,7 +334,7 @@ static const gcry_mac_spec_t * const mac_list_algo201[] =
 /* GMAC implementations start with index 401 (enum gcry_mac_algos) */
 static const gcry_mac_spec_t * const mac_list_algo401[] =
   {
-#if USE_AES
+#if defined(USE_AES) && !defined(HAVE_WOLFSSL)
     &_gcry_mac_type_spec_gmac_aes,
 #else
     NULL,

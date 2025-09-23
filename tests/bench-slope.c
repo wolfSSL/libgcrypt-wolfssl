@@ -2620,17 +2620,22 @@ kdf_bench (char **argv, int argc)
 #if USE_ECC
 enum bench_ecc_algo
 {
+#ifndef HAVE_WOLFSSL
   ECC_ALGO_ED25519 = 0,
+  ECC_ALGO_ED448,
   ECC_ALGO_ED448,
   ECC_ALGO_X25519,
   ECC_ALGO_X448,
+#endif
   ECC_ALGO_NIST_P192,
   ECC_ALGO_NIST_P224,
   ECC_ALGO_NIST_P256,
   ECC_ALGO_NIST_P384,
   ECC_ALGO_NIST_P521,
+#ifndef HAVE_WOLFSSL
   ECC_ALGO_SECP256K1,
   ECC_ALGO_BRAINP256R1,
+#endif
   __MAX_ECC_ALGO
 };
 
@@ -2680,14 +2685,18 @@ ecc_algo_fips_allowed (int algo)
       case ECC_ALGO_NIST_P256:
       case ECC_ALGO_NIST_P384:
       case ECC_ALGO_NIST_P521:
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_ED25519:
       case ECC_ALGO_ED448:
+#endif
         return 1;
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_SECP256K1:
       case ECC_ALGO_BRAINP256R1:
       case ECC_ALGO_X25519:
       case ECC_ALGO_X448:
       case ECC_ALGO_NIST_P192:
+#endif
       default:
         return 0;
     }
@@ -2698,6 +2707,7 @@ ecc_algo_name (int algo)
 {
   switch (algo)
     {
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_ED25519:
 	return "Ed25519";
       case ECC_ALGO_ED448:
@@ -2706,6 +2716,7 @@ ecc_algo_name (int algo)
 	return "X25519";
       case ECC_ALGO_X448:
 	return "X448";
+#endif
       case ECC_ALGO_NIST_P192:
 	return "NIST-P192";
       case ECC_ALGO_NIST_P224:
@@ -2716,10 +2727,12 @@ ecc_algo_name (int algo)
 	return "NIST-P384";
       case ECC_ALGO_NIST_P521:
 	return "NIST-P521";
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_SECP256K1:
 	return "secp256k1";
       case ECC_ALGO_BRAINP256R1:
 	return "brainpoolP256r1";
+#endif
       default:
 	return NULL;
     }
@@ -2730,6 +2743,7 @@ ecc_algo_curve (int algo)
 {
   switch (algo)
     {
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_ED25519:
 	return "Ed25519";
       case ECC_ALGO_ED448:
@@ -2738,8 +2752,9 @@ ecc_algo_curve (int algo)
 	return "Curve25519";
       case ECC_ALGO_X448:
 	return "X448";
+#endif
       case ECC_ALGO_NIST_P192:
-	return "NIST P-192";
+  return "NIST P-192";
       case ECC_ALGO_NIST_P224:
 	return "NIST P-224";
       case ECC_ALGO_NIST_P256:
@@ -2748,10 +2763,12 @@ ecc_algo_curve (int algo)
 	return "NIST P-384";
       case ECC_ALGO_NIST_P521:
 	return "NIST P-521";
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_SECP256K1:
 	return "secp256k1";
       case ECC_ALGO_BRAINP256R1:
 	return "brainpoolP256r1";
+#endif
       default:
 	return NULL;
     }
@@ -2762,6 +2779,7 @@ ecc_nbits (int algo)
 {
   switch (algo)
     {
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_ED25519:
 	return 255;
       case ECC_ALGO_ED448:
@@ -2770,6 +2788,7 @@ ecc_nbits (int algo)
 	return 255;
       case ECC_ALGO_X448:
 	return 448;
+#endif
       case ECC_ALGO_NIST_P192:
 	return 192;
       case ECC_ALGO_NIST_P224:
@@ -2780,10 +2799,12 @@ ecc_nbits (int algo)
 	return 384;
       case ECC_ALGO_NIST_P521:
 	return 521;
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_SECP256K1:
 	return 256;
       case ECC_ALGO_BRAINP256R1:
 	return 256;
+#endif
       default:
 	return 0;
     }
@@ -2884,25 +2905,13 @@ bench_ecc_mult_do_bench (struct bench_obj *obj, void *buf, size_t num_iter)
   size_t i;
 
   (void)buf;
-
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (
-      #if !defined(HAVE_ED25519)
-      on_ecc_algo == ECC_ALGO_ED25519 ||
-      #endif
-      #if !defined(HAVE_ED448)
-      on_ecc_algo == ECC_ALGO_ED448 ||
-      #endif
-      0) {
-      return;
-  }
-#endif
-
+#ifndef HAVE_WOLFSSL
   if (oper->algo == ECC_ALGO_X25519 || oper->algo == ECC_ALGO_X448)
     {
       y = NULL;
     }
   else
+#endif
     {
       y = hd->y;
     }
@@ -2963,6 +2972,7 @@ bench_ecc_init (struct bench_obj *obj)
         free (hd);
         return -1;
 
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_ED25519:
         err = gcry_sexp_build (&hd->key_spec, NULL,
                                "(genkey (ecdsa (curve \"Ed25519\")"
@@ -2973,7 +2983,6 @@ bench_ecc_init (struct bench_obj *obj)
                                "(data (flags eddsa)(hash-algo sha512)"
                                " (value %m))", x);
 	break;
-
       case ECC_ALGO_ED448:
         err = gcry_sexp_build (&hd->key_spec, NULL,
                                "(genkey (ecdsa (curve \"Ed448\")"
@@ -2984,7 +2993,7 @@ bench_ecc_init (struct bench_obj *obj)
                                "(data (flags eddsa)(hash-algo shake256)"
                                " (value %m))", x);
 	break;
-
+#endif
       case ECC_ALGO_NIST_P192:
       case ECC_ALGO_NIST_P224:
       case ECC_ALGO_NIST_P256:
@@ -2997,6 +3006,7 @@ bench_ecc_init (struct bench_obj *obj)
         err = gcry_sexp_build (&hd->data, NULL,
 			       "(data (flags raw) (value %m))", x);
 	break;
+#ifndef HAVE_WOLFSSL
       case ECC_ALGO_BRAINP256R1:
         err = gcry_sexp_build (&hd->key_spec, NULL,
                                "(genkey (ECDSA (curve brainpoolP256r1)))");
@@ -3005,6 +3015,7 @@ bench_ecc_init (struct bench_obj *obj)
         err = gcry_sexp_build (&hd->data, NULL,
 			       "(data (flags raw) (value %m))", x);
 	break;
+#endif
     }
 
   gcry_mpi_release (x);
@@ -3041,22 +3052,6 @@ bench_ecc_keygen (struct bench_ecc_hd *hd)
   gpg_error_t err;
 
   err = gcry_pk_genkey (&key_pair, hd->key_spec);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (
-      #if !defined(HAVE_ED25519)
-      on_ecc_algo == ECC_ALGO_ED25519 ||
-      #endif
-      #if !defined(HAVE_ED448)
-      on_ecc_algo == ECC_ALGO_ED448 ||
-      #endif
-      0) {
-    if (strncmp(gpg_strerror(err), "Not supported", 13) != 0) {
-      fprintf (stderr, PGM ": Not expected error\n");
-      exit (1);
-    }
-      return;
-  }
-#endif
   if (err)
     {
       fprintf (stderr, PGM ": gcry_pk_genkey failed: %s\n",
@@ -3109,21 +3104,6 @@ bench_ecc_sign_do_bench (struct bench_obj *obj, void *buf, size_t num_iter)
   (void)buf;
 
   bench_ecc_keygen (hd);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (
-      #if !defined(HAVE_ED25519)
-      on_ecc_algo == ECC_ALGO_ED25519 ||
-      #endif
-      #if !defined(HAVE_ED448)
-      on_ecc_algo == ECC_ALGO_ED448 ||
-      #endif
-      0) {
-      hd->sig = NULL;
-      hd->pub_key = NULL;
-      hd->sec_key = NULL;
-      return;
-  }
-#endif
 
   for (i = 0; i < num_iter; i++)
     {
@@ -3154,21 +3134,7 @@ bench_ecc_verify_do_bench (struct bench_obj *obj, void *buf, size_t num_iter)
   (void)buf;
 
   bench_ecc_keygen (hd);
-#if defined(ENABLED_WOLFSSL_FIPS)
-  if (
-      #if !defined(HAVE_ED25519)
-      on_ecc_algo == ECC_ALGO_ED25519 ||
-      #endif
-      #if !defined(HAVE_ED448)
-      on_ecc_algo == ECC_ALGO_ED448 ||
-      #endif
-      0) {
-      hd->sig = NULL;
-      hd->pub_key = NULL;
-      hd->sec_key = NULL;
-      return;
-  }
-#endif
+
   err = gcry_pk_sign (&hd->sig, hd->data, hd->sec_key);
   if (err)
     {
@@ -3238,9 +3204,11 @@ cipher_ecc_one (enum bench_ecc_algo algo, struct bench_ecc_oper *poper)
   struct bench_obj obj = { 0 };
   double result;
 
+#ifndef HAVE_WOLFSSL
   if ((algo == ECC_ALGO_X25519 || algo == ECC_ALGO_X448 ||
        algo == ECC_ALGO_SECP256K1) && oper.oper != ECC_OPER_MULT)
     return;
+#endif
 
   oper.algo = algo;
 
@@ -3261,7 +3229,11 @@ _ecc_bench (int algo)
   int i;
 
   /* Skip not allowed mechanisms */
+  #ifdef HAVE_WOLFSSL
+  if (!ecc_algo_fips_allowed (algo))
+  #else
   if (in_fips_mode && !ecc_algo_fips_allowed (algo))
+  #endif
     return;
 
   algo_name = ecc_algo_name (algo);

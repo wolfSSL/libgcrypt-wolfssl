@@ -1467,8 +1467,13 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
   switch (mode)
     {
     case GCRY_CIPHER_MODE_STREAM:
+    #if defined(HAVE_WOLFSSL)
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = do_stream_encrypt;
       c->mode_ops.decrypt = do_stream_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_ECB:
@@ -1490,13 +1495,23 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_CFB:
+    #if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_AES_CFB)
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_cfb_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_cfb_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_CFB8:
+    #if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_AES_CFB8)
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_cfb8_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_cfb8_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_OFB:
@@ -1528,8 +1543,13 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_EAX:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_eax_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_eax_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_GCM:
@@ -1551,28 +1571,53 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_POLY1305:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_poly1305_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_poly1305_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_OCB:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_ocb_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_ocb_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_XTS:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_xts_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_xts_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_SIV:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_siv_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_siv_decrypt;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_GCM_SIV:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.encrypt = NULL;
+      c->mode_ops.decrypt = NULL;
+    #else
       c->mode_ops.encrypt = _gcry_cipher_gcm_siv_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_gcm_siv_decrypt;
+    #endif
       break;
 
     default:
@@ -1593,7 +1638,11 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_EAX:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.setiv = NULL;
+    #else
       c->mode_ops.setiv = _gcry_cipher_eax_set_nonce;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_GCM:
@@ -1611,19 +1660,35 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       }
       break;
     case GCRY_CIPHER_MODE_POLY1305:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.setiv = NULL;
+    #else
       c->mode_ops.setiv = _gcry_cipher_poly1305_setiv;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_OCB:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.setiv = NULL;
+    #else
       c->mode_ops.setiv = _gcry_cipher_ocb_set_nonce;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_SIV:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.setiv = NULL;
+    #else
       c->mode_ops.setiv = _gcry_cipher_siv_set_nonce;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_GCM_SIV:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.setiv = NULL;
+    #else
       c->mode_ops.setiv = _gcry_cipher_gcm_siv_set_nonce;
+    #endif
       break;
 
     default:
@@ -1654,9 +1719,15 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_EAX:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.authenticate = NULL;
+      c->mode_ops.get_tag      = NULL;
+      c->mode_ops.check_tag    = NULL;
+    #else
       c->mode_ops.authenticate = _gcry_cipher_eax_authenticate;
       c->mode_ops.get_tag      = _gcry_cipher_eax_get_tag;
       c->mode_ops.check_tag    = _gcry_cipher_eax_check_tag;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_GCM:
@@ -1679,27 +1750,51 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_POLY1305:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.authenticate = NULL;
+      c->mode_ops.get_tag      = NULL;
+      c->mode_ops.check_tag    = NULL;
+    #else
       c->mode_ops.authenticate = _gcry_cipher_poly1305_authenticate;
       c->mode_ops.get_tag      = _gcry_cipher_poly1305_get_tag;
       c->mode_ops.check_tag    = _gcry_cipher_poly1305_check_tag;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_OCB:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.authenticate = NULL;
+      c->mode_ops.get_tag      = NULL;
+      c->mode_ops.check_tag    = NULL;
+    #else
       c->mode_ops.authenticate = _gcry_cipher_ocb_authenticate;
       c->mode_ops.get_tag      = _gcry_cipher_ocb_get_tag;
       c->mode_ops.check_tag    = _gcry_cipher_ocb_check_tag;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_SIV:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.authenticate = NULL;
+      c->mode_ops.get_tag      = NULL;
+      c->mode_ops.check_tag    = NULL;
+    #else
       c->mode_ops.authenticate = _gcry_cipher_siv_authenticate;
       c->mode_ops.get_tag      = _gcry_cipher_siv_get_tag;
       c->mode_ops.check_tag    = _gcry_cipher_siv_check_tag;
+    #endif
       break;
 
     case GCRY_CIPHER_MODE_GCM_SIV:
+    #ifdef HAVE_WOLFSSL
+      c->mode_ops.authenticate = NULL;
+      c->mode_ops.get_tag      = NULL;
+      c->mode_ops.check_tag    = NULL;
+    #else
       c->mode_ops.authenticate = _gcry_cipher_gcm_siv_authenticate;
       c->mode_ops.get_tag      = _gcry_cipher_gcm_siv_get_tag;
       c->mode_ops.check_tag    = _gcry_cipher_gcm_siv_check_tag;
+    #endif
       break;
 
     default:

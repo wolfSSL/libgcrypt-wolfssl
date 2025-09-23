@@ -102,7 +102,7 @@ global_init (void)
   if (is_wolfssl_on == 0) {
     is_wolfssl_on = 1;
     if (wc_SetSeed_Cb(wc_GenerateSeed) != 0) {
-      printf("Error libgcrypt (global_init): wc_SetSeed_Cb failed\n");
+      fprintf(stderr, "[WOLFSSL ERROR] wc_SetSeed_Cb failed\n");
     }
   }
 #endif

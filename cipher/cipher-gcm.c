@@ -1368,27 +1368,32 @@ _wc_cipher_aes_gcm_reset(gcry_cipher_hd_t c)
   size_t keylen = aesGcmEnc->keylen;
   wc_gcm_context_t *wc_c = &c->u_mode.gcm.wc_gcm;
 
-  if (wc_c->iv) {
+  if (wc_c->iv_len > 0) {
+    memset(wc_c->iv, 0, wc_c->iv_len);
     free(wc_c->iv);
     wc_c->iv = NULL;
     wc_c->iv_len = 0;
+    c->marks.iv = 0;
   }
 
-  if (wc_c->databuf) {
+  if (wc_c->databuf_len > 0) {
+    memset(wc_c->databuf, 0, wc_c->databuf_len);
     free(wc_c->databuf);
     wc_c->databuf = NULL;
     wc_c->databuf_len = 0;
     wc_c->databuf_cap = 0;
   }
 
-  if (wc_c->cryptbuf) {
+  if (wc_c->cryptbuf_len > 0) {
+    memset(wc_c->cryptbuf, 0, wc_c->cryptbuf_len);
     free(wc_c->cryptbuf);
     wc_c->cryptbuf = NULL;
     wc_c->cryptbuf_len = 0;
     wc_c->cryptbuf_cap = 0;
   }
 
-  if (wc_c->aadbuf) {
+  if (wc_c->aadbuf_len > 0) {
+    memset(wc_c->aadbuf, 0, wc_c->aadbuf_len);
     free(wc_c->aadbuf);
     wc_c->aadbuf = NULL;
     wc_c->aadbuf_len = 0;
@@ -1442,7 +1447,7 @@ _wc_cipher_aes_gcm_setiv (gcry_cipher_hd_t c, const byte *iv, size_t ivlen)
   int ret;
   wc_gcm_context_t *wc_c = &c->u_mode.gcm.wc_gcm;
   Aes *aesGcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
-  unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
+  Aes *aesGcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
 
   c->marks.iv = 0;
   c->marks.tag = 0;
@@ -1484,15 +1489,6 @@ _wc_cipher_aes_gcm_setiv (gcry_cipher_hd_t c, const byte *iv, size_t ivlen)
   c->unused = 0;
   c->marks.iv = 1;
   c->marks.tag = 0;
-
-
-  ret = wc_AesGcmEncrypt(aesGcmEnc, NULL,
-                         NULL, 0,
-                         wc_c->iv, wc_c->iv_len,
-                         wc_c->authtag, GCRY_GCM_BLOCK_LEN,
-                         aadbuf, wc_c->aadbuf_len);
-  if (ret)
-    return GPG_ERR_INV_VALUE;
 
   return GPG_ERR_NO_ERROR;
 }
@@ -1548,6 +1544,247 @@ _wc_cipher_aes_gcm_authenticate (gcry_cipher_hd_t c,
   return 0;
 }
 
+
+static WC_INLINE void wc_rightshift(byte* x)
+{
+    int i;
+    int carryIn = 0;
+    int borrow = x[15] & 0x01;
+
+    for (i = 0; i < AES_BLOCK_SIZE; i++) {
+        int carryOut = x[i] & 0x01;
+        x[i] = (x[i] >> 1) | (carryIn ? 0x80 : 0);
+        carryIn = carryOut;
+    }
+    if (borrow) x[0] ^= 0xE1;
+}
+
+
+void wc_xorWords(wolfssl_word** r, const wolfssl_word** a,
+                                       word32 n)
+{
+    const wolfssl_word *e = *a + n;
+
+    while (*a < e)
+        *((*r)++) ^= *((*a)++);
+}
+
+void wc_xorbuf(void* buf, const void* mask, word32 count)
+{
+    byte*       b = (byte*)buf;
+    const byte* m = (const byte*)mask;
+
+    /* type-punning helpers */
+    union {
+        byte* bp;
+        wolfssl_word* wp;
+    } tpb;
+    union {
+        const byte* bp;
+        const wolfssl_word* wp;
+    } tpm;
+
+    if ((((wc_ptr_t)buf & (WOLFSSL_WORD_SIZE - 1)) == 0) &&
+        (((wc_ptr_t)mask & (WOLFSSL_WORD_SIZE - 1)) == 0))
+    {
+        /* Both buffers are already aligned.  Possible to XOR by words without
+         * fixup.
+         */
+
+        tpb.bp = b;
+        tpm.bp = m;
+
+        wc_xorWords(&tpb.wp, &tpm.wp, count >> WOLFSSL_WORD_SIZE_LOG2);
+
+        b = tpb.bp;
+        m = tpm.bp;
+        count &= (WOLFSSL_WORD_SIZE - 1);
+    }
+    else if (((wc_ptr_t)buf & (WOLFSSL_WORD_SIZE - 1)) ==
+             ((wc_ptr_t)mask & (WOLFSSL_WORD_SIZE - 1)))
+    {
+        /* Alignment can be fixed up to allow XOR by words. */
+
+        /* Perform bytewise xor until pointers are aligned to
+         * WOLFSSL_WORD_SIZE.
+         */
+        while ((((wc_ptr_t)b & (WOLFSSL_WORD_SIZE - 1)) != 0) && (count > 0))
+        {
+            *(b++) ^= *(m++);
+            count--;
+        }
+
+        tpb.bp = b;
+        tpm.bp = m;
+
+        wc_xorWords(&tpb.wp, &tpm.wp, count >> WOLFSSL_WORD_SIZE_LOG2);
+
+        b = tpb.bp;
+        m = tpm.bp;
+        count &= (WOLFSSL_WORD_SIZE - 1);
+    }
+
+    while (count > 0) {
+        *b++ ^= *m++;
+        count--;
+    }
+}
+
+
+
+static void wc_flattenSzInBits(byte* buf, word32 sz)
+{
+    /* Multiply the sz by 8 */
+    word32 szHi = (sz >> (8*sizeof(sz) - 3));
+    sz <<= 3;
+
+    /* copy over the words of the sz into the destination buffer */
+    buf[0] = (szHi >> 24) & 0xff;
+    buf[1] = (szHi >> 16) & 0xff;
+    buf[2] = (szHi >>  8) & 0xff;
+    buf[3] = szHi & 0xff;
+    buf[4] = (sz >> 24) & 0xff;
+    buf[5] = (sz >> 16) & 0xff;
+    buf[6] = (sz >>  8) & 0xff;
+    buf[7] = sz & 0xff;
+}
+
+
+
+static void wc_gmult(byte* X, byte* Y)
+{
+    byte Z[AES_BLOCK_SIZE];
+    byte V[AES_BLOCK_SIZE];
+    int i, j;
+
+    memset(Z, 0, AES_BLOCK_SIZE);
+    memcpy(V, X, AES_BLOCK_SIZE);
+    for (i = 0; i < AES_BLOCK_SIZE; i++)
+    {
+        byte y = Y[i];
+        for (j = 0; j < 8; j++)
+        {
+            if (y & 0x80) {
+                wc_xorbuf(Z, V, AES_BLOCK_SIZE);
+            }
+
+            wc_rightshift(V);
+            y = y << 1;
+        }
+    }
+    memcpy(X, Z, AES_BLOCK_SIZE);
+}
+
+
+/* GHASH is not considered a cryptographic function */
+/* Therefore we can have a implmentation of this inside the wolfssl port */
+void wc_ghash(Aes* aes, const byte* a, word32 aSz, const byte* c,
+    word32 cSz, byte* s, word32 sSz)
+{
+    byte x[AES_BLOCK_SIZE];
+    byte scratch[AES_BLOCK_SIZE];
+    word32 blocks, partial;
+    byte* h;
+
+    if (aes == NULL) {
+        return;
+    }
+
+    h = aes->H;
+    memset(x, 0, AES_BLOCK_SIZE);
+
+    /* Hash in A, the Additional Authentication Data */
+    if (aSz != 0 && a != NULL) {
+        blocks = aSz / AES_BLOCK_SIZE;
+        partial = aSz % AES_BLOCK_SIZE;
+        while (blocks--) {
+            wc_xorbuf(x, a, AES_BLOCK_SIZE);
+            wc_gmult(x, h);
+            a += AES_BLOCK_SIZE;
+        }
+        if (partial != 0) {
+            memset(scratch, 0, AES_BLOCK_SIZE);
+            memcpy(scratch, a, partial);
+            wc_xorbuf(x, scratch, AES_BLOCK_SIZE);
+            wc_gmult(x, h);
+        }
+    }
+
+    /* Hash in C, the Ciphertext */
+    if (cSz != 0 && c != NULL) {
+        blocks = cSz / AES_BLOCK_SIZE;
+        partial = cSz % AES_BLOCK_SIZE;
+        while (blocks--) {
+            wc_xorbuf(x, c, AES_BLOCK_SIZE);
+            wc_gmult(x, h);
+            c += AES_BLOCK_SIZE;
+        }
+        if (partial != 0) {
+            memset(scratch, 0, AES_BLOCK_SIZE);
+            memcpy(scratch, c, partial);
+            wc_xorbuf(x, scratch, AES_BLOCK_SIZE);
+            wc_gmult(x, h);
+        }
+    }
+
+    /* Hash in the lengths of A and C in bits */
+    wc_flattenSzInBits(&scratch[0], aSz);
+    wc_flattenSzInBits(&scratch[8], cSz);
+    wc_xorbuf(x, scratch, AES_BLOCK_SIZE);
+    wc_gmult(x, h);
+
+    /* Copy the result into s. */
+    memcpy(s, x, sSz);
+}
+
+/* Calculate GCM authentication tag manually
+ * For cases where libgcrypt API doesn't provide the auth tag automatically
+ */
+static int wc_calculate_gcm_auth_tag(Aes* aes,
+                                     const unsigned char* aad, word32 aad_len,
+                                     const unsigned char* ciphertext, word32 ct_len,
+                                     const unsigned char* iv, word32 iv_len,
+                                     unsigned char* auth_tag)
+{
+    unsigned char counter[AES_BLOCK_SIZE];
+    unsigned char ghash_result[AES_BLOCK_SIZE];
+    unsigned char encrypted_counter[AES_BLOCK_SIZE];
+
+    if (aes == NULL || auth_tag == NULL) {
+        return -1;
+    }
+
+    /* Setup initial counter (J0) */
+    if (iv_len == GCM_NONCE_MID_SZ) {
+        /* Standard 96-bit IV: counter is IV with bottom 4 bytes set to 0x00,0x00,0x00,0x01 */
+        memcpy(counter, iv, iv_len);
+        memset(counter + GCM_NONCE_MID_SZ, 0, AES_BLOCK_SIZE - GCM_NONCE_MID_SZ - 1);
+        counter[AES_BLOCK_SIZE - 1] = 1;
+    } else {
+        /* Non-standard IV length: counter is GHASH of IV */
+        wc_ghash(aes, NULL, 0, iv, iv_len, counter, AES_BLOCK_SIZE);
+    }
+
+    /* Calculate GHASH over AAD and ciphertext */
+    wc_ghash(aes, aad, aad_len, ciphertext, ct_len, ghash_result, AES_BLOCK_SIZE);
+
+    /* Encrypt the initial counter to get E(K, J0) */
+    /* Void function */
+    wc_AesEncryptDirect(aes, encrypted_counter, counter);
+
+    /* Final auth tag = GHASH result XOR E(K, J0) */
+    wc_xorbuf(ghash_result, encrypted_counter, AES_BLOCK_SIZE);
+
+    /* Copy result to output */
+    memcpy(auth_tag, ghash_result, AES_BLOCK_SIZE);
+
+    return 0;
+}
+
+
+
+
+
 gcry_err_code_t
 _wc_cipher_aes_gcm_encrypt (gcry_cipher_hd_t c,
                           byte *outbuf, size_t outbuflen,
@@ -1569,8 +1806,10 @@ _wc_cipher_aes_gcm_encrypt (gcry_cipher_hd_t c,
       || c->u_mode.gcm.ghash_data_finalized)
     return GPG_ERR_INV_STATE;
 
-  if (!c->marks.iv)
+  if (c->marks.iv == 0) {
     _wc_cipher_aes_gcm_setiv_zero(c);
+    /* mark the IV as set */
+  }
 
   if (c->u_mode.gcm.disallow_encryption_because_of_setiv_in_fips_mode)
     return GPG_ERR_INV_STATE;
@@ -1588,11 +1827,14 @@ _wc_cipher_aes_gcm_encrypt (gcry_cipher_hd_t c,
                          wc_c->iv, wc_c->iv_len,
                          wc_c->authtag, GCRY_GCM_BLOCK_LEN,
                          aadbuf, wc_c->aadbuf_len);
-  if (ret != 0)
+  if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_AesGcmEncrypt failed with ret=%d\n", ret);
     return GPG_ERR_INV_ARG;
+  }
 
-  wc_c->cryptbuf_len += inbuflen;
   memcpy(outbuf, &wc_c->cryptbuf[newdatastart], inbuflen);
+  wc_c->cryptbuf_len += inbuflen;
+
   return GPG_ERR_NO_ERROR;
 }
 
@@ -1603,7 +1845,6 @@ _wc_cipher_aes_gcm_decrypt (gcry_cipher_hd_t c,
 {
   int ret;
   Aes *aesGcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
-  Aes *aesGcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
   wc_gcm_context_t *wc_c = &c->u_mode.gcm.wc_gcm;
   unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
   size_t newdatastart;
@@ -1618,33 +1859,45 @@ _wc_cipher_aes_gcm_decrypt (gcry_cipher_hd_t c,
       || c->u_mode.gcm.ghash_data_finalized)
     return GPG_ERR_INV_STATE;
 
-  if (!c->marks.iv)
+  if (c->marks.iv == 0) {
     _wc_cipher_aes_gcm_setiv_zero(c);
+  }
 
   ret = _wc_realloc_if_needed(wc_c, outbuflen, inbuflen);
   if (ret)
     return ret;
 
-  memcpy(&wc_c->databuf[wc_c->databuf_len], inbuf, inbuflen);
+  memcpy(&wc_c->cryptbuf[wc_c->cryptbuf_len], inbuf, inbuflen);
+  newdatastart = wc_c->cryptbuf_len;
+  wc_c->cryptbuf_len += inbuflen;
 
-  newdatastart = wc_c->databuf_len;
-  wc_c->databuf_len += inbuflen;
-
-  ret = wc_AesGcmDecrypt(aesGcmDec, wc_c->cryptbuf,
-                         wc_c->databuf, wc_c->databuf_len,
-                         wc_c->iv, wc_c->iv_len,
-                         wc_c->authtag, GCRY_GCM_BLOCK_LEN,
-                         aadbuf, wc_c->aadbuf_len);
-  if (ret != -181) {
-    ret = wc_AesGcmEncrypt(aesGcmEnc, wc_c->databuf,
-                           wc_c->cryptbuf, wc_c->databuf_len,
-                           wc_c->iv, wc_c->iv_len,
-                           wc_c->authtag, GCRY_GCM_BLOCK_LEN,
-                           aadbuf, wc_c->aadbuf_len);
+  /* TO be able to decrypt with wolfssl we need the auth tag */
+  /* That is assoiciated with the ciphertext */
+  /* We calculate it manually and pass it to the decrypt function */
+  ret = wc_calculate_gcm_auth_tag(aesGcmDec, aadbuf, wc_c->aadbuf_len,
+                          wc_c->cryptbuf, wc_c->cryptbuf_len,
+                          wc_c->iv, wc_c->iv_len,
+                          wc_c->authtag);
+  if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_calculate_gcm_auth_tag failed with ret=%d\n", ret);
+    return GPG_ERR_INV_ARG;
   }
 
-  wc_c->cryptbuf_len += inbuflen;
-  memcpy(outbuf, &wc_c->cryptbuf[newdatastart], inbuflen);
+/* In theory this means that Decrypt will not fail because we calulated the auth tag */
+/* This is what libgcrypt does any way natively, it is expected that tag checking happens after decryption */
+/* This has to be called by the application using gcrypt */
+  ret = wc_AesGcmDecrypt(aesGcmDec, wc_c->databuf,
+                          wc_c->cryptbuf, wc_c->cryptbuf_len,
+                          wc_c->iv, wc_c->iv_len,
+                          wc_c->authtag, GCRY_GCM_BLOCK_LEN,
+                          aadbuf, wc_c->aadbuf_len);
+  if (ret != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_AesGcmDecrypt failed with ret=%d\n", ret);
+    return GPG_ERR_INV_ARG;
+  }
+
+  memcpy(outbuf, &wc_c->databuf[newdatastart], inbuflen);
+  wc_c->databuf_len += inbuflen;
 
   return GPG_ERR_NO_ERROR;
 }
@@ -1654,10 +1907,34 @@ _wc_cipher_aes_gcm_tag (gcry_cipher_hd_t c,
                       byte * outbuf, size_t outbuflen, int check)
 {
   wc_gcm_context_t *wc_c = &c->u_mode.gcm.wc_gcm;
+  Aes *aesGcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
+  unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
+  unsigned char* tempAuthTag = (unsigned char*)_gcry_malloc_secure(GCRY_GCM_BLOCK_LEN);
+  if (!tempAuthTag)
+    return GPG_ERR_ENOMEM;
+
   if (!(is_tag_length_valid (outbuflen) || outbuflen >= GCRY_GCM_BLOCK_LEN))
-    return GPG_ERR_INV_LENGTH;
+    {
+      wipememory(tempAuthTag, GCRY_GCM_BLOCK_LEN);
+      xfree(tempAuthTag);
+      return GPG_ERR_INV_LENGTH;
+    }
   if (c->u_mode.gcm.datalen_over_limits)
-    return GPG_ERR_INV_LENGTH;
+    {
+      wipememory(tempAuthTag, GCRY_GCM_BLOCK_LEN);
+      xfree(tempAuthTag);
+      return GPG_ERR_INV_LENGTH;
+    }
+
+  if (wc_calculate_gcm_auth_tag(aesGcmDec, aadbuf, wc_c->aadbuf_len,
+                              wc_c->cryptbuf, wc_c->cryptbuf_len,
+                              wc_c->iv, wc_c->iv_len,
+                              tempAuthTag) != 0) {
+    fprintf(stderr, "[WOLFSSL ERROR] wc_calculate_gcm_auth_tag failed\n");
+    wipememory(tempAuthTag, GCRY_GCM_BLOCK_LEN);
+    xfree(tempAuthTag);
+    return GPG_ERR_INV_ARG;
+  }
 
   if (!check)
     {
@@ -1666,17 +1943,31 @@ _wc_cipher_aes_gcm_tag (gcry_cipher_hd_t c,
 
       /* NB: We already checked that OUTBUF is large enough to hold
        * the result or has valid truncated length.  */
-      memcpy (outbuf, wc_c->authtag, outbuflen);
+      memcpy (outbuf, tempAuthTag, outbuflen);
+
+
     }
   else
     {
       /* OUTBUFLEN gives the length of the user supplied tag in OUTBUF
        * and thus we need to compare its length first.  */
-      if (!is_tag_length_valid (outbuflen)
-          || !buf_eq_const (outbuf, wc_c->authtag, outbuflen))
-        return GPG_ERR_CHECKSUM;
+      if (!is_tag_length_valid (outbuflen))
+        {
+          wipememory(tempAuthTag, GCRY_GCM_BLOCK_LEN);
+          xfree(tempAuthTag);
+          return GPG_ERR_CHECKSUM;
+        }
+
+      if (!buf_eq_const (outbuf, tempAuthTag, outbuflen))
+        {
+          wipememory(tempAuthTag, GCRY_GCM_BLOCK_LEN);
+          xfree(tempAuthTag);
+          return GPG_ERR_CHECKSUM;
+        }
     }
 
+  wipememory(tempAuthTag, GCRY_GCM_BLOCK_LEN);
+  xfree(tempAuthTag);
   return 0;
 }
 

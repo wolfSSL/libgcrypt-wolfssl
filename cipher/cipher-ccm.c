@@ -484,7 +484,7 @@ _wc_cipher_aes_ccm_setkey(gcry_cipher_hd_t c, byte *key, size_t keylen)
    */
   ret = wc_AesSetKey(aesCcmDec, key, keylen, NULL, AES_ENCRYPTION);
   if (ret != 0) {
-    printf("wc_AesSetKey failed\n");
+    fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetKey failed with ret=%d\n", ret);
     return GPG_ERR_INV_VALUE;
   }
   return GPG_ERR_NO_ERROR;
@@ -528,12 +528,16 @@ _wc_cipher_aes_ccm_set_nonce (gcry_cipher_hd_t c, const unsigned char *nonce,
   wc_c->authtag_len = save_wc_c.authtag_len;
 
   ret = wc_AesCcmSetNonce(aesCcmEnc, nonce, noncelen);
-  if (ret != 0)
+  if (ret != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_AesCcmSetNonce (enc) failed with ret=%d\n", ret);
       return GPG_ERR_INV_ARG;
+  }
 
   ret = wc_AesCcmSetNonce(aesCcmDec, nonce, noncelen);
-  if (ret != 0)
+  if (ret != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_AesCcmSetNonce (dec) failed with ret=%d\n", ret);
       return GPG_ERR_INV_ARG;
+  }
 
    c->u_mode.ccm.nonce = 1;
    return GPG_ERR_NO_ERROR;

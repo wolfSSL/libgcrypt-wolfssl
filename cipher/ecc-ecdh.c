@@ -351,7 +351,12 @@ _gcry_ecc_mul_point (int curveid, unsigned char *result,
   else
     return gpg_error (GPG_ERR_UNKNOWN_CURVE);
 
+
+  #if defined(HAVE_WOLFSSL) /* wolfSSL does not support ECDH with these curves */
+  return gpg_error (GPG_ERR_NOT_SUPPORTED);
+  #else
   return _gcry_ecc_curve_mul_point (curve, result, pubkey_len,
                                     scalar, seckey_len,
                                     point, pubkey_len);
+  #endif
 }
