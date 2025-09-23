@@ -2,7 +2,7 @@
 set -e
 
 cleanup () {
-	/usr/share/libgcrypt20/clean-up-unmanaged-libraries \
+	/usr/share/libgcrypt20-1.11.0-wolfssl/clean-up-unmanaged-libraries \
 		--bug-ref=984884 \
 		"$@" \
 		#ENV.DEB_HOST_MULTIARCH# \

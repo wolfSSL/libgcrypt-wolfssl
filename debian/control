@@ -1,4 +1,4 @@
-Source: libgcrypt20
+Source: libgcrypt20-1.11.0-wolfssl
 Section: libs
 Priority: optional
 Maintainer: wolfSSL <support@wolfssl.com>
@@ -13,13 +13,16 @@ Homepage: https://directory.fsf.org/project/libgcrypt/
 Vcs-Browser: https://github.com/wolfSSL/libgcrypt-wolfssl
 Vcs-Git: https://github.com/wolfSSL/libgcrypt-wolfssl.git
 
-Package: libgcrypt20-dev
+Package: libgcrypt20-1.11.0-wolfssl-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
 Depends:
- libgcrypt20 (= ${binary:Version}),
+ libgcrypt20-1.11.0-wolfssl (= ${binary:Version}),
  ${misc:Depends},
+Conflicts: libgcrypt20-dev
+Replaces: libgcrypt20-dev
+Provides: libgcrypt20-dev (= 1.11.0)
 Description: LGPL Crypto library with wolfCrypt - development files
  libgcrypt contains cryptographic functions.  Many important free
  ciphers, hash algorithms and public key signing algorithms have been
@@ -43,12 +46,15 @@ Description: LGPL Crypto library with wolfCrypt - development files
  This package contains header files and libraries for static linking.
 
 
-Package: libgcrypt20
+Package: libgcrypt20-1.11.0-wolfssl
 Architecture: any
 Multi-Arch: same
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
+Conflicts: libgcrypt20
+Replaces: libgcrypt20
+Provides: libgcrypt20 (= 1.11.0)
 Description: LGPL Crypto library with wolfCrypt - runtime library
  libgcrypt contains cryptographic functions.  Many important free
  ciphers, hash algorithms and public key signing algorithms have been

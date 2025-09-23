@@ -26,10 +26,10 @@ override_dh_auto_install-indep:	debian/tmp/usr/include/gcrypt.h
 	find debian/tmp -name libgcrypt.la -type f -delete
 
 override_dh_auto_install-arch:
-	mkdir -p debian/libgcrypt20/usr/share/libgcrypt20/
+	mkdir -p debian/libgcrypt20-1.11.0-wolfssl/usr/share/libgcrypt20-1.11.0-wolfssl/
 	dh_auto_install --arch --verbose --builddirectory=build
 	install -m755 debian/clean-up-unmanaged-libraries \
-		debian/libgcrypt20/usr/share/libgcrypt20/
+		debian/libgcrypt20-1.11.0-wolfssl/usr/share/libgcrypt20-1.11.0-wolfssl/
 	find debian/tmp -name libgcrypt.la -type f -delete
 
 override_dh_auto_configure:
