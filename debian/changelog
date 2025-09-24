@@ -1,4 +1,4 @@
-libgcrypt20 (1.11.0) UNRELEASED; urgency=medium
+libgcrypt20-1.11.0-wolfssl (1.11.0) UNRELEASED; urgency=medium
 
   * Initial release.
 
