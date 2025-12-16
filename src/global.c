@@ -104,6 +104,9 @@ global_init (void)
     if (wc_SetSeed_Cb(wc_GenerateSeed) != 0) {
       fprintf(stderr, "[WOLFSSL ERROR] wc_SetSeed_Cb failed\n");
     }
+    if (wc_RunAllCast_fips() != 0) {
+      fprintf(stderr, "[WOLFSSL ERROR] wc_RunAllCast_fips failed\n");
+    }
   }
 #endif
 
