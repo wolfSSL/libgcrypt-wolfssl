@@ -44,6 +44,17 @@
 #include "wolfssl/wolfcrypt/settings.h"
 #endif
 
+/* When wolfSSL FIPS is enabled, undefine features not supported in FIPS mode
+ * so that the test code takes the same path as normal FIPS builds. */
+#if defined(ENABLED_WOLFSSL_FIPS)
+#ifdef HAVE_ED25519
+#undef HAVE_ED25519
+#endif
+#ifdef HAVE_ED448
+#undef HAVE_ED448
+#endif
+#endif
+
 /* A real world sample public key.  */
 static char const sample_key_1[] =
 "(public-key\n"

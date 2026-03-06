@@ -37,6 +37,15 @@
 #include "wolfssl/wolfcrypt/settings.h"
 #endif
 
+#if defined(ENABLED_WOLFSSL_FIPS)
+#ifdef HAVE_ED25519
+#undef HAVE_ED25519
+#endif
+#ifdef HAVE_ED448
+#undef HAVE_ED448
+#endif
+#endif
+
 
 static int in_fips_mode;
 
