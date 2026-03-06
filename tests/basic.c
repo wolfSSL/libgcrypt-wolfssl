@@ -46,6 +46,32 @@
 #include "wolfssl/wolfcrypt/settings.h"
 #endif
 
+/* When wolfSSL FIPS is enabled, undefine features not supported in FIPS mode
+ * so that the test code takes the same path as normal FIPS builds. */
+#if defined(ENABLED_WOLFSSL_FIPS)
+#ifdef WOLFSSL_AES_CFB
+#undef WOLFSSL_AES_CFB
+#endif
+#ifdef WOLFSSL_AES_XTS
+#undef WOLFSSL_AES_XTS
+#endif
+#ifdef WOLFSSL_AES_EAX
+#undef WOLFSSL_AES_EAX
+#endif
+#ifdef WOLFSSL_AES_OCB
+#undef WOLFSSL_AES_OCB
+#endif
+#ifdef WOLFSSL_AES_SIV
+#undef WOLFSSL_AES_SIV
+#endif
+#ifdef HAVE_POLY1305
+#undef HAVE_POLY1305
+#endif
+#ifdef WOLFSSL_SM2
+#undef WOLFSSL_SM2
+#endif
+#endif
+
 #if __GNUC__ >= 4
 #  define ALWAYS_INLINE __attribute__((always_inline))
 #else

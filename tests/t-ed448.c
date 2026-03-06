@@ -33,6 +33,14 @@
 #include "t-common.h"
 #define N_TESTS 11
 
+/* When wolfSSL FIPS is enabled, undefine features not supported in FIPS mode
+ * so that the test code takes the same path as normal FIPS builds. */
+#if defined(ENABLED_WOLFSSL_FIPS)
+#ifdef HAVE_ED448
+#undef HAVE_ED448
+#endif
+#endif
+
 static int sign_with_pk;
 static int no_verify;
 static int custom_data_file;
@@ -54,7 +62,7 @@ show_note (const char *format, ...)
   va_end (arg_ptr);
 }
 
-#if !defined(ENABLED_WOLFSSL_FIPS) || defined(HAVE_ED448)
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 show_sexp (const char *prefix, gcry_sexp_t a)
 {

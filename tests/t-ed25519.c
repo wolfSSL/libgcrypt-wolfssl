@@ -38,6 +38,14 @@
 #include <wolfssl/wolfcrypt/settings.h>
 #endif
 
+/* When wolfSSL FIPS is enabled, undefine features not supported in FIPS mode
+ * so that the test code takes the same path as normal FIPS builds. */
+#if defined(ENABLED_WOLFSSL_FIPS)
+#ifdef HAVE_ED25519
+#undef HAVE_ED25519
+#endif
+#endif
+
 static int sign_with_pk;
 static int no_verify;
 static int no_fips;
@@ -60,7 +68,7 @@ show_note (const char *format, ...)
   va_end (arg_ptr);
 }
 
-#if !defined(ENABLED_WOLFSSL_FIPS) || defined(HAVE_ED25519)
+#if !defined(ENABLED_WOLFSSL_FIPS)
 static void
 show_sexp (const char *prefix, gcry_sexp_t a)
 {
