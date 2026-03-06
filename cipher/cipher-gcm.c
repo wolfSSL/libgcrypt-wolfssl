@@ -1551,7 +1551,7 @@ static WC_INLINE void wc_rightshift(byte* x)
     int carryIn = 0;
     int borrow = x[15] & 0x01;
 
-    for (i = 0; i < AES_BLOCK_SIZE; i++) {
+    for (i = 0; i < WC_AES_BLOCK_SIZE; i++) {
         int carryOut = x[i] & 0x01;
         x[i] = (x[i] >> 1) | (carryIn ? 0x80 : 0);
         carryIn = carryOut;
@@ -1653,26 +1653,26 @@ static void wc_flattenSzInBits(byte* buf, word32 sz)
 
 static void wc_gmult(byte* X, byte* Y)
 {
-    byte Z[AES_BLOCK_SIZE];
-    byte V[AES_BLOCK_SIZE];
+    byte Z[WC_AES_BLOCK_SIZE];
+    byte V[WC_AES_BLOCK_SIZE];
     int i, j;
 
-    memset(Z, 0, AES_BLOCK_SIZE);
-    memcpy(V, X, AES_BLOCK_SIZE);
-    for (i = 0; i < AES_BLOCK_SIZE; i++)
+    memset(Z, 0, WC_AES_BLOCK_SIZE);
+    memcpy(V, X, WC_AES_BLOCK_SIZE);
+    for (i = 0; i < WC_AES_BLOCK_SIZE; i++)
     {
         byte y = Y[i];
         for (j = 0; j < 8; j++)
         {
             if (y & 0x80) {
-                wc_xorbuf(Z, V, AES_BLOCK_SIZE);
+                wc_xorbuf(Z, V, WC_AES_BLOCK_SIZE);
             }
 
             wc_rightshift(V);
             y = y << 1;
         }
     }
-    memcpy(X, Z, AES_BLOCK_SIZE);
+    memcpy(X, Z, WC_AES_BLOCK_SIZE);
 }
 
 
@@ -1681,8 +1681,8 @@ static void wc_gmult(byte* X, byte* Y)
 void wc_ghash(Aes* aes, const byte* a, word32 aSz, const byte* c,
     word32 cSz, byte* s, word32 sSz)
 {
-    byte x[AES_BLOCK_SIZE];
-    byte scratch[AES_BLOCK_SIZE];
+    byte x[WC_AES_BLOCK_SIZE];
+    byte scratch[WC_AES_BLOCK_SIZE];
     word32 blocks, partial;
     byte* h;
 
@@ -1690,39 +1690,39 @@ void wc_ghash(Aes* aes, const byte* a, word32 aSz, const byte* c,
         return;
     }
 
-    h = aes->H;
-    memset(x, 0, AES_BLOCK_SIZE);
+    h = aes->gcm.H;
+    memset(x, 0, WC_AES_BLOCK_SIZE);
 
     /* Hash in A, the Additional Authentication Data */
     if (aSz != 0 && a != NULL) {
-        blocks = aSz / AES_BLOCK_SIZE;
-        partial = aSz % AES_BLOCK_SIZE;
+        blocks = aSz / WC_AES_BLOCK_SIZE;
+        partial = aSz % WC_AES_BLOCK_SIZE;
         while (blocks--) {
-            wc_xorbuf(x, a, AES_BLOCK_SIZE);
+            wc_xorbuf(x, a, WC_AES_BLOCK_SIZE);
             wc_gmult(x, h);
-            a += AES_BLOCK_SIZE;
+            a += WC_AES_BLOCK_SIZE;
         }
         if (partial != 0) {
-            memset(scratch, 0, AES_BLOCK_SIZE);
+            memset(scratch, 0, WC_AES_BLOCK_SIZE);
             memcpy(scratch, a, partial);
-            wc_xorbuf(x, scratch, AES_BLOCK_SIZE);
+            wc_xorbuf(x, scratch, WC_AES_BLOCK_SIZE);
             wc_gmult(x, h);
         }
     }
 
     /* Hash in C, the Ciphertext */
     if (cSz != 0 && c != NULL) {
-        blocks = cSz / AES_BLOCK_SIZE;
-        partial = cSz % AES_BLOCK_SIZE;
+        blocks = cSz / WC_AES_BLOCK_SIZE;
+        partial = cSz % WC_AES_BLOCK_SIZE;
         while (blocks--) {
-            wc_xorbuf(x, c, AES_BLOCK_SIZE);
+            wc_xorbuf(x, c, WC_AES_BLOCK_SIZE);
             wc_gmult(x, h);
-            c += AES_BLOCK_SIZE;
+            c += WC_AES_BLOCK_SIZE;
         }
         if (partial != 0) {
-            memset(scratch, 0, AES_BLOCK_SIZE);
+            memset(scratch, 0, WC_AES_BLOCK_SIZE);
             memcpy(scratch, c, partial);
-            wc_xorbuf(x, scratch, AES_BLOCK_SIZE);
+            wc_xorbuf(x, scratch, WC_AES_BLOCK_SIZE);
             wc_gmult(x, h);
         }
     }
@@ -1730,7 +1730,7 @@ void wc_ghash(Aes* aes, const byte* a, word32 aSz, const byte* c,
     /* Hash in the lengths of A and C in bits */
     wc_flattenSzInBits(&scratch[0], aSz);
     wc_flattenSzInBits(&scratch[8], cSz);
-    wc_xorbuf(x, scratch, AES_BLOCK_SIZE);
+    wc_xorbuf(x, scratch, WC_AES_BLOCK_SIZE);
     wc_gmult(x, h);
 
     /* Copy the result into s. */
@@ -1746,9 +1746,9 @@ static int wc_calculate_gcm_auth_tag(Aes* aes,
                                      const unsigned char* iv, word32 iv_len,
                                      unsigned char* auth_tag)
 {
-    unsigned char counter[AES_BLOCK_SIZE];
-    unsigned char ghash_result[AES_BLOCK_SIZE];
-    unsigned char encrypted_counter[AES_BLOCK_SIZE];
+    unsigned char counter[WC_AES_BLOCK_SIZE];
+    unsigned char ghash_result[WC_AES_BLOCK_SIZE];
+    unsigned char encrypted_counter[WC_AES_BLOCK_SIZE];
 
     if (aes == NULL || auth_tag == NULL) {
         return -1;
@@ -1758,25 +1758,25 @@ static int wc_calculate_gcm_auth_tag(Aes* aes,
     if (iv_len == GCM_NONCE_MID_SZ) {
         /* Standard 96-bit IV: counter is IV with bottom 4 bytes set to 0x00,0x00,0x00,0x01 */
         memcpy(counter, iv, iv_len);
-        memset(counter + GCM_NONCE_MID_SZ, 0, AES_BLOCK_SIZE - GCM_NONCE_MID_SZ - 1);
-        counter[AES_BLOCK_SIZE - 1] = 1;
+        memset(counter + GCM_NONCE_MID_SZ, 0, WC_AES_BLOCK_SIZE - GCM_NONCE_MID_SZ - 1);
+        counter[WC_AES_BLOCK_SIZE - 1] = 1;
     } else {
         /* Non-standard IV length: counter is GHASH of IV */
-        wc_ghash(aes, NULL, 0, iv, iv_len, counter, AES_BLOCK_SIZE);
+        wc_ghash(aes, NULL, 0, iv, iv_len, counter, WC_AES_BLOCK_SIZE);
     }
 
     /* Calculate GHASH over AAD and ciphertext */
-    wc_ghash(aes, aad, aad_len, ciphertext, ct_len, ghash_result, AES_BLOCK_SIZE);
+    wc_ghash(aes, aad, aad_len, ciphertext, ct_len, ghash_result, WC_AES_BLOCK_SIZE);
 
     /* Encrypt the initial counter to get E(K, J0) */
     /* Void function */
     wc_AesEncryptDirect(aes, encrypted_counter, counter);
 
     /* Final auth tag = GHASH result XOR E(K, J0) */
-    wc_xorbuf(ghash_result, encrypted_counter, AES_BLOCK_SIZE);
+    wc_xorbuf(ghash_result, encrypted_counter, WC_AES_BLOCK_SIZE);
 
     /* Copy result to output */
-    memcpy(auth_tag, ghash_result, AES_BLOCK_SIZE);
+    memcpy(auth_tag, ghash_result, WC_AES_BLOCK_SIZE);
 
     return 0;
 }
