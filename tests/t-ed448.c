@@ -54,7 +54,7 @@ show_note (const char *format, ...)
   va_end (arg_ptr);
 }
 
-#if !defined(ENABLED_WOLFSSL_FIPS)
+#if !defined(ENABLED_WOLFSSL_FIPS) || defined(HAVE_ED448)
 static void
 show_sexp (const char *prefix, gcry_sexp_t a)
 {
