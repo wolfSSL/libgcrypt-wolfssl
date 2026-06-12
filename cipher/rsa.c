@@ -46,6 +46,7 @@
 #include <wolfssl/wolfcrypt/sha512.h>
 #include <wolfssl/wolfcrypt/sha3.h>
 #include <wolfssl/wolfcrypt/integer.h>
+#include <wolfssl/wolfcrypt/error-crypt.h>
 
 #endif
 
@@ -2827,6 +2828,30 @@ static void shiftRight(byte* arr, word32* oldSize, word32 newSize)
 }
 
 
+/* Bounded number of whole-key regeneration attempts used in non-FIPS
+ * mode.  Each attempt fails independently with a very small probability,
+ * so a handful of tries drives the effective failure rate to negligible.
+ * In FIPS mode we do not retry at all (see wc_rsa_generate). */
+#define WC_RSA_KEYGEN_MAX_TRIES 8
+
+/* Map a wolfCrypt error code to a libgcrypt error code.  The wolfCrypt
+ * port historically returned raw negative wolfCrypt codes straight out of
+ * gcry_pk_genkey(); once masked into the 16-bit gpg error code field they
+ * collided with GPG_ERR_UNKNOWN_ERRNO and were printed as "Unknown system
+ * error".  Translate the codes RSA key generation can produce. */
+static gpg_err_code_t
+wc_rsa_err_to_gcry (int wc_ret)
+{
+  switch (wc_ret)
+    {
+    case 0:            return GPG_ERR_NO_ERROR;
+    case PRIME_GEN_E:  return GPG_ERR_NO_PRIME;
+    case MEMORY_E:     return GPG_ERR_ENOMEM;
+    case BAD_FUNC_ARG: return GPG_ERR_INV_ARG;
+    default:           return GPG_ERR_GENERAL;
+    }
+}
+
 static gcry_err_code_t
 wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 {
@@ -2846,6 +2871,8 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   RNG rng;
   long e = 0;
   int bits = 0;
+  int wc_ret = 0;
+  int rsa_tries = 0;
   byte wc_e[RSA_MAX_SIZE/8] = {0};
   byte wc_n[RSA_MAX_SIZE/8] = {0};
   byte wc_d[RSA_MAX_SIZE/8] = {0};
@@ -2948,24 +2975,46 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
       /* Generate.  */
       /* Initialize RNG */
-      ec = wc_InitRng(&rng);
-      if (ec) {
-        return ec;
+      wc_ret = wc_InitRng(&rng);
+      if (wc_ret != 0) {
+        return wc_rsa_err_to_gcry (wc_ret);
       }
 
-      /* Initialize Key */
-      ec = wc_InitRsaKey(&rsaKey, NULL);
-      if (ec) {
-        wc_FreeRng(&rng);
-        return ec;
-      }
+      /* WolfSSL key generation.
+       *
+       * In FIPS mode wolfCrypt bounds the prime search to a fixed number of
+       * candidates (NIST FIPS 186-4 B.3.3) and returns PRIME_GEN_E when that
+       * budget is exhausted.  Stock libgcrypt's generate_fips surfaces this
+       * as GPG_ERR_NO_PRIME, so in FIPS mode we pass it straight up without
+       * retrying.  In non-FIPS mode stock libgcrypt retries the prime search
+       * forever, so we emulate that with a bounded retry on PRIME_GEN_E. */
+      for (rsa_tries = 0; rsa_tries < WC_RSA_KEYGEN_MAX_TRIES; rsa_tries++) {
+        wc_ret = wc_InitRsaKey(&rsaKey, NULL);
+        if (wc_ret != 0) {
+          wc_FreeRng(&rng);
+          return wc_rsa_err_to_gcry (wc_ret);
+        }
 
-      /* WolfSSL Key Generation */
-      ec = wc_MakeRsaKey(&rsaKey, bits, e, &rng);
-      if (ec) {
+        wc_ret = wc_MakeRsaKey(&rsaKey, bits, e, &rng);
+        if (wc_ret == 0)
+          break; /* success */
+
+        /* Failed: release the key before retrying or giving up. */
         wc_FreeRsaKey(&rsaKey);
+
+        /* Only a non-FIPS PRIME_GEN_E is retryable.  In FIPS mode, or for
+         * any other error, surface it immediately. */
+        if (wc_ret != PRIME_GEN_E || fips_mode()) {
+          wc_FreeRng(&rng);
+          return wc_rsa_err_to_gcry (wc_ret);
+        }
+        /* non-FIPS PRIME_GEN_E: draw fresh primes and try again. */
+      }
+
+      if (wc_ret != 0) {
+        /* Non-FIPS prime-search budget exhausted on every attempt. */
         wc_FreeRng(&rng);
-        return ec;
+        return wc_rsa_err_to_gcry (wc_ret);
       }
 
       /* Get all sizes */
@@ -2978,24 +3027,24 @@ wc_rsa_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
 
       /* Convert wolfSSL Key to libgcrypt Key */
       PRIVATE_KEY_UNLOCK();
-      ec = wc_RsaExportKey(&rsaKey,
-                            wc_e, &wc_e_len,
-                            wc_n, &wc_n_len,
-                            wc_d, &wc_d_len,
-                            wc_p, &wc_p_len,
-                            wc_q, &wc_q_len);
+      wc_ret = wc_RsaExportKey(&rsaKey,
+                               wc_e, &wc_e_len,
+                               wc_n, &wc_n_len,
+                               wc_d, &wc_d_len,
+                               wc_p, &wc_p_len,
+                               wc_q, &wc_q_len);
       PRIVATE_KEY_LOCK();
-      if (ec) {
+      if (wc_ret != 0) {
         wc_FreeRsaKey(&rsaKey);
         wc_FreeRng(&rng);
-        return ec;
+        return wc_rsa_err_to_gcry (wc_ret);
       }
 
-      ec = mp_to_unsigned_bin(&rsaKey.u, wc_u);
-      if (ec) {
+      wc_ret = mp_to_unsigned_bin(&rsaKey.u, wc_u);
+      if (wc_ret != 0) {
         wc_FreeRsaKey(&rsaKey);
         wc_FreeRng(&rng);
-        return ec;
+        return wc_rsa_err_to_gcry (wc_ret);
       }
 
       /* convert to libgcrypt key */
