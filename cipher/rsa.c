@@ -3612,6 +3612,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     case PUBKEY_ENC_PKCS1:
     case PUBKEY_ENC_RAW:
     case PUBKEY_ENC_OAEP:
+    case PUBKEY_ENC_UNKNOWN: /* GnuPG OpenPGP verify supplies the full encoded message and libgcrypt leaves encoding UNKNOWN; stock libgcrypt does the raw mpi_cmp for all non-PSS encodings, so handle it here instead of falling to default->BAD. */
       /* Allocate a buffer for the output */
       myDataLen = mySigLen;
 
