@@ -109,11 +109,6 @@ static const gcry_md_spec_t * const digest_list[] =
      &_gcry_digest_spec_shake256,
      &_gcry_digest_spec_cshake128,
      &_gcry_digest_spec_cshake256,
-#else
-    NULL,
-    NULL,
-    NULL,
-    NULL,
 #endif
 #endif
 #if USE_GOST_R_3411_94
