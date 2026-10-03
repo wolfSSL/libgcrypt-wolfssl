@@ -317,6 +317,11 @@ _gcry_ecc_compute_public (mpi_point_t Q, mpi_ec_t ec)
 {
   if (!ec->d || !ec->G || !ec->p || !ec->a)
     return NULL;
+#ifdef HAVE_WOLFSSL
+  /* No Edwards-curve secret-key arithmetic outside wolfCrypt.  */
+  if (ec->model == MPI_EC_EDWARDS)
+    return NULL;
+#endif
   if (ec->model == MPI_EC_EDWARDS && !ec->b)
     return NULL;
 
