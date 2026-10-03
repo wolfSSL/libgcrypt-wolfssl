@@ -148,7 +148,10 @@ typedef struct
 /* This static table defines all available curves.  */
 static const ecc_domain_parms_t domain_parms[] =
   {
-    #ifndef HAVE_WOLFSSL
+    /* A HAVE_WOLFSSL build without ENABLED_WOLFSSL_FIPS verifies Ed25519
+     * and Ed448 signatures with wolfCrypt (ecc-eddsa.c); no wolfCrypt build
+     * here has X25519 or X448.  */
+    #if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
     {
       /* (-x^2 + y^2 = 1 + dx^2y^2) */
       "Ed25519", 255, 1,
@@ -161,6 +164,8 @@ static const ecc_domain_parms_t domain_parms[] =
       "0x6666666666666666666666666666666666666666666666666666666666666658",
       8
     },
+    #endif
+    #ifndef HAVE_WOLFSSL
     {
       /* (y^2 = x^3 + 486662*x^2 + x) */
       "Curve25519", 255, 0,
@@ -178,6 +183,8 @@ static const ecc_domain_parms_t domain_parms[] =
        * the function _gcry_ecc_fill_in_curve.  See bug #4712.
        */
     },
+    #endif
+    #if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
     {
       /* (x^2 + y^2 = 1 + dx^2y^2) */
       "Ed448", 448, 1,
@@ -195,6 +202,8 @@ static const ecc_domain_parms_t domain_parms[] =
       "05A0C2D73AD3FF1CE67C39C4FDBD132C4ED7C8AD9808795BF230FA14",
       4,
     },
+    #endif
+    #ifndef HAVE_WOLFSSL
     {
       /* (y^2 = x^3 + 156326*x^2 + x) */
       "X448", 448, 0,

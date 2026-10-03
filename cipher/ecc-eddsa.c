@@ -30,6 +30,13 @@
 #include "ec-context.h"
 #include "ecc-common.h"
 
+#ifdef HAVE_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/ed25519.h>
+#include <wolfssl/wolfcrypt/ed448.h>
+#endif
+
 
 
 void
@@ -504,6 +511,10 @@ _gcry_ecc_eddsa_compute_h_d (unsigned char **r_digest, mpi_ec_t ec)
   gcry_buffer_t hvec[2];
 
   *r_digest = NULL;
+#ifdef HAVE_WOLFSSL
+  /* No EdDSA secret-key arithmetic outside wolfCrypt.  */
+  return GPG_ERR_NOT_SUPPORTED;
+#endif
 
   b = (ec->nbits+7)/8;
 
@@ -598,6 +609,11 @@ _gcry_ecc_eddsa_genkey (mpi_ec_t ec, int flags)
   size_t dlen;
   unsigned char *hash_d = NULL;
 
+#ifdef HAVE_WOLFSSL
+  /* The wolfCrypt port does not generate EdDSA keys; refuse rather
+     than compute a secret key outside wolfCrypt.  */
+  return GPG_ERR_NOT_SUPPORTED;
+#endif
   if ((flags & PUBKEY_FLAG_TRANSIENT_KEY))
     random_level = GCRY_STRONG_RANDOM;
   else
@@ -693,6 +709,11 @@ _gcry_ecc_eddsa_sign (gcry_mpi_t input, mpi_ec_t ec,
   gcry_buffer_t hvec[6];
   gcry_buffer_t hvec2[1];
 
+#ifdef HAVE_WOLFSSL
+  /* The wolfCrypt port does not sign with EdDSA; refuse rather than
+     use the secret key outside wolfCrypt.  */
+  return GPG_ERR_NOT_SUPPORTED;
+#endif
   b = (ec->nbits+7)/8;
 
   if (ec->nbits == 255)
@@ -889,6 +910,139 @@ _gcry_ecc_eddsa_sign (gcry_mpi_t input, mpi_ec_t ec,
 }
 
 
+#ifdef HAVE_WOLFSSL
+/* Verify an EdDSA signature with wolfCrypt: the variant RFC 8032 names
+ * for the same inputs _gcry_ecc_eddsa_verify takes (Ed25519, Ed25519ctx
+ * with a label, Ed25519ph with PUBKEY_FLAG_PREHASH; Ed448 with its
+ * context, Ed448ph).  Only the RFC 8032 hash of the curve is supported.
+ * The public key is still encoded and range-checked by libgcrypt.  */
+static gpg_err_code_t
+eddsa_verify_wc (gcry_mpi_t input, mpi_ec_t ec,
+                 gcry_mpi_t r_in, gcry_mpi_t s_in,
+                 struct pk_encoding_ctx *ctx)
+{
+  static const unsigned char empty[1];
+  gpg_err_code_t rc = 0;
+  unsigned char *encpk = NULL;
+  unsigned int encpklen = 0;
+  const unsigned char *mbuf, *rbuf, *sbuf;
+  unsigned int tmp;
+  size_t mlen, rlen, slen, b;
+  unsigned char sig[2 * 57];  /* Ed448 is the larger (RFC 8032 5.2).  */
+  const unsigned char *label = ctx->labellen ? ctx->label : NULL;
+  byte labellen = (byte)ctx->labellen;
+  int prehash = !!(ctx->flags & PUBKEY_FLAG_PREHASH);
+  int ret = 0, res = 0;
+
+  if (!mpi_is_opaque (input) || !mpi_is_opaque (r_in) || !mpi_is_opaque (s_in))
+    return GPG_ERR_INV_DATA;
+
+  if (ec->nbits == 255)
+    {
+      if (ctx->hash_algo != GCRY_MD_SHA512)
+        return GPG_ERR_DIGEST_ALGO;
+      b = 32;
+    }
+  else if (ec->nbits == 448)
+    {
+      if (ctx->hash_algo != GCRY_MD_SHAKE256)
+        return GPG_ERR_DIGEST_ALGO;
+      b = 57;
+    }
+  else
+    return GPG_ERR_NOT_IMPLEMENTED;
+  if (ctx->labellen > 255)
+    return GPG_ERR_INV_LENGTH;
+
+  rc = _gcry_ecc_eddsa_encodepoint (ec->Q, ec, NULL, NULL, 0,
+                                    &encpk, &encpklen);
+  if (rc)
+    return rc;
+  if (!_gcry_mpi_ec_curve_point (ec->Q, ec))
+    {
+      rc = GPG_ERR_BROKEN_PUBKEY;
+      goto leave;
+    }
+  if (encpklen != b)
+    {
+      rc = GPG_ERR_INV_LENGTH;
+      goto leave;
+    }
+
+  mbuf = mpi_get_opaque (input, &tmp);
+  mlen = (tmp + 7) / 8;
+  if (!mbuf)
+    mbuf = empty;  /* wolfCrypt rejects a NULL message, even when empty.  */
+  rbuf = mpi_get_opaque (r_in, &tmp);
+  rlen = (tmp + 7) / 8;
+  sbuf = mpi_get_opaque (s_in, &tmp);
+  slen = (tmp + 7) / 8;
+  if (rlen != b || slen != b)
+    {
+      rc = GPG_ERR_INV_LENGTH;
+      goto leave;
+    }
+  memcpy (sig, rbuf, b);
+  memcpy (sig + b, sbuf, b);
+
+  if (ec->nbits == 255)
+    {
+#ifdef HAVE_ED25519
+      ed25519_key key;
+
+      if (wc_ed25519_init (&key))
+        {
+          rc = GPG_ERR_INTERNAL;
+          goto leave;
+        }
+      if (wc_ed25519_import_public (encpk, encpklen, &key))
+        rc = GPG_ERR_BROKEN_PUBKEY;
+      else if (prehash)
+        ret = wc_ed25519ph_verify_msg (sig, 2 * b, mbuf, mlen, &res, &key,
+                                       label, labellen);
+      else if (labellen)
+        ret = wc_ed25519ctx_verify_msg (sig, 2 * b, mbuf, mlen, &res, &key,
+                                        label, labellen);
+      else
+        ret = wc_ed25519_verify_msg (sig, 2 * b, mbuf, mlen, &res, &key);
+      wc_ed25519_free (&key);
+#else
+      rc = GPG_ERR_NOT_SUPPORTED;
+#endif
+    }
+  else
+    {
+#ifdef HAVE_ED448
+      ed448_key key;
+
+      if (wc_ed448_init (&key))
+        {
+          rc = GPG_ERR_INTERNAL;
+          goto leave;
+        }
+      if (wc_ed448_import_public (encpk, encpklen, &key))
+        rc = GPG_ERR_BROKEN_PUBKEY;
+      else if (prehash)
+        ret = wc_ed448ph_verify_msg (sig, 2 * b, mbuf, mlen, &res, &key,
+                                     label, labellen);
+      else
+        ret = wc_ed448_verify_msg (sig, 2 * b, mbuf, mlen, &res, &key,
+                                   label, labellen);
+      wc_ed448_free (&key);
+#else
+      rc = GPG_ERR_NOT_SUPPORTED;
+#endif
+    }
+  if (!rc && (ret || res != 1))
+    rc = GPG_ERR_BAD_SIGNATURE;
+
+ leave:
+  xfree (encpk);
+  return rc;
+}
+#endif /* HAVE_WOLFSSL */
+
+
 /* Verify an EdDSA signature.  See sign_eddsa for the reference.
  * Check if R_IN and S_IN verifies INPUT.
  */
@@ -917,6 +1071,9 @@ _gcry_ecc_eddsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   gcry_buffer_t hvec[6];
   gcry_buffer_t hvec2[1];
 
+#ifdef HAVE_WOLFSSL
+  return eddsa_verify_wc (input, ec, r_in, s_in, ctx);
+#endif
   if (!mpi_is_opaque (input) || !mpi_is_opaque (r_in) || !mpi_is_opaque (s_in))
     return GPG_ERR_INV_DATA;
 
