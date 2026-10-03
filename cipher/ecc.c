@@ -131,6 +131,10 @@ static const char ecdsa_sample_data_string[] = "sample";
 static const char ecdsa_sample_data_bad_string[] = "sbmple";
 
 
+/* EdDSA vectors.  A HAVE_WOLFSSL build has no Ed25519 or Ed448 curve
+ * (ecc-curves.c); only its ENABLED_WOLFSSL_FIPS selftest uses them, to
+ * check that the curves are refused.  */
+#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS)
 /* Ed25519 test vector from RFC 8032 7.1.  */
 static const char ed25519_sample_public_key[] =
   "(public-key"
@@ -188,6 +192,7 @@ static const char *ed448_data_tmpl = "(data (value %b))";
 /* Sample data from RFC 6979 section A.2.5, hash is of message "sample" */
 static const char ed448_sample_data_string[] = "\x03";
 static const char ed448_sample_data_bad_string[] = "\x03\x03\x03";
+#endif /* !HAVE_WOLFSSL || ENABLED_WOLFSSL_FIPS */
 
 
 /* Registered progress function and its callback value. */
@@ -3462,6 +3467,10 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
                      ecdsa_data_tmpl,
                      ecdsa_sample_data_string, ecdsa_sample_data_bad_string,
                      ecdsa_signature_r, ecdsa_signature_s);
+#ifdef HAVE_WOLFSSL
+  /* Ed25519 and Ed448 are not provided by the wolfCrypt port.  */
+  return r;
+#else
   if (r)
     return r;
 
@@ -3483,6 +3492,7 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
                      ed448_sample_data_string, ed448_sample_data_bad_string,
                      ed448_signature_r, ed448_signature_s);
   return r;
+#endif /* !HAVE_WOLFSSL */
 }
 #endif
 
