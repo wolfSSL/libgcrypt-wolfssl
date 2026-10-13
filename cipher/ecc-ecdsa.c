@@ -511,7 +511,7 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
   byte wc_D_rightAligned[WC_MAX_CURVE_SIZE] = {0};
   byte wc_k[WC_MAX_CURVE_SIZE] = {0};
 
-  word32 wc_D_len = 0;
+  size_t wc_D_len = 0;
   word32 wc_D_rightAligned_len = 0;
   size_t wc_k_len = 0;
   int wc_curve_size = 0;
@@ -578,9 +578,15 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 
     /* Get Curve Parameters from libgcrypt */
     ret = _gcry_mpi_print(GCRYMPI_FMT_USG, (unsigned char *)&wc_D,
-                                WC_MAX_CURVE_SIZE, (size_t *)&wc_D_len, ec->d);
+                                WC_MAX_CURVE_SIZE, &wc_D_len, ec->d);
     if (ret != 0) {
       rc = GPG_ERR_BROKEN_PUBKEY;
+      wc_ecc_free(&wc_key);
+      wc_FreeRng(&rng);
+      goto leave;
+    }
+    if (wc_D_len > wc_D_rightAligned_len) {
+      rc = GPG_ERR_BROKEN_SECKEY; /* d wider than the curve: right-align would underflow */
       wc_ecc_free(&wc_key);
       wc_FreeRng(&rng);
       goto leave;
@@ -927,8 +933,8 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
   byte wc_QX_rightAligned[WC_MAX_CURVE_SIZE] = {0};
   byte wc_QY_rightAligned[WC_MAX_CURVE_SIZE] = {0};
 
-  word32 wc_QX_len = 0;
-  word32 wc_QY_len = 0;
+  size_t wc_QX_len = 0;
+  size_t wc_QY_len = 0;
   word32 wc_QX_rightAligned_len = 0;
   word32 wc_QY_rightAligned_len = 0;
   word32 wc_r_rightAligned_len = 0;
@@ -994,7 +1000,7 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
 
     /* Get public key coordinates from libgcrypt */
     ret = _gcry_mpi_print(GCRYMPI_FMT_USG, (unsigned char *)&wc_QX, WC_MAX_CURVE_SIZE,
-                                (size_t *)&wc_QX_len, ec->Q->x);
+                                &wc_QX_len, ec->Q->x);
     if (ret != 0) {
       err = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);
@@ -1002,7 +1008,7 @@ _gcry_ecc_ecdsa_verify (gcry_mpi_t input, mpi_ec_t ec,
     }
 
     ret = _gcry_mpi_print(GCRYMPI_FMT_USG, (unsigned char *)&wc_QY, WC_MAX_CURVE_SIZE,
-                                (size_t *)&wc_QY_len, ec->Q->y);
+                                &wc_QY_len, ec->Q->y);
     if (ret != 0) {
       err = GPG_ERR_BROKEN_PUBKEY;
       wc_ecc_free(&wc_key);

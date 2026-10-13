@@ -3139,6 +3139,7 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
   byte inputDataBlock[RSA_MAX_SIZE/8] = {0};
   word32 inputDataBlockLen = 0;
+  size_t nwritten = 0;
 
   byte cipherData[RSA_MAX_SIZE/8] = {0};
   word32 cipherDataLen = 0;
@@ -3189,10 +3190,11 @@ wc_rsa_encrypt (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   }
 
   rc = _gcry_mpi_print(GCRYMPI_FMT_USG, inputDataBlock, (size_t)sizeof(inputDataBlock),
-                       (size_t *)&inputDataBlockLen, data);
+                       &nwritten, data);
   if (rc) {
     goto leave_wolf;
   }
+  inputDataBlockLen = (word32)nwritten;
 
   /* Set amount of cipher data needed */
   cipherDataLen = (nbits/8);
@@ -3271,6 +3273,7 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
   byte inputDataBlock[RSA_MAX_SIZE/8] = {0};
   word32 inputDataBlockLen = 0;
+  size_t nwritten = 0;
 
   byte plainData[RSA_MAX_SIZE/8] = {0};
   word32 plainDataLen = 0;
@@ -3335,10 +3338,11 @@ wc_rsa_decrypt (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   }
 
   rc = _gcry_mpi_print(GCRYMPI_FMT_USG, inputDataBlock, (size_t)sizeof(inputDataBlock),
-                       (size_t *)&inputDataBlockLen, data);
+                       &nwritten, data);
   if (rc) {
     goto leave_wolf;
   }
+  inputDataBlockLen = (word32)nwritten;
 
   /* Allocate memory for plain data */
   plainDataLen = (nbits/8);
