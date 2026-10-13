@@ -30,6 +30,40 @@
 #include "secmem.h"
 #include "mpi.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfcrypt-cast-retry.h"
+
+/* The one lock around the wolfCrypt glue's log calls; see
+   wolfcrypt-cast-retry.h.  */
+GPGRT_LOCK_DEFINE (wc_log_lock);
+
+void
+_gcry_wc_log_lock (void)
+{
+  gpgrt_lock_lock (&wc_log_lock);
+}
+
+void
+_gcry_wc_log_unlock (void)
+{
+  gpgrt_lock_unlock (&wc_log_lock);
+}
+
+/* log_fatal under the lock, which is never released: this does not
+   return.  */
+void
+_gcry_wc_log_fatal (const char *fmt, ...)
+{
+  va_list arg_ptr;
+
+  _gcry_wc_log_lock ();
+  va_start (arg_ptr, fmt);
+  _gcry_logv (GCRY_LOG_FATAL, fmt, arg_ptr);
+  va_end (arg_ptr);
+  abort (); /* not reached */
+}
+#endif /*HAVE_WOLFSSL*/
+
 static int verbosity_level = 0;
 
 #ifndef HAVE_EXPLICIT_MEMSET
