@@ -1581,13 +1581,8 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_OCB:
-    #ifdef HAVE_WOLFSSL
-      c->mode_ops.encrypt = NULL;
-      c->mode_ops.decrypt = NULL;
-    #else
       c->mode_ops.encrypt = _gcry_cipher_ocb_encrypt;
       c->mode_ops.decrypt = _gcry_cipher_ocb_decrypt;
-    #endif
       break;
 
     case GCRY_CIPHER_MODE_XTS:
@@ -1668,11 +1663,7 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_OCB:
-    #ifdef HAVE_WOLFSSL
-      c->mode_ops.setiv = NULL;
-    #else
       c->mode_ops.setiv = _gcry_cipher_ocb_set_nonce;
-    #endif
       break;
 
     case GCRY_CIPHER_MODE_SIV:
@@ -1762,15 +1753,9 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_OCB:
-    #ifdef HAVE_WOLFSSL
-      c->mode_ops.authenticate = NULL;
-      c->mode_ops.get_tag      = NULL;
-      c->mode_ops.check_tag    = NULL;
-    #else
       c->mode_ops.authenticate = _gcry_cipher_ocb_authenticate;
       c->mode_ops.get_tag      = _gcry_cipher_ocb_get_tag;
       c->mode_ops.check_tag    = _gcry_cipher_ocb_check_tag;
-    #endif
       break;
 
     case GCRY_CIPHER_MODE_SIV:
