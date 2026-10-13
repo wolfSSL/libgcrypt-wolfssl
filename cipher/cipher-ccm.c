@@ -419,7 +419,48 @@ _gcry_cipher_ccm_decrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
 }
 
 #ifdef HAVE_WOLFSSL
+#include <wolfssl/wolfcrypt/error-crypt.h>
 #include "rijndael-internal.h"
+
+/* Map a wolfCrypt AES-CCM return code to a libgcrypt error code.  Any
+   other refusal (a failed or running CAST, a degraded module) means the
+   module did not perform the operation.  */
+static gcry_err_code_t
+wc_ccm_err (int ret)
+{
+  switch (ret)
+    {
+    case 0:
+      return GPG_ERR_NO_ERROR;
+    case BAD_FUNC_ARG:
+      return GPG_ERR_INV_ARG;
+    case AES_CCM_AUTH_E:
+      return GPG_ERR_CHECKSUM;
+    case MEMORY_E:
+      return GPG_ERR_ENOMEM;
+    default:
+      return GPG_ERR_NOT_OPERATIONAL;
+    }
+}
+
+/* Wipe and free the collected data; they hold plaintext.  */
+static void
+wc_ccm_free_bufs (wc_ccm_context_t *wc_c)
+{
+  if (wc_c->databuf != NULL)
+    {
+      wipememory (wc_c->databuf, wc_c->databuf_cap);
+      free (wc_c->databuf);
+    }
+  if (wc_c->cryptbuf != NULL)
+    {
+      wipememory (wc_c->cryptbuf, wc_c->cryptbuf_cap);
+      free (wc_c->cryptbuf);
+    }
+  if (wc_c->aadbuf != NULL)
+    free (wc_c->aadbuf);
+  wc_c->databuf = wc_c->cryptbuf = wc_c->aadbuf = NULL;
+}
 
 gcry_err_code_t
 _wc_cipher_aes_ccm_close(gcry_cipher_hd_t c)
@@ -428,14 +469,7 @@ _wc_cipher_aes_ccm_close(gcry_cipher_hd_t c)
   Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
   wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
 
-  if (wc_c->databuf != NULL)
-      free(wc_c->databuf);
-
-  if (wc_c->cryptbuf != NULL)
-      free(wc_c->cryptbuf);
-
-  if (wc_c->aadbuf != NULL)
-      free(wc_c->aadbuf);
+  wc_ccm_free_bufs (wc_c);
 
   wc_AesFree(aesCcmEnc);
   wc_AesFree(aesCcmDec);
@@ -507,14 +541,7 @@ _wc_cipher_aes_ccm_set_nonce (gcry_cipher_hd_t c, const unsigned char *nonce,
   if (L < 2 || L > 8)
     return GPG_ERR_INV_LENGTH;
 
-  if (wc_c->databuf != NULL)
-      free(wc_c->databuf);
-
-  if (wc_c->cryptbuf != NULL)
-      free(wc_c->cryptbuf);
-
-  if (wc_c->aadbuf != NULL)
-      free(wc_c->aadbuf);
+  wc_ccm_free_bufs (wc_c);
 
   marks_key = c->marks.key;
   memset (&c->u_mode, 0, sizeof(c->u_mode));
@@ -561,23 +588,32 @@ _wc_cipher_aes_ccm_set_lengths (gcry_cipher_hd_t c, u64 encryptlen, u64 aadlen,
     return GPG_ERR_INV_STATE;
   if (c->u_mode.ccm.lengths)
     return GPG_ERR_INV_STATE;
+  /* The module takes word32 lengths.  */
+  if (encryptlen > 0xffffffffU || aadlen > 0xffffffffU)
+    return GPG_ERR_INV_LENGTH;
+
+  /* One byte at least, so a zero length still gets a buffer.  */
+  wc_c->databuf = calloc(encryptlen + 1, sizeof *wc_c->databuf);
+  wc_c->cryptbuf = calloc(encryptlen + 1, sizeof *wc_c->cryptbuf);
+  wc_c->aadbuf = calloc(aadlen + 1, sizeof *wc_c->aadbuf);
+  if (!wc_c->databuf || !wc_c->cryptbuf || !wc_c->aadbuf)
+    {
+      gcry_err_code_t err = gpg_err_code_from_syserror ();
+      wc_ccm_free_bufs (wc_c);
+      return err;
+    }
+  wc_c->databuf_cap = encryptlen;
+  wc_c->databuf_len = 0;
+  wc_c->cryptbuf_cap = encryptlen;
+  wc_c->cryptbuf_len = 0;
+  wc_c->aadbuf_cap = aadlen;
+  wc_c->aadbuf_len = 0;
+  wc_c->decrypting = 0;
 
   c->u_mode.ccm.authlen = taglen;
   c->u_mode.ccm.encryptlen = encryptlen;
   c->u_mode.ccm.aadlen = aadlen;
   wc_c->authtag_len = taglen;
-
-  wc_c->databuf = calloc(encryptlen, sizeof *wc_c->databuf);
-  wc_c->databuf_cap = encryptlen;
-  wc_c->databuf_len = 0;
-
-  wc_c->cryptbuf = calloc(encryptlen, sizeof *wc_c->cryptbuf);
-  wc_c->cryptbuf_cap = encryptlen;
-  wc_c->cryptbuf_len = 0;
-
-  wc_c->aadbuf = calloc(aadlen, sizeof *wc_c->aadbuf);
-  wc_c->aadbuf_cap = aadlen;
-  wc_c->aadbuf_len = 0;
 
   c->u_mode.ccm.lengths = 1;
 
@@ -630,15 +666,46 @@ _wc_cipher_aes_ccm_tag (gcry_cipher_hd_t c, unsigned char *outbuf,
       c->marks.tag = 1;
     }
 
-  if (!check)
+  if (!check && !wc_c->decrypting && wc_c->databuf_len > 0)
     {
+      /* The module's tag from the last encryption call.  */
       memcpy (outbuf, wc_c->authtag, outbuflen);
       return GPG_ERR_NO_ERROR;
     }
   else
     {
-      return buf_eq_const(outbuf, wc_c->authtag, outbuflen) ?
-             GPG_ERR_NO_ERROR : GPG_ERR_CHECKSUM;
+      Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
+      Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
+      unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
+      size_t n = wc_c->databuf_len;
+      const unsigned char *ptext = wc_c->decrypting ? wc_c->cryptbuf : wc_c->databuf;
+      const unsigned char *ctext = wc_c->decrypting ? wc_c->databuf : wc_c->cryptbuf;
+      unsigned char *tmp = calloc (n + 1, 1);
+      int ret;
+
+      if (!tmp)
+        return gpg_err_code_from_syserror ();
+      if (check)
+        /* The module's authenticated CCM decryption with the caller's
+           tag over the collected ciphertext.  */
+        ret = wc_AesCcmDecrypt (aesCcmDec, tmp, ctext, n,
+                                (byte *)aesCcmDec->reg,
+                                aesCcmDec->nonceSz,
+                                outbuf, outbuflen,
+                                aadbuf, wc_c->aadbuf_len);
+      else
+        /* The module's CCM tag over the collected plaintext (after
+           decryption, or with no data at all).  */
+        ret = wc_AesCcmEncrypt (aesCcmEnc, tmp, ptext, n,
+                                (byte *)aesCcmEnc->reg,
+                                aesCcmEnc->nonceSz,
+                                outbuf, outbuflen,
+                                aadbuf, wc_c->aadbuf_len);
+      wipememory (tmp, n + 1);
+      free (tmp);
+      if (ret && !check)
+        wipememory (outbuf, outbuflen);
+      return wc_ccm_err (ret);
     }
 }
 
@@ -677,6 +744,8 @@ _wc_cipher_aes_ccm_encrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
     return GPG_ERR_INV_STATE;
   if (inbuflen > c->u_mode.ccm.encryptlen)
     return GPG_ERR_INV_LENGTH;
+  if (wc_c->decrypting)
+    return GPG_ERR_INV_STATE;
 
   memcpy(&wc_c->databuf[wc_c->databuf_len], inbuf, inbuflen);
   newdatastart = wc_c->databuf_len;
@@ -702,10 +771,10 @@ _wc_cipher_aes_ccm_decrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
                           size_t inbuflen)
 {
   int ret;
-  Aes *aesCcmDec = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_dec);
   Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
   wc_ccm_context_t *wc_c = &c->u_mode.ccm.wc_ccm;
   unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
+  unsigned char unused_tag[16];
   size_t newdatastart;
 
   if (outbuflen < inbuflen)
@@ -715,30 +784,34 @@ _wc_cipher_aes_ccm_decrypt (gcry_cipher_hd_t c, unsigned char *outbuf,
     return GPG_ERR_INV_STATE;
   if (inbuflen > c->u_mode.ccm.encryptlen)
     return GPG_ERR_INV_LENGTH;
+  if (wc_c->databuf_len > 0 && !wc_c->decrypting)
+    return GPG_ERR_INV_STATE;
+  wc_c->decrypting = 1;
 
   memcpy(&wc_c->databuf[wc_c->databuf_len], inbuf, inbuflen);
-
   newdatastart = wc_c->databuf_len;
   wc_c->databuf_len += inbuflen;
 
-  ret = wc_AesCcmDecrypt(aesCcmDec, wc_c->cryptbuf,
-                         wc_c->databuf, wc_c->databuf_len,
-                         (byte *)aesCcmDec->reg, aesCcmDec->nonceSz,
-                         wc_c->authtag, wc_c->authtag_len,
-                         aadbuf, wc_c->aadbuf_len);
-
-  /* Ignore authentication error from decrypt */
-  if (ret == -181) {
-      /* Get the authtag by encrypting the plaintext again */
-      ret = wc_AesCcmEncrypt(aesCcmEnc, wc_c->databuf,
-                             wc_c->cryptbuf, wc_c->databuf_len,
-                             (byte *)aesCcmEnc->reg, aesCcmEnc->nonceSz,
-                             wc_c->authtag, wc_c->authtag_len,
-                             aadbuf, wc_c->aadbuf_len);
-  }
+  /* libgcrypt hands over the tag after the data (gcry_cipher_checktag),
+     so the module's CCM decryption, which needs the tag first, runs in
+     checktag.  CCM encrypts and decrypts with the same CTR keystream:
+     the module's CCM encryption of the ciphertext is the plaintext (its
+     tag is not used).  */
+  ret = wc_AesCcmEncrypt (aesCcmEnc, wc_c->cryptbuf,
+                          wc_c->databuf, wc_c->databuf_len,
+                          (byte *)aesCcmEnc->reg,
+                          aesCcmEnc->nonceSz,
+                          unused_tag, wc_c->authtag_len,
+                          aadbuf, wc_c->aadbuf_len);
+  wipememory (unused_tag, sizeof unused_tag);
   if (ret != 0)
-    return GPG_ERR_INV_ARG;
+    {
+      wc_c->databuf_len = newdatastart;
+      wipememory (outbuf, inbuflen);
+      return wc_ccm_err (ret);
+    }
 
+  wc_c->cryptbuf_len = wc_c->databuf_len;
   c->u_mode.ccm.encryptlen -= inbuflen;
   memcpy(outbuf, &wc_c->cryptbuf[newdatastart], inbuflen);
 

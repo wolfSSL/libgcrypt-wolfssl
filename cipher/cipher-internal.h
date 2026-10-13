@@ -150,6 +150,11 @@ typedef struct wc_ccm_context {
 
     unsigned char authtag[16];
     size_t authtag_len;
+
+    /* Set by the first decrypt call: the tag then comes from the
+       module's CCM decryption (checktag) or encryption (gettag) over
+       the collected data, not from authtag.  */
+    int decrypting;
 } wc_ccm_context_t;
 
 typedef struct wc_gcm_context {
@@ -484,6 +489,11 @@ struct gcry_cipher_handle
       /* Pointer to tweak cipher context, allocated after actual
        * cipher context. */
       char *tweak_context;
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+      /* The module's XTS contexts, [0] encryption and [1] decryption,
+       * allocated after the tweak cipher context.  */
+      XtsAes *wc_xts;
+#endif
     } xts;
 
     /* Mode specific storage for SIV mode. */
@@ -561,6 +571,16 @@ gcry_err_code_t _gcry_cipher_cfb8_decrypt
 /*           */ (gcry_cipher_hd_t c,
                  unsigned char *outbuf, size_t outbuflen,
                  const unsigned char *inbuf, size_t inbuflen);
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_CFB)
+gcry_err_code_t _wc_cipher_aes_cfb8_encrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, size_t outbuflen,
+                 const unsigned char *inbuf, size_t inbuflen);
+gcry_err_code_t _wc_cipher_aes_cfb8_decrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, size_t outbuflen,
+                 const unsigned char *inbuf, size_t inbuflen);
+#endif
 
 
 /*-- cipher-ofb.c --*/
@@ -810,6 +830,18 @@ gcry_err_code_t _gcry_cipher_xts_encrypt
 gcry_err_code_t _gcry_cipher_xts_decrypt
 /*           */ (gcry_cipher_hd_t c, unsigned char *outbuf, size_t outbuflen,
 		 const unsigned char *inbuf, size_t inbuflen);
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+gcry_err_code_t _wc_cipher_aes_xts_setkey
+/*           */ (gcry_cipher_hd_t c, const byte *key, size_t keylen);
+void _wc_cipher_aes_xts_close
+/*           */ (gcry_cipher_hd_t c);
+gcry_err_code_t _wc_cipher_aes_xts_encrypt
+/*           */ (gcry_cipher_hd_t c, unsigned char *outbuf, size_t outbuflen,
+		 const unsigned char *inbuf, size_t inbuflen);
+gcry_err_code_t _wc_cipher_aes_xts_decrypt
+/*           */ (gcry_cipher_hd_t c, unsigned char *outbuf, size_t outbuflen,
+		 const unsigned char *inbuf, size_t inbuflen);
+#endif
 
 
 /*-- cipher-siv.c --*/

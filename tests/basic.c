@@ -13615,6 +13615,146 @@ check_ciphers (void)
 }
 
 
+/* AES-128 CFB8 and XTS known answers, run in every build: the vector
+   tables in check_cfb_cipher and check_xts_cipher are compiled out in
+   wolfCrypt FIPS builds.  CFB8 is NIST SP 800-38A F.3.7; XTS is IEEE
+   P1619 vector 2, then the next data unit (tweak + 1) to check the IV
+   auto-increment.  */
+static void
+check_aes_cfb8_xts_kat (void)
+{
+  static const struct
+  {
+    int mode;
+    const char *key;
+    int keylen;
+    const char *iv;
+    const char *pt;
+    int len;
+    const char *ct[2];
+  } tv[] =
+    {
+      { GCRY_CIPHER_MODE_CFB8,
+        "\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c",
+        16,
+        "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f",
+        "\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a"
+        "\xae\x2d", 18,
+        { "\x3b\x79\x42\x4c\x9c\x0d\xd4\x36\xba\xce\x9e\x0e\xd4\x58\x6a\x4f"
+          "\x32\xb9", NULL } },
+      { GCRY_CIPHER_MODE_XTS,
+        "\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11"
+        "\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22",
+        32,
+        "\x33\x33\x33\x33\x33\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+        "\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44"
+        "\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44", 32,
+        { "\xc4\x54\x18\x5e\x6a\x16\x93\x6e\x39\x33\x40\x38\xac\xef\x83\x8b"
+          "\xfb\x18\x6f\xff\x74\x80\xad\xc4\x28\x93\x82\xec\xd6\xd3\x94\xf0",
+          "\xda\xe1\xd6\xe7\xc0\xf4\xf4\xd2\xfe\x3b\xcf\x24\xd1\xf7\x94\x5b"
+          "\x1d\xce\x56\x2a\x2d\x72\xc5\x5b\x50\x2b\x3b\x7b\xcd\xf3\x72\xeb" } }
+    };
+  gcry_cipher_hd_t hde, hdd;
+  unsigned char out[32];
+  gpg_error_t err;
+  int i, j;
+
+  if (verbose)
+    fprintf (stderr, "  Starting AES CFB8/XTS known-answer checks.\n");
+
+  for (i = 0; i < DIM (tv); i++)
+    {
+      err = gcry_cipher_open (&hde, GCRY_CIPHER_AES, tv[i].mode, 0);
+      if (!err)
+        err = gcry_cipher_open (&hdd, GCRY_CIPHER_AES, tv[i].mode, 0);
+      else
+        hdd = NULL;
+      if (gpg_err_code (err) == GPG_ERR_INV_CIPHER_MODE)
+        {
+          gcry_cipher_close (hde);
+          show_note ("AES mode %d not available, test %d skipped\n",
+                     tv[i].mode, i);
+          continue;
+        }
+      if (err)
+        {
+          fail ("aes-cfb8-xts, gcry_cipher_open failed (%d): %s\n",
+                i, gpg_strerror (err));
+          gcry_cipher_close (hde);
+          return;
+        }
+
+      err = gcry_cipher_setkey (hde, tv[i].key, tv[i].keylen);
+      if (!err)
+        err = gcry_cipher_setkey (hdd, tv[i].key, tv[i].keylen);
+      if (!err)
+        err = gcry_cipher_setiv (hde, tv[i].iv, 16);
+      if (!err)
+        err = gcry_cipher_setiv (hdd, tv[i].iv, 16);
+      if (err)
+        {
+          fail ("aes-cfb8-xts, setkey/setiv failed (%d): %s\n",
+                i, gpg_strerror (err));
+          goto next;
+        }
+
+      for (j = 0; j < 2 && tv[i].ct[j]; j++)
+        {
+          err = gcry_cipher_encrypt (hde, out, tv[i].len,
+                                     tv[i].pt, tv[i].len);
+          if (err)
+            {
+              fail ("aes-cfb8-xts, encrypt failed (%d:%d): %s\n",
+                    i, j, gpg_strerror (err));
+              goto next;
+            }
+          if (memcmp (out, tv[i].ct[j], tv[i].len))
+            fail ("aes-cfb8-xts, encrypt mismatch (%d:%d)\n", i, j);
+
+          err = gcry_cipher_decrypt (hdd, out, tv[i].len,
+                                     tv[i].ct[j], tv[i].len);
+          if (err)
+            {
+              fail ("aes-cfb8-xts, decrypt failed (%d:%d): %s\n",
+                    i, j, gpg_strerror (err));
+              goto next;
+            }
+          if (memcmp (out, tv[i].pt, tv[i].len))
+            fail ("aes-cfb8-xts, decrypt mismatch (%d:%d)\n", i, j);
+        }
+
+    next:
+      gcry_cipher_close (hde);
+      gcry_cipher_close (hdd);
+    }
+
+  /* In FIPS mode libgcrypt refuses equal XTS key halves with
+     GPG_ERR_WEAK_KEY, even with GCRYCTL_SET_ALLOW_WEAK_KEY, and the
+     handle stays unkeyed.  */
+  if (!in_fips_mode)
+    return;
+  err = gcry_cipher_open (&hde, GCRY_CIPHER_AES, GCRY_CIPHER_MODE_XTS, 0);
+  if (gpg_err_code (err) == GPG_ERR_INV_CIPHER_MODE)
+    return;
+  if (err)
+    {
+      fail ("aes-xts, gcry_cipher_open failed: %s\n", gpg_strerror (err));
+      return;
+    }
+  memset (out, 0x11, sizeof out);
+  gcry_cipher_ctl (hde, GCRYCTL_SET_ALLOW_WEAK_KEY, NULL, 1);
+  err = gcry_cipher_setkey (hde, out, 32);
+  if (gpg_err_code (err) != GPG_ERR_WEAK_KEY)
+    fail ("aes-xts, equal key halves: got '%s', expected weak key\n",
+          gpg_strerror (err));
+  err = gcry_cipher_encrypt (hde, out, 16, NULL, 0);
+  if (gpg_err_code (err) != GPG_ERR_MISSING_KEY)
+    fail ("aes-xts, encrypt after refused key: got '%s', expected"
+          " missing key\n", gpg_strerror (err));
+  gcry_cipher_close (hde);
+}
+
+
 static void
 check_cipher_modes(void)
 {
@@ -13628,6 +13768,7 @@ check_cipher_modes(void)
 #if !defined(ENABLED_WOLFSSL_FIPS) || defined(WOLFSSL_AES_CFB)
   check_cfb_cipher ();
 #endif
+  check_aes_cfb8_xts_kat ();
   check_ofb_cipher ();
   check_ccm_cipher ();
   if (!in_fips_mode)

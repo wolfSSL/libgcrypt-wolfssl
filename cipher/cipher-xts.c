@@ -187,3 +187,100 @@ _gcry_cipher_xts_decrypt (gcry_cipher_hd_t c,
 {
   return _gcry_cipher_xts_crypt (c, outbuf, outbuflen, inbuf, inbuflen, 0);
 }
+
+
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+#include <wolfssl/wolfcrypt/error-crypt.h>
+
+/* AES-XTS through the module (wc_AesXts*, mapped to the _fips entry
+   points by wolfssl/wolfcrypt/fips.h).  As in _gcry_cipher_xts_crypt,
+   each call is one data unit whose tweak is the IV, a partial last block
+   is handled by ciphertext stealing, and the IV is then incremented.  */
+
+void
+_wc_cipher_aes_xts_close (gcry_cipher_hd_t c)
+{
+  XtsAes *x = c->u_mode.xts.wc_xts;
+
+  wc_AesXtsFree (&x[0]);
+  wc_AesXtsFree (&x[1]);
+  wipememory (x, 2 * sizeof *x);
+}
+
+/* KEY is both halves, KEYLEN their total length.  */
+gcry_err_code_t
+_wc_cipher_aes_xts_setkey (gcry_cipher_hd_t c, const byte *key, size_t keylen)
+{
+  XtsAes *x = c->u_mode.xts.wc_xts;
+  int ret;
+
+  _wc_cipher_aes_xts_close (c);
+  /* The module refuses equal key halves (BAD_FUNC_ARG); report them as
+     libgcrypt does in FIPS mode.  */
+  if (buf_eq_const (key, key + keylen / 2, keylen / 2))
+    return GPG_ERR_WEAK_KEY;
+  ret = wc_AesXtsSetKey (&x[0], key, keylen, AES_ENCRYPTION,
+                         NULL, INVALID_DEVID);
+  if (!ret)
+    ret = wc_AesXtsSetKey (&x[1], key, keylen, AES_DECRYPTION,
+                           NULL, INVALID_DEVID);
+  if (!ret)
+    return GPG_ERR_NO_ERROR;
+  _wc_cipher_aes_xts_close (c);
+  switch (ret)
+    {
+    case BAD_FUNC_ARG:
+      return GPG_ERR_INV_KEYLEN;
+    default:
+      return GPG_ERR_NOT_OPERATIONAL;
+    }
+}
+
+static gcry_err_code_t
+wc_xts_crypt (gcry_cipher_hd_t c, unsigned char *outbuf, size_t outbuflen,
+              const unsigned char *inbuf, size_t inbuflen, int encrypt)
+{
+  XtsAes *x = c->u_mode.xts.wc_xts;
+  int ret;
+
+  if (outbuflen < inbuflen)
+    return GPG_ERR_BUFFER_TOO_SHORT;
+  if (inbuflen < GCRY_XTS_BLOCK_LEN)
+    return GPG_ERR_BUFFER_TOO_SHORT;
+  /* Data-unit max length: 2^20 blocks. */
+  if (inbuflen > GCRY_XTS_BLOCK_LEN << 20)
+    return GPG_ERR_INV_LENGTH;
+
+  if (encrypt)
+    ret = wc_AesXtsEncrypt (&x[0], outbuf, inbuf, inbuflen,
+                            c->u_iv.iv, GCRY_XTS_BLOCK_LEN);
+  else
+    ret = wc_AesXtsDecrypt (&x[1], outbuf, inbuf, inbuflen,
+                            c->u_iv.iv, GCRY_XTS_BLOCK_LEN);
+  if (ret)
+    {
+      wipememory (outbuf, inbuflen);
+      return ret == BAD_FUNC_ARG ? GPG_ERR_INV_ARG : GPG_ERR_NOT_OPERATIONAL;
+    }
+
+  /* Auto-increment data-unit sequence number */
+  xts_inc128 (c->u_iv.iv);
+  return GPG_ERR_NO_ERROR;
+}
+
+gcry_err_code_t
+_wc_cipher_aes_xts_encrypt (gcry_cipher_hd_t c,
+                            unsigned char *outbuf, size_t outbuflen,
+                            const unsigned char *inbuf, size_t inbuflen)
+{
+  return wc_xts_crypt (c, outbuf, outbuflen, inbuf, inbuflen, 1);
+}
+
+gcry_err_code_t
+_wc_cipher_aes_xts_decrypt (gcry_cipher_hd_t c,
+                            unsigned char *outbuf, size_t outbuflen,
+                            const unsigned char *inbuf, size_t inbuflen)
+{
+  return wc_xts_crypt (c, outbuf, outbuflen, inbuf, inbuflen, 0);
+}
+#endif /* HAVE_WOLFSSL && WOLFSSL_AES_XTS */
