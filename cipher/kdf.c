@@ -31,6 +31,18 @@
 #ifdef HAVE_WOLFSSL
 #include "wolfssl/options.h"
 #include "wolfssl/wolfcrypt/settings.h"
+/* From module v6.0.0, wc_PBKDF2 keys its HMAC with short passwords
+   allowed; older modules refuse them like the raw HMAC service.  */
+#if defined(HAVE_FIPS) && defined(HAVE_PBKDF2) && defined(FIPS_VERSION3_GE)
+#if FIPS_VERSION3_GE(6,0,0)
+#include <limits.h>
+#include "wolfssl/wolfcrypt/error-crypt.h"
+#include "wolfssl/wolfcrypt/hash.h"
+#include "wolfssl/wolfcrypt/pwdbased.h"
+#include "wolfssl/wolfcrypt/fips.h" /* maps wc_PBKDF2 to wc_PBKDF2_fips */
+#define USE_WC_FIPS_PBKDF2 1
+#endif
+#endif
 #endif
 
 #ifndef USE_BLAKE2
@@ -119,6 +131,27 @@ openpgp_s2k (const void *passphrase, size_t passphraselen,
 }
 
 
+#ifdef USE_WC_FIPS_PBKDF2
+/* wolfCrypt hash type for PBKDF2 with HASHALGO, or WC_HASH_TYPE_NONE.  */
+static int
+wc_pbkdf2_hash_type (int hashalgo)
+{
+  switch (hashalgo)
+    {
+    case GCRY_MD_SHA1:     return WC_HASH_TYPE_SHA;
+    case GCRY_MD_SHA224:   return WC_HASH_TYPE_SHA224;
+    case GCRY_MD_SHA256:   return WC_HASH_TYPE_SHA256;
+    case GCRY_MD_SHA384:   return WC_HASH_TYPE_SHA384;
+    case GCRY_MD_SHA512:   return WC_HASH_TYPE_SHA512;
+    case GCRY_MD_SHA3_224: return WC_HASH_TYPE_SHA3_224;
+    case GCRY_MD_SHA3_256: return WC_HASH_TYPE_SHA3_256;
+    case GCRY_MD_SHA3_384: return WC_HASH_TYPE_SHA3_384;
+    case GCRY_MD_SHA3_512: return WC_HASH_TYPE_SHA3_512;
+    default:               return WC_HASH_TYPE_NONE;
+    }
+}
+#endif
+
 /* Transform a passphrase into a suitable key of length KEYSIZE and
    store this key in the caller provided buffer KEYBUFFER.  The caller
    must provide PRFALGO which indicates the pseudorandom function to
@@ -159,6 +192,27 @@ _gcry_kdf_pkdf2 (const void *passphrase, size_t passphraselen,
   if (!hlen) {
     return GPG_ERR_DIGEST_ALGO;
   }
+
+#ifdef USE_WC_FIPS_PBKDF2
+  /* Use the module's PBKDF2 service: its HMAC key setup accepts
+     passphrases shorter than 14 bytes (SP 800-132), the raw HMAC
+     service used below does not.  */
+  if (wc_pbkdf2_hash_type (hashalgo) != WC_HASH_TYPE_NONE
+      && passphraselen <= INT_MAX && saltlen <= INT_MAX
+      && iterations <= INT_MAX && dklen <= INT_MAX)
+    {
+      int ret;
+
+      PRIVATE_KEY_UNLOCK ();
+      ret = wc_PBKDF2 (keybuffer, passphrase, (int)passphraselen,
+                       salt, (int)saltlen, (int)iterations, (int)dklen,
+                       wc_pbkdf2_hash_type (hashalgo));
+      PRIVATE_KEY_LOCK ();
+      if (ret == BAD_LENGTH_E)
+        return GPG_ERR_INV_VALUE; /* dkLen below the module's 112 bits */
+      return ret ? GPG_ERR_INTERNAL : 0;
+    }
+#endif
 
   secmode = _gcry_is_secure (passphrase) || _gcry_is_secure (keybuffer);
 
