@@ -46,6 +46,9 @@ _gcry_wc_md_open (gcry_md_hd_t *h, int algo, unsigned int flags);
 static gcry_err_code_t
 _gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm);
 
+static int
+digest_is_supported (int algorithm);
+
 static gcry_err_code_t
 _gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src);
 
@@ -1981,6 +1984,11 @@ _gcry_wc_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
                  | GCRY_MD_FLAG_BUGEMU1)))
     return GPG_ERR_INV_ARG;
 
+  /* An HMAC over a digest wolfCrypt does not provide (MD5 under NO_MD5,
+     RIPEMD-160, BLAKE2, SM3, ...) is not available.  */
+  if (!digest_is_supported (algo))
+    return GPG_ERR_DIGEST_ALGO;
+
   rc = md_open (&hd, algo, flags);
   if (rc)
     return rc;
@@ -1996,9 +2004,11 @@ _gcry_wc_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
   hd->ctx->wc_c->flags = flags;
   rc = _gcry_wc_md_enable(hd, algo);
   if (rc) {
+    /* Clear wc_c before md_close() frees hd: the old order wrote through
+       the freed handle (use after free, SIGSEGV on musl).  */
     free(hd->ctx->wc_c);
-    md_close(hd);
     hd->ctx->wc_c = NULL;
+    md_close(hd);
     *h = NULL;
     return rc;
   }
@@ -2054,7 +2064,7 @@ _gcry_wc_md_enable (gcry_md_hd_t hd, int algorithm)
   int rc;
 
   if (!digest_is_supported(algorithm))
-    return GPG_ERR_INV_ARG;
+    return GPG_ERR_DIGEST_ALGO;
 
   rc = md_enable(hd, algorithm);
   if (rc)
