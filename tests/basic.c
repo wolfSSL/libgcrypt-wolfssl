@@ -4802,6 +4802,100 @@ _check_gcm_cipher (unsigned int step)
 }
 
 
+/* A GCM handle reused with gcry_cipher_setiv and no gcry_cipher_reset
+   must not carry the previous message's AAD into the next tag.  */
+static void
+check_gcm_setiv_no_reset (void)
+{
+  /* NIST GCM spec, Test Case 4.  */
+  static const unsigned char key[16] =
+    "\xfe\xff\xe9\x92\x86\x65\x73\x1c\x6d\x6a\x8f\x94\x67\x30\x83\x08";
+  static const unsigned char iv[12] =
+    "\xca\xfe\xba\xbe\xfa\xce\xdb\xad\xde\xca\xf8\x88";
+  static const unsigned char aad[20] =
+    "\xfe\xed\xfa\xce\xde\xad\xbe\xef\xfe\xed\xfa\xce\xde\xad\xbe\xef"
+    "\xab\xad\xda\xd2";
+  static const unsigned char plaintext[60] =
+    "\xd9\x31\x32\x25\xf8\x84\x06\xe5\xa5\x59\x09\xc5\xaf\xf5\x26\x9a"
+    "\x86\xa7\xa9\x53\x15\x34\xf7\xda\x2e\x4c\x30\x3d\x8a\x31\x8a\x72"
+    "\x1c\x3c\x0c\x95\x95\x68\x09\x53\x2f\xcf\x0e\x24\x49\xa6\xb5\x25"
+    "\xb1\x6a\xed\xf5\xaa\x0d\xe6\x57\xba\x63\x7b\x39";
+  static const unsigned char ciphertext[60] =
+    "\x42\x83\x1e\xc2\x21\x77\x74\x24\x4b\x72\x21\xb7\x84\xd0\xd4\x9c"
+    "\xe3\xaa\x21\x2f\x2c\x02\xa4\xe0\x35\xc1\x7e\x23\x29\xac\xa1\x2e"
+    "\x21\xd5\x14\xb2\x54\x66\x93\x1c\x7d\x8f\x6a\x5a\xac\x84\xaa\x05"
+    "\x1b\xa3\x0b\x39\x6a\x0a\xac\x97\x3d\x58\xe0\x91";
+  static const unsigned char tag[16] =
+    "\x5b\xc9\x4f\xbc\x32\x21\xa5\xdb\x94\xfa\xe9\x5a\xe7\x12\x1a\x47";
+  gcry_cipher_hd_t hde, hdd;
+  unsigned char out[60];
+  unsigned char outtag[16];
+  gcry_error_t err;
+  int msg;
+
+  if (verbose)
+    fprintf (stderr, "  Starting GCM setiv without reset checks.\n");
+
+  err = gcry_cipher_open (&hde, GCRY_CIPHER_AES, GCRY_CIPHER_MODE_GCM, 0);
+  if (!err)
+    err = gcry_cipher_open (&hdd, GCRY_CIPHER_AES, GCRY_CIPHER_MODE_GCM, 0);
+  if (err)
+    {
+      fail ("aes-gcm setiv/no-reset, gcry_cipher_open failed: %s\n",
+            gpg_strerror (err));
+      return;
+    }
+  err = gcry_cipher_setkey (hde, key, sizeof key);
+  if (!err)
+    err = gcry_cipher_setkey (hdd, key, sizeof key);
+  if (err)
+    {
+      fail ("aes-gcm setiv/no-reset, gcry_cipher_setkey failed: %s\n",
+            gpg_strerror (err));
+      goto leave;
+    }
+
+  /* Two messages on the same handles, a new IV for each.  */
+  for (msg = 0; msg < 2; msg++)
+    {
+      err = gcry_cipher_setiv (hde, iv, sizeof iv);
+      if (!err)
+        err = gcry_cipher_setiv (hdd, iv, sizeof iv);
+      if (!err)
+        err = gcry_cipher_authenticate (hde, aad, sizeof aad);
+      if (!err)
+        err = gcry_cipher_authenticate (hdd, aad, sizeof aad);
+      if (!err)
+        err = gcry_cipher_encrypt (hde, out, sizeof out,
+                                   plaintext, sizeof plaintext);
+      if (!err && memcmp (out, ciphertext, sizeof ciphertext))
+        fail ("aes-gcm setiv/no-reset, encrypt mismatch (msg %d)\n", msg);
+      if (!err)
+        err = gcry_cipher_gettag (hde, outtag, sizeof outtag);
+      if (!err && memcmp (outtag, tag, sizeof tag))
+        fail ("aes-gcm setiv/no-reset, tag mismatch (msg %d)\n", msg);
+      if (!err)
+        err = gcry_cipher_decrypt (hdd, out, sizeof out, NULL, 0);
+      if (!err && memcmp (out, plaintext, sizeof plaintext))
+        fail ("aes-gcm setiv/no-reset, decrypt mismatch (msg %d)\n", msg);
+      if (!err)
+        err = gcry_cipher_checktag (hdd, tag, sizeof tag);
+      if (err)
+        {
+          fail ("aes-gcm setiv/no-reset, msg %d failed: %s\n",
+                msg, gpg_strerror (err));
+          break;
+        }
+    }
+
+ leave:
+  gcry_cipher_close (hde);
+  gcry_cipher_close (hdd);
+  if (verbose)
+    fprintf (stderr, "  Completed GCM setiv without reset checks.\n");
+}
+
+
 static void
 check_gcm_cipher (void)
 {
@@ -4817,6 +4911,7 @@ check_gcm_cipher (void)
   _check_gcm_cipher(16);
   /* Split input to 17 byte buffers. */
   _check_gcm_cipher(17);
+  check_gcm_setiv_no_reset ();
 }
 
 

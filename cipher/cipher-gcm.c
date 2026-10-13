@@ -1499,6 +1499,11 @@ _wc_cipher_aes_gcm_setiv (gcry_cipher_hd_t c, const byte *iv, size_t ivlen)
   wc_c->stream = WC_GCM_NONE;
   wc_c->cryptbuf_len = 0;
   wc_c->databuf_len = 0;
+  /* A new IV starts a new message: drop the previous message's AAD, as
+     libgcrypt's own GCM does.  */
+  if (wc_c->aadbuf_len > 0)
+    wipememory (wc_c->aadbuf, wc_c->aadbuf_len);
+  wc_c->aadbuf_len = 0;
 
   if (wc_c->iv)
     free(wc_c->iv);
