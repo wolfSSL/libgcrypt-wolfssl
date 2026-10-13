@@ -169,7 +169,15 @@ typedef struct wc_gcm_context {
     size_t aadbuf_cap;
 
     unsigned char authtag[16];
+
+    /* wolfCrypt GCM stream on the encryption context: WC_GCM_NONE until
+       the first data or tag operation after setiv.  */
+    int stream;
 } wc_gcm_context_t;
+
+#define WC_GCM_NONE    0
+#define WC_GCM_ENCRYPT 1
+#define WC_GCM_DECRYPT 2
 
 #endif
 typedef unsigned int (*ghash_fn_t) (gcry_cipher_hd_t c, byte *result,

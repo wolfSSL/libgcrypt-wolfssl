@@ -850,7 +850,9 @@ cipher_setkey (gcry_cipher_hd_t c, byte *key, size_t keylen)
               case GCRY_CIPHER_AES:     /* AES-128, AES-192, AES-256 */
               case GCRY_CIPHER_AES192:  /* These are all supported by wolfSSL */
               case GCRY_CIPHER_AES256:  /* These are all supported by wolfSSL */
-                _wc_cipher_aes_gcm_setkey (c, key, keylen);
+                rc = _wc_cipher_aes_gcm_setkey (c, key, keylen);
+                if (rc)
+                  c->marks.key = 0;
                 break;
           #endif
               default:
