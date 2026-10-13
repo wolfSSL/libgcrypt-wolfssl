@@ -268,6 +268,32 @@ check_nonce_forking (void)
 }
 
 
+/* Check that requests larger than a typical single DRBG generate call
+   are filled completely.  The buffers start zeroed; 64 zero bytes at
+   either end of a random buffer would not happen by chance.  */
+static void
+check_large_request (void)
+{
+  static const unsigned char zero[64];
+  const size_t buflen = 70000;
+  unsigned char *buf;
+
+  buf = xcalloc (1, buflen);
+  gcry_randomize (buf, buflen, GCRY_STRONG_RANDOM);
+  if (!memcmp (buf, zero, sizeof zero)
+      || !memcmp (buf + buflen - sizeof zero, zero, sizeof zero))
+    die ("gcry_randomize of %zu bytes did not fill the buffer\n", buflen);
+
+  memset (buf, 0, buflen);
+  gcry_create_nonce (buf, buflen);
+  if (!memcmp (buf, zero, sizeof zero)
+      || !memcmp (buf + buflen - sizeof zero, zero, sizeof zero))
+    die ("gcry_create_nonce of %zu bytes did not fill the buffer\n", buflen);
+
+  xfree (buf);
+}
+
+
 /* Check that a closed random device os re-opened if needed. */
 static void
 check_close_random_device (void)
@@ -791,6 +817,7 @@ main (int argc, char **argv)
       check_forking ();
       check_nonce_forking ();
       check_close_random_device ();
+      check_large_request ();
     }
   /* For now we do not run the drgb_reinit check from "make check" due
      to its high requirement for entropy.  */
