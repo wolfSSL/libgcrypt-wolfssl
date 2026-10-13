@@ -31,6 +31,17 @@
 #define PGM "t-kdf"
 #include "t-common.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfssl/options.h"
+#include "wolfssl/wolfcrypt/settings.h"
+/* From module v6.0.0 wolfCrypt's PBKDF2 accepts short passphrases.  */
+#if defined(HAVE_FIPS) && defined(HAVE_PBKDF2) && defined(FIPS_VERSION3_GE)
+#if FIPS_VERSION3_GE(6,0,0)
+#define PBKDF2_SHORT_PASSWD_OK 1
+#endif
+#endif
+#endif
+
 static int in_fips_mode;
 
 
@@ -1130,7 +1141,12 @@ check_pbkdf2 (void)
         }
       if (err)
         {
-          #ifdef HAVE_WOLFSSL
+          #ifdef PBKDF2_SHORT_PASSWD_OK
+          /* The module refuses a dkLen below 112 bits but must accept
+             short passphrases (SP 800-132).  */
+          if (tv[tvidx].dklen < 14
+              || (in_fips_mode && tv[tvidx].plen < 14))
+          #elif defined(HAVE_WOLFSSL)
           if (tv[tvidx].plen < 14 || tv[tvidx].dklen < 14)
           #else
           if (in_fips_mode && (tv[tvidx].plen < 14 || tv[tvidx].dklen < 14))
