@@ -16362,6 +16362,48 @@ out:
   gcry_mac_close (hd);
 }
 
+/* Read the CMAC of the empty message without any gcry_mac_write or
+   gcry_mac_verify call before it.  check_one_mac always verifies
+   first, so it does not cover this.  Vector: NIST SP 800-38B, AES-128
+   Example 1 (RFC 4493, Example 1).  */
+static void
+check_cmac_read_empty (void)
+{
+  static const unsigned char key[16] =
+    "\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c";
+  static const unsigned char expect[16] =
+    "\xbb\x1d\x69\x29\xe9\x59\x37\x28\x7f\xa3\x7d\x12\x9b\x75\x67\x46";
+  unsigned char mac[16];
+  size_t maclen = sizeof mac;
+  gcry_mac_hd_t hd;
+  gcry_error_t err;
+
+  if (gcry_mac_test_algo (GCRY_MAC_CMAC_AES))
+    return;
+  if (verbose)
+    fprintf (stderr, "  checking CMAC_AES read of the empty message\n");
+
+  err = gcry_mac_open (&hd, GCRY_MAC_CMAC_AES, 0, NULL);
+  if (err)
+    {
+      fail ("cmac-aes empty, gcry_mac_open failed: %s\n", gpg_strerror (err));
+      return;
+    }
+  err = gcry_mac_setkey (hd, key, sizeof key);
+  if (err)
+    fail ("cmac-aes empty, gcry_mac_setkey failed: %s\n", gpg_strerror (err));
+  else
+    {
+      err = gcry_mac_read (hd, mac, &maclen);
+      if (err)
+        fail ("cmac-aes empty, gcry_mac_read failed: %s\n",
+              gpg_strerror (err));
+      else if (maclen != sizeof expect || memcmp (mac, expect, sizeof expect))
+        fail ("cmac-aes empty, MAC mismatch\n");
+    }
+  gcry_mac_close (hd);
+}
+
 static void
 check_mac (void)
 {
@@ -17314,6 +17356,8 @@ check_mac (void)
 		     algos[i].iv, algos[i].iv ? strlen(algos[i].iv) : 0,
 		     algos[i].expect, 1);
     }
+
+  check_cmac_read_empty ();
 
   if (verbose)
     fprintf (stderr, "Completed MAC checks.\n");

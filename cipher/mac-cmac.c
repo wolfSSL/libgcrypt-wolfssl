@@ -33,6 +33,8 @@
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/aes.h>
+#include <wolfssl/wolfcrypt/error-crypt.h>
+#include "wolfcrypt-cast-retry.h"
 #endif
 
 
@@ -461,6 +463,23 @@ static gcry_mac_spec_ops_t cmac_ops = {
 
 #ifdef HAVE_WOLFSSL
 
+/* Map a refused wolfCrypt CMAC call to a libgcrypt error code.  */
+static gcry_err_code_t
+wc_cmac_err (int ret)
+{
+  switch (ret)
+    {
+    case 0:
+      return GPG_ERR_NO_ERROR;
+    case BAD_FUNC_ARG:
+      return GPG_ERR_INV_ARG;
+    case MEMORY_E:
+      return GPG_ERR_ENOMEM;
+    default:
+      return GPG_ERR_NOT_OPERATIONAL;
+    }
+}
+
 static void
 wc_aes_cmac_close (gcry_mac_hd_t h)
 {
@@ -489,6 +508,8 @@ wc_aes_cmac_close (gcry_mac_hd_t h)
 static gcry_err_code_t
 wc_aes_cmac_setkey (gcry_mac_hd_t h, const unsigned char *key, size_t keylen)
 {
+  int ret;
+
   if (h->key == NULL) {
     h->key = calloc(keylen, sizeof *h->key);
     if (h->key == NULL) {
@@ -498,13 +519,15 @@ wc_aes_cmac_setkey (gcry_mac_hd_t h, const unsigned char *key, size_t keylen)
     memcpy(h->key, key, keylen);
     h->key_len = keylen;
   }
-  return wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL);
+  WC_CAST_RETRY (ret, wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL));
+  return wc_cmac_err (ret);
 }
 
 static gcry_err_code_t
 wc_aes_cmac_reset (gcry_mac_hd_t h)
 {
   gcry_err_code_t ret;
+  int wret;
   ret = _gcry_cipher_reset (h->u.cmac.ctx);
   if (ret)
     return ret;
@@ -518,12 +541,15 @@ wc_aes_cmac_reset (gcry_mac_hd_t h)
   wc_AesFree((Aes *)&h->aesCmac);
   wipememory(&h->aesCmac, sizeof(h->aesCmac));
 #endif
-  return wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL);
+  WC_CAST_RETRY (wret, wc_InitCmac(&h->aesCmac, h->key, h->key_len, WC_CMAC_AES, NULL));
+  return wc_cmac_err (wret);
 }
 
 static gcry_err_code_t
 wc_aes_cmac_write (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 {
+  int ret;
+
   if (h->authTag == NULL) {
     h->authTag = calloc(WC_AES_BLOCK_SIZE, sizeof *h->authTag);
     h->authTag_len = WC_AES_BLOCK_SIZE * (sizeof *h->authTag);
@@ -532,21 +558,35 @@ wc_aes_cmac_write (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
     }
   }
   h->authTagUpdated = 1;
-  return wc_CmacUpdate(&h->aesCmac, buf, buflen);
+  WC_CAST_RETRY (ret, wc_CmacUpdate(&h->aesCmac, buf, buflen));
+  return wc_cmac_err (ret);
 }
 
 
 static gcry_err_code_t
 wc_aes_cmac_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
 {
-  if (!outbuf || *outlen == 0 || !h->authTag)
+  int ret;
+
+  if (!outbuf || *outlen == 0)
     return GPG_ERR_INV_ARG;
+
+  if (h->authTag == NULL) {
+    /* Nothing written: the tag of the empty message.  */
+    h->authTag = calloc(WC_AES_BLOCK_SIZE, sizeof *h->authTag);
+    h->authTag_len = WC_AES_BLOCK_SIZE * (sizeof *h->authTag);
+    if (h->authTag == NULL)
+      return GPG_ERR_ENOMEM;
+    h->authTagUpdated = 1;
+  }
 
   if (*outlen > h->authTag_len)
     *outlen = h->authTag_len;
 
   if (h->authTagUpdated) {
-    wc_CmacFinal(&h->aesCmac, h->authTag, (word32 *)&h->authTag_len);
+    WC_CAST_RETRY (ret, wc_CmacFinal(&h->aesCmac, h->authTag, (word32 *)&h->authTag_len));
+    if (ret != 0)
+      return wc_cmac_err (ret);
     h->authTagUpdated = 0;
   }
   memcpy(outbuf, h->authTag, *outlen);
@@ -557,6 +597,8 @@ wc_aes_cmac_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
 static gcry_err_code_t
 wc_aes_cmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 {
+  int ret;
+
   if (!buf || buflen == 0)
     return GPG_ERR_INV_ARG;
 
@@ -569,7 +611,9 @@ wc_aes_cmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 
   }
 
-  wc_CmacFinal(&h->aesCmac, h->authTag, (word32 *)&h->authTag_len);
+  WC_CAST_RETRY (ret, wc_CmacFinal(&h->aesCmac, h->authTag, (word32 *)&h->authTag_len));
+  if (ret != 0)
+    return wc_cmac_err (ret);
   h->authTagUpdated = 0;
 
   return buf_eq_const(buf, h->authTag, buflen) ?

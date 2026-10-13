@@ -56,6 +56,8 @@
 #include "wolfssl/options.h"
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/logging.h"
+#include "wolfssl/wolfcrypt/error-crypt.h"
+#include "wolfcrypt-cast-retry.h"
 #endif
 
 
@@ -1550,11 +1552,41 @@ _gcry_aes_xts_crypt (void *context, unsigned char *tweak,
 
 #ifdef HAVE_WOLFSSL
 
+/* A wolfCrypt AES call on a path that cannot return an error was refused
+   for good (WC_CAST_RETRY gave up): abort instead of returning output
+   the module never produced.  */
+static void
+wc_aes_refused (const char *call, int ret)
+{
+  _gcry_wc_log_fatal ("wolfCrypt %s failed: %d\n", call, ret);
+}
+
+/* Map a refused wolfCrypt AES key setup to a libgcrypt error code.  */
+static gcry_err_code_t
+wc_aes_err (int ret)
+{
+  switch (ret)
+    {
+    case BAD_FUNC_ARG:
+      return GPG_ERR_INV_KEYLEN;
+    case MEMORY_E:
+      return GPG_ERR_ENOMEM;
+    default:
+      return GPG_ERR_NOT_OPERATIONAL;
+    }
+}
+
 static unsigned int
 wc_do_encrypt (const RIJNDAEL_context *ctx,
             unsigned char *bx, const unsigned char *ax)
 {
-  wc_AesEncryptDirect((Aes*)&ctx->wc_aes_enc, bx, ax);
+  int ret;
+
+  /* One block through the module's ECB service: wc_AesEncryptDirect has
+     no FIPS wrapper and skips the module's state checks.  */
+  WC_CAST_RETRY (ret, wc_AesEcbEncrypt((Aes*)&ctx->wc_aes_enc, bx, ax, WC_AES_BLOCK_SIZE));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesEcbEncrypt", ret);
   return WC_AES_BLOCK_SIZE;
 }
 
@@ -1564,7 +1596,11 @@ static unsigned int
 wc_do_decrypt (const RIJNDAEL_context *ctx, unsigned char *bx,
             const unsigned char *ax)
 {
-  wc_AesDecryptDirect((Aes*)&ctx->wc_aes_dec, bx, ax);
+  int ret;
+
+  WC_CAST_RETRY (ret, wc_AesEcbDecrypt((Aes*)&ctx->wc_aes_dec, bx, ax, WC_AES_BLOCK_SIZE));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesEcbDecrypt", ret);
   return WC_AES_BLOCK_SIZE;
 }
 
@@ -1579,15 +1615,13 @@ _wc_aes_ecb_enc (RIJNDAEL_context *ctx, unsigned char *dst,
   word32 sz = nblocks*WC_AES_BLOCK_SIZE;
 
   if (encrypt != 0) {
-    ret = wc_AesEcbEncrypt(&ctx->wc_aes_enc, dst, src, sz);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_AesEcbEncrypt failed with ret=%d\n", ret);
-    }
+    WC_CAST_RETRY (ret, wc_AesEcbEncrypt(&ctx->wc_aes_enc, dst, src, sz));
+    if (ret != 0)
+      wc_aes_refused ("wc_AesEcbEncrypt", ret);
   } else {
-    ret = wc_AesEcbDecrypt(&ctx->wc_aes_dec, dst, src, sz);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_AesEcbDecrypt failed with ret=%d\n", ret);
-    }
+    WC_CAST_RETRY (ret, wc_AesEcbDecrypt(&ctx->wc_aes_dec, dst, src, sz));
+    if (ret != 0)
+      wc_aes_refused ("wc_AesEcbDecrypt", ret);
   }
 
 
@@ -1633,26 +1667,20 @@ _wc_aes_cbc_enc (void *context, unsigned char *iv,
   if (cbc_mac && nblocks > 0) {
     /* CBC-MAC mode: process blocks one at a time, overwriting the output */
     /* Set initial IV */
-    ret = wc_AesSetIV(&ctx->wc_aes_enc, ivp);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetIV failed with ret=%d\n", ret);
-      return;
-    }
+    WC_CAST_RETRY (ret, wc_AesSetIV(&ctx->wc_aes_enc, ivp));
+    if (ret != 0)
+      wc_aes_refused ("wc_AesSetIV", ret);
     /* Process blocks one at a time, always writing to outbuf */
     while (nblocks--) {
       /* Encrypt this block */
-      ret = wc_AesCbcEncrypt(&ctx->wc_aes_enc, outbuf, inbuf, WC_AES_BLOCK_SIZE);
-      if (ret != 0) {
-        fprintf(stderr, "[WOLFSSL ERROR] wc_AesCbcEncrypt failed with ret=%d\n", ret);
-        return;
-      }
+      WC_CAST_RETRY (ret, wc_AesCbcEncrypt(&ctx->wc_aes_enc, outbuf, inbuf, WC_AES_BLOCK_SIZE));
+      if (ret != 0)
+        wc_aes_refused ("wc_AesCbcEncrypt", ret);
       /* For next block, use current output as new IV */
       ivp = outbuf;
-      ret = wc_AesSetIV(&ctx->wc_aes_enc, ivp);
-      if (ret != 0) {
-        fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetIV failed with ret=%d\n", ret);
-        return;
-      }
+      WC_CAST_RETRY (ret, wc_AesSetIV(&ctx->wc_aes_enc, ivp));
+      if (ret != 0)
+        wc_aes_refused ("wc_AesSetIV", ret);
       /* Move to next input block, but keep same output location for CBC-MAC */
       inbuf += WC_AES_BLOCK_SIZE;
     }
@@ -1660,16 +1688,12 @@ _wc_aes_cbc_enc (void *context, unsigned char *iv,
     memcpy(iv, outbuf, WC_AES_BLOCK_SIZE);
   } else {
     /* Normal CBC encryption */
-    ret = wc_AesSetIV(&ctx->wc_aes_enc, iv);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetIV failed with ret=%d\n", ret);
-      return;
-    }
-    ret = wc_AesCbcEncrypt(&ctx->wc_aes_enc, outbuf, inbuf, nblocks * WC_AES_BLOCK_SIZE);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_AesCbcEncrypt failed with ret=%d\n", ret);
-      return;
-    }
+    WC_CAST_RETRY (ret, wc_AesSetIV(&ctx->wc_aes_enc, iv));
+    if (ret != 0)
+      wc_aes_refused ("wc_AesSetIV", ret);
+    WC_CAST_RETRY (ret, wc_AesCbcEncrypt(&ctx->wc_aes_enc, outbuf, inbuf, nblocks * WC_AES_BLOCK_SIZE));
+    if (ret != 0)
+      wc_aes_refused ("wc_AesCbcEncrypt", ret);
     /* Update IV to last ciphertext block */
     memcpy(iv, ctx->wc_aes_enc.reg, WC_AES_BLOCK_SIZE);
   }
@@ -1687,15 +1711,13 @@ _wc_aes_cbc_dec (void *context, unsigned char *iv,
   word32 sz = nblocks*WC_AES_BLOCK_SIZE;
 
 
-  ret = wc_AesSetIV(&ctx->wc_aes_dec, iv);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetIV failed with ret=%d\n", ret);
-  }
+  WC_CAST_RETRY (ret, wc_AesSetIV(&ctx->wc_aes_dec, iv));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesSetIV", ret);
 
-  ret = wc_AesCbcDecrypt(&ctx->wc_aes_dec, outbuf_arg, inbuf_arg, sz);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_AesCbcDecrypt failed with ret=%d\n", ret);
-  }
+  WC_CAST_RETRY (ret, wc_AesCbcDecrypt(&ctx->wc_aes_dec, outbuf_arg, inbuf_arg, sz));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesCbcDecrypt", ret);
 
   memcpy(iv, ctx->wc_aes_dec.reg, WC_AES_BLOCK_SIZE);
 
@@ -1712,15 +1734,13 @@ _wc_aes_ofb_enc (void *context, unsigned char *iv,
   RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
   word32 sz = nblocks*WC_AES_BLOCK_SIZE;
 
-  ret = wc_AesSetIV(&ctx->wc_aes_enc, iv);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetIV failed with ret=%d\n", ret);
-  }
+  WC_CAST_RETRY (ret, wc_AesSetIV(&ctx->wc_aes_enc, iv));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesSetIV", ret);
 
-  ret = wc_AesOfbEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_AesOfbEncrypt failed with ret=%d\n", ret);
-  }
+  WC_CAST_RETRY (ret, wc_AesOfbEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesOfbEncrypt", ret);
 
   memcpy(iv, ctx->wc_aes_enc.reg, WC_AES_BLOCK_SIZE);
 
@@ -1737,15 +1757,13 @@ _wc_aes_ctr_enc (void *context, unsigned char *ctr,
   RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
   word32 sz = nblocks*WC_AES_BLOCK_SIZE;
 
-  ret = wc_AesSetIV(&ctx->wc_aes_enc, ctr);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetIV failed with ret=%d\n", ret);
-  }
+  WC_CAST_RETRY (ret, wc_AesSetIV(&ctx->wc_aes_enc, ctr));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesSetIV", ret);
 
-  ret = wc_AesCtrEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_AesCtrEncrypt failed with ret=%d\n", ret);
-  }
+  WC_CAST_RETRY (ret, wc_AesCtrEncrypt(&ctx->wc_aes_enc, outbuf_arg, inbuf_arg, sz));
+  if (ret != 0)
+    wc_aes_refused ("wc_AesCtrEncrypt", ret);
 
   /* Update the counter value for the next call */
   memcpy(ctr, ctx->wc_aes_enc.reg, WC_AES_BLOCK_SIZE);
@@ -1837,28 +1855,28 @@ static gcry_err_code_t
 wc_aes_setkey(void *context, const byte *key, const unsigned keylen,
                  cipher_bulk_ops_t *bulk_ops)
 {
-  gcry_err_code_t ret = -1;
+  int ret;
   RIJNDAEL_context *ctx = (RIJNDAEL_context *)context;
 
-  ret = wc_AesInit(&ctx->wc_aes_enc, NULL, INVALID_DEVID);
+  WC_CAST_RETRY (ret, wc_AesInit(&ctx->wc_aes_enc, NULL, INVALID_DEVID));
   if (ret != 0) {
     fprintf(stderr, "[WOLFSSL ERROR] wc_AesInit (enc) failed with ret=%d\n", ret);
-    return ret;
+    return wc_aes_err (ret);
   }
-  ret = wc_AesSetKey(&ctx->wc_aes_enc, key, keylen, NULL, AES_ENCRYPTION);
+  WC_CAST_RETRY (ret, wc_AesSetKey(&ctx->wc_aes_enc, key, keylen, NULL, AES_ENCRYPTION));
   if (ret != 0) {
     fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetKey (enc) failed with ret=%d\n", ret);
-    return ret;
+    return wc_aes_err (ret);
   }
-  ret = wc_AesInit(&ctx->wc_aes_dec, NULL, INVALID_DEVID);
+  WC_CAST_RETRY (ret, wc_AesInit(&ctx->wc_aes_dec, NULL, INVALID_DEVID));
   if (ret != 0) {
     fprintf(stderr, "[WOLFSSL ERROR] wc_AesInit (dec) failed with ret=%d\n", ret);
-    return ret;
+    return wc_aes_err (ret);
   }
-  ret = wc_AesSetKey(&ctx->wc_aes_dec, key, keylen, NULL, AES_DECRYPTION);
+  WC_CAST_RETRY (ret, wc_AesSetKey(&ctx->wc_aes_dec, key, keylen, NULL, AES_DECRYPTION));
   if (ret != 0) {
     fprintf(stderr, "[WOLFSSL ERROR] wc_AesSetKey (dec) failed with ret=%d\n", ret);
-    return ret;
+    return wc_aes_err (ret);
   }
   ret = wc_do_setkey (ctx, key, keylen, bulk_ops);
   return ret;
