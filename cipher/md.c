@@ -2289,6 +2289,15 @@ _gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
   struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
   int rc;
+
+#ifdef HAVE_FIPS
+  /* The FIPS module refuses HMAC keys under 14 bytes (112 bits).  That is
+     the caller's bad key, not a module failure: report it here, before
+     the call, as an invalid value.  */
+  if (keylen < HMAC_FIPS_MIN_KEY)
+    return GPG_ERR_INV_VALUE;
+#endif
+
   _gcry_wc_md_reset(hd);
 
   for (entry = wc->list; entry; entry = entry->next) {
