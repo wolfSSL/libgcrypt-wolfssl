@@ -347,23 +347,40 @@ _gcry_random_add_bytes (const void *buf, size_t buflen, int quality)
 }
 
 #ifdef HAVE_WOLFSSL
+/* Fill BUFFER with LENGTH bytes from a fresh wolfCrypt DRBG.
+   wc_RNG_GenerateBlock() takes a word32 length and refuses more than
+   RNG_MAX_BLOCK_LEN bytes per call, while libgcrypt's callers pass any
+   size_t, so generate in chunks.  Any failure is fatal: the public API
+   cannot report it.  */
+static void
+wolfssl_randomize (void *buffer, size_t length)
+{
+  RNG rng;
+  unsigned char *p = buffer;
+  int ret;
+
+  ret = wc_InitRng(&rng);
+  if (ret != 0)
+    log_fatal ("wolfCrypt wc_InitRng failed: %d\n", ret);
+  while (length)
+    {
+      word32 n = length > RNG_MAX_BLOCK_LEN ? (word32)RNG_MAX_BLOCK_LEN
+                                            : (word32)length;
+
+      ret = wc_RNG_GenerateBlock(&rng, p, n);
+      if (ret != 0)
+        log_fatal ("wolfCrypt wc_RNG_GenerateBlock failed: %d\n", ret);
+      p += n;
+      length -= n;
+    }
+  wc_FreeRng(&rng);
+}
+
 static void
 do_randomize (void *buffer, size_t length, enum gcry_random_level level)
 {
-  RNG rng;
   (void)level;
-  int ret;
-  ret = wc_InitRng(&rng);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRng failed with ret=%d\n", ret);
-    return;
-  }
-  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_RNG_GenerateBlock failed with ret=%d\n", ret);
-    return;
-  }
-  wc_FreeRng(&rng);
+  wolfssl_randomize (buffer, length);
 }
 #else
 /* Helper function.  */
@@ -491,17 +508,7 @@ _gcry_fast_random_poll (void)
 void
 _gcry_create_nonce (void *buffer, size_t length)
 {
-  RNG rng;
-  int ret;
-  ret = wc_InitRng(&rng);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitRng failed with ret=%d\n", ret);
-  }
-  ret = wc_RNG_GenerateBlock(&rng, buffer, length);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_RNG_GenerateBlock failed with ret=%d\n", ret);
-  }
-  wc_FreeRng(&rng);
+  wolfssl_randomize (buffer, length);
 }
 #else
 /* Create an unpredicable nonce of LENGTH bytes in BUFFER. */
