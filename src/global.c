@@ -124,6 +124,16 @@ global_init (void)
   /* Add a handler to be called after log_fatal and log_debug.  */
   _gcry_set_gpgrt_post_log_handler ();
 
+#if defined(HAVE_WOLFSSL) && defined(HAVE_FIPS) && defined(WC_RNG_SEED_CB)
+  /* A FIPS wolfCrypt starts without a seed source; every wc_InitRng
+     fails until one is registered.  */
+  if (wc_SetSeed_Cb (WC_GENERATE_SEED_DEFAULT) != 0)
+    {
+      log_error ("wolfCrypt wc_SetSeed_Cb failed\n");
+      goto fail;
+    }
+#endif
+
   /* See whether the system is in FIPS mode.  This needs to come as
      early as possible but after ATH has been initialized.  */
   _gcry_initialize_fips_mode (force_fips_mode);

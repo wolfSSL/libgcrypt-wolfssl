@@ -491,7 +491,9 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
 {
   gpg_err_code_t rc = 0;
   int extraloops = 0;
-  gcry_mpi_t k, dr, sum, k_1, x;
+  /* k = NULL: the early wolfCrypt error paths reach "leave", which frees k
+     unless the caller supplied it.  */
+  gcry_mpi_t k = NULL, dr, sum, k_1, x;
   mpi_point_struct I;
   gcry_mpi_t hash;
   const void *abuf;
@@ -562,11 +564,14 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     wolf = 1;
     ret = wc_InitRng(&rng);
     if (ret != 0) {
-      goto leave;
+      /* No DRBG means no signature: fail hard like every other RNG
+         failure, never return rc = 0 with r and s unset.  */
+      log_fatal ("wolfCrypt wc_InitRng failed: %d\n", ret);
     }
 
     ret = wc_ecc_init(&wc_key);
     if (ret != 0) {
+      rc = GPG_ERR_INTERNAL;
       wc_FreeRng(&rng);
       goto leave;
     }
