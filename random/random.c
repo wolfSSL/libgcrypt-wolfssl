@@ -45,6 +45,7 @@
 #include "wolfssl/wolfcrypt/settings.h"
 //#include <wolfssl/wolfcrypt/types.h>
 #include "wolfssl/wolfcrypt/random.h"
+#include "wolfcrypt-cast-retry.h"
 #endif
 
 /* The name of a file used to globally configure the RNG. */
@@ -361,7 +362,7 @@ wolfssl_randomize (void *buffer, size_t length)
 
   ret = wc_InitRng(&rng);
   if (ret != 0)
-    log_fatal ("wolfCrypt wc_InitRng failed: %d\n", ret);
+    _gcry_wc_log_fatal ("wolfCrypt wc_InitRng failed: %d\n", ret);
   while (length)
     {
       word32 n = length > RNG_MAX_BLOCK_LEN ? (word32)RNG_MAX_BLOCK_LEN
@@ -369,7 +370,7 @@ wolfssl_randomize (void *buffer, size_t length)
 
       ret = wc_RNG_GenerateBlock(&rng, p, n);
       if (ret != 0)
-        log_fatal ("wolfCrypt wc_RNG_GenerateBlock failed: %d\n", ret);
+        _gcry_wc_log_fatal ("wolfCrypt wc_RNG_GenerateBlock failed: %d\n", ret);
       p += n;
       length -= n;
     }

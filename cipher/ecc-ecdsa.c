@@ -46,6 +46,7 @@
 #include <wolfssl/wolfcrypt/sha3.h>
 #include <wolfssl/wolfcrypt/signature.h>
 #include <wolfssl/wolfcrypt/integer.h>
+#include "wolfcrypt-cast-retry.h"
 #endif
 
 /* Compute an ECDSA signature.
@@ -566,7 +567,7 @@ _gcry_ecc_ecdsa_sign (gcry_mpi_t input, gcry_mpi_t k_supplied, mpi_ec_t ec,
     if (ret != 0) {
       /* No DRBG means no signature: fail hard like every other RNG
          failure, never return rc = 0 with r and s unset.  */
-      log_fatal ("wolfCrypt wc_InitRng failed: %d\n", ret);
+      _gcry_wc_log_fatal ("wolfCrypt wc_InitRng failed: %d\n", ret);
     }
 
     ret = wc_ecc_init(&wc_key);
