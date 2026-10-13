@@ -131,10 +131,11 @@ static const char ecdsa_sample_data_string[] = "sample";
 static const char ecdsa_sample_data_bad_string[] = "sbmple";
 
 
-/* EdDSA vectors.  A HAVE_WOLFSSL build has no Ed25519 or Ed448 curve
- * (ecc-curves.c); only its ENABLED_WOLFSSL_FIPS selftest uses them, to
- * check that the curves are refused.  */
-#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS)
+/* EdDSA vectors.  A HAVE_WOLFSSL build without ENABLED_WOLFSSL_FIPS only
+ * verifies EdDSA, and only on the curves wolfSSL provides, so its
+ * selftest needs no secret key and no sign template.  */
+#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS) \
+    || defined(HAVE_ED25519)
 /* Ed25519 test vector from RFC 8032 7.1.  */
 static const char ed25519_sample_public_key[] =
   "(public-key"
@@ -142,6 +143,7 @@ static const char ed25519_sample_public_key[] =
   "  (curve Ed25519)"
   "  (flags eddsa)"
   "  (q #3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c#)))";
+#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS)
 static const char ed25519_sample_secret_key[] =
   "(private-key"
   " (ecc"
@@ -149,6 +151,7 @@ static const char ed25519_sample_secret_key[] =
   "  (flags eddsa)"
   "  (d #4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb#)"
   "  (q #3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c#)))";
+#endif
 static const char ed25519_sample_data[] =
   "(data (value #72#))";
 static const char ed25519_sample_data_bad[] =
@@ -157,12 +160,17 @@ static const char ed25519_signature_r[] =
   "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da";
 static const char ed25519_signature_s[] =
   "085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00";
+#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS)
 static const char *ed25519_data_tmpl = "(data (value %b))";
 /* Sample data from RFC 6979 section A.2.5, hash is of message "sample" */
 static const char ed25519_sample_data_string[] = "\x72";
 static const char ed25519_sample_data_bad_string[] = "\x72\x72\x72\x72";
+#endif
+#endif
 
 
+#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS) \
+    || defined(HAVE_ED448)
 /* Ed448 test vector from RFC 8032 7.4.  */
 static const char ed448_sample_public_key[] =
   "(public-key"
@@ -170,6 +178,7 @@ static const char ed448_sample_public_key[] =
   "  (curve Ed448)"
   "  (q #43ba28f430cdff456ae531545f7ecd0ac834a55d9358c0372bfa0c6c6798c086"
   /**/  "6aea01eb00742802b8438ea4cb82169c235160627b4c3a9480#)))";
+#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS)
 static const char ed448_sample_secret_key[] =
   "(private-key"
   " (ecc"
@@ -178,6 +187,7 @@ static const char ed448_sample_secret_key[] =
   /**/  "fbea67c5e8d2877c5e3bc397a659949ef8021e954e0a12274e#)"
   "  (q #43ba28f430cdff456ae531545f7ecd0ac834a55d9358c0372bfa0c6c6798c086"
   /**/  "6aea01eb00742802b8438ea4cb82169c235160627b4c3a9480#)))";
+#endif
 static const char ed448_sample_data[] =
   "(data (value #03#))";
 static const char ed448_sample_data_bad[] =
@@ -188,11 +198,69 @@ static const char ed448_signature_r[] =
 static const char ed448_signature_s[] =
   "5e0dbcc0aae1cbcee1afb2e027df36bc04dcecbf154336c19f0af7e0a6472905"
   "e799f1953d2a0ff3348ab21aa4adafd1d234441cf807c03a00";
+#if !defined(HAVE_WOLFSSL) || defined(ENABLED_WOLFSSL_FIPS)
 static const char *ed448_data_tmpl = "(data (value %b))";
 /* Sample data from RFC 6979 section A.2.5, hash is of message "sample" */
 static const char ed448_sample_data_string[] = "\x03";
 static const char ed448_sample_data_bad_string[] = "\x03\x03\x03";
-#endif /* !HAVE_WOLFSSL || ENABLED_WOLFSSL_FIPS */
+#endif
+#endif
+
+#if defined(HAVE_WOLFSSL) && !defined(ENABLED_WOLFSSL_FIPS)
+#ifdef HAVE_ED25519
+/* Ed25519ctx test vector from RFC 8032 7.2 (context "foo").  */
+static const char ed25519ctx_sample_public_key[] =
+  "(public-key"
+  " (ecc"
+  "  (curve Ed25519)"
+  "  (flags eddsa)"
+  "  (q #dfc9425e4f968f7f0c29f0259cf5f9aed6851c2bb4ad8bfb860cfee0ab248292#)))";
+static const char ed25519ctx_sample_data[] =
+  "(data (label #666f6f#) (value #f726936d19c800494e3fdaff20b276a8#))";
+static const char ed25519ctx_sample_data_bad[] =
+  "(data (label #666f6f#) (value #f726936d19c800494e3fdaff20b276a9#))";
+static const char ed25519ctx_signature_r[] =
+  "55a4cc2f70a54e04288c5f4cd1e45a7bb520b36292911876cada7323198dd87a";
+static const char ed25519ctx_signature_s[] =
+  "8b36950b95130022907a7fb7c4e9b2d5f6cca685a587b4b21f4b888e4e7edb0d";
+
+/* Ed25519ph test vector from RFC 8032 7.3 (message "abc").  */
+static const char ed25519ph_sample_public_key[] =
+  "(public-key"
+  " (ecc"
+  "  (curve Ed25519)"
+  "  (flags eddsa)"
+  "  (q #ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf#)))";
+static const char ed25519ph_sample_data[] =
+  "(data (flags prehash) (value #616263#))";
+static const char ed25519ph_sample_data_bad[] =
+  "(data (flags prehash) (value #616264#))";
+static const char ed25519ph_signature_r[] =
+  "98a70222f0b8121aa9d30f813d683f809e462b469c7ff87639499bb94e6dae41";
+static const char ed25519ph_signature_s[] =
+  "31f85042463c2a355a2003d062adf5aaa10b8c61e636062aaad11c2a26083406";
+#endif
+
+#ifdef HAVE_ED448
+/* Ed448ph test vector from RFC 8032 7.5 (message "abc", no context).  */
+static const char ed448ph_sample_public_key[] =
+  "(public-key"
+  " (ecc"
+  "  (curve Ed448)"
+  "  (q #259b71c19f83ef77a7abd26524cbdb3161b590a48f7d17de3ee0ba9c52beb743"
+  /**/  "c09428a131d6b1b57303d90d8132c276d5ed3d5d01c0f53880#)))";
+static const char ed448ph_sample_data[] =
+  "(data (flags prehash) (value #616263#))";
+static const char ed448ph_sample_data_bad[] =
+  "(data (flags prehash) (value #616264#))";
+static const char ed448ph_signature_r[] =
+  "822f6901f7480f3d5f562c592994d9693602875614483256505600bbc281ae38"
+  "1f54d6bce2ea911574932f52a4e6cadd78769375ec3ffd1b80";
+static const char ed448ph_signature_s[] =
+  "1a0d9b3f4030cd433964b6457ea39476511214f97469b57dd32dbc560a9a94d0"
+  "0bff07620464a3ad203df7dc7ce360c3cd3696d9d9fab90f00";
+#endif
+#endif /* HAVE_WOLFSSL && !ENABLED_WOLFSSL_FIPS */
 
 
 /* Registered progress function and its callback value. */
@@ -948,6 +1016,14 @@ ecc_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       rc = GPG_ERR_NO_OBJ;
       goto leave;
     }
+#ifdef HAVE_WOLFSSL
+  /* On an Edwards curve the wolfCrypt port only verifies EdDSA.  */
+  if (ec->model == MPI_EC_EDWARDS)
+    {
+      rc = GPG_ERR_NOT_SUPPORTED;
+      goto leave;
+    }
+#endif
 
   ctx.flags |= flags;
   if (ec->model == MPI_EC_EDWARDS && ec->dialect == ECC_DIALECT_SAFECURVE)
@@ -1149,6 +1225,14 @@ ecc_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t s_keyparms)
       rc = GPG_ERR_CONFLICT; /* Inconsistent use of flag/algoname.  */
       goto leave;
     }
+#ifdef HAVE_WOLFSSL
+  /* On an Edwards curve the wolfCrypt port only verifies EdDSA.  */
+  if (ec->model == MPI_EC_EDWARDS && !(sigflags & PUBKEY_FLAG_EDDSA))
+    {
+      rc = GPG_ERR_NOT_SUPPORTED;
+      goto leave;
+    }
+#endif
 
   /*
    * Verify the signature.
@@ -1254,6 +1338,14 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   #endif
   if (rc)
     goto leave;
+#ifdef HAVE_WOLFSSL
+  /* On an Edwards curve the wolfCrypt port only verifies EdDSA.  */
+  if (ec->model == MPI_EC_EDWARDS)
+    {
+      rc = GPG_ERR_NOT_SUPPORTED;
+      goto leave;
+    }
+#endif
 
   if (ec->dialect == ECC_DIALECT_SAFECURVE)
     {
@@ -1435,6 +1527,14 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       rc = GPG_ERR_NO_OBJ;
       goto leave;
     }
+#ifdef HAVE_WOLFSSL
+  /* On an Edwards curve the wolfCrypt port only verifies EdDSA.  */
+  if (ec->model == MPI_EC_EDWARDS)
+    {
+      rc = GPG_ERR_NOT_SUPPORTED;
+      goto leave;
+    }
+#endif
 
   /*
    * Extract the data.
@@ -2137,6 +2237,14 @@ wc_ecc_generate (const gcry_sexp_t genparms, gcry_sexp_t *r_skey)
   rc = _gcry_mpi_ec_internal_new (&ec, &flags, "ecgen curve", genparms, NULL);
   if (rc)
     goto leave;
+#ifdef HAVE_WOLFSSL
+  /* On an Edwards curve the wolfCrypt port only verifies EdDSA.  */
+  if (ec->model == MPI_EC_EDWARDS)
+    {
+      rc = GPG_ERR_NOT_SUPPORTED;
+      goto leave;
+    }
+#endif
 
   if ((flags & PUBKEY_FLAG_EDDSA)
       || (ec->model == MPI_EC_EDWARDS &&
@@ -2437,6 +2545,14 @@ wc_ecc_check_secret_key (gcry_sexp_t keyparms)
   rc = _gcry_mpi_ec_internal_new (&ec, &flags, "ecc_testkey", keyparms, NULL);
   if (rc)
     goto leave;
+#ifndef ENABLED_WOLFSSL_FIPS
+  /* On an Edwards curve the wolfCrypt port only verifies EdDSA.  */
+  if (ec->model == MPI_EC_EDWARDS)
+    {
+      rc = GPG_ERR_NOT_SUPPORTED;
+      goto leave;
+    }
+#endif
   if (!ec->p || !ec->a || !ec->b || !ec->G || !ec->n || !ec->Q || !ec->d)
     {
       rc = GPG_ERR_NO_OBJ;
@@ -3451,6 +3567,74 @@ selftests_ecc (selftest_report_func_t report, int extended, int is_eddsa,
 }
 
 
+#if defined(HAVE_WOLFSSL) && (defined(HAVE_ED25519) || defined(HAVE_ED448))
+/* Known-answer EdDSA verification: the signature (SIGNATURE_R,
+   SIGNATURE_S) must verify INPUT under PUBLIC_KEY and must not verify
+   INPUT_BAD.  */
+static gpg_err_code_t
+selftest_verify_eddsa (selftest_report_func_t report, const char *public_key,
+                       const char *input, const char *input_bad,
+                       const char *signature_r, const char *signature_s)
+{
+  const char *what = "convert";
+  const char *errtxt = NULL;
+  gcry_error_t err;
+  gcry_sexp_t pkey = NULL;
+  gcry_sexp_t data = NULL;
+  gcry_sexp_t data_bad = NULL;
+  gcry_sexp_t sig = NULL;
+  char *sigtxt, *p;
+
+  sigtxt = xtrymalloc (strlen (signature_r) + strlen (signature_s) + 32);
+  if (!sigtxt)
+    err = gpg_error_from_syserror ();
+  else
+    {
+      p = stpcpy (sigtxt, "(sig-val(eddsa(r #");
+      p = stpcpy (p, signature_r);
+      p = stpcpy (p, "#)(s #");
+      p = stpcpy (p, signature_s);
+      strcpy (p, "#)))");
+      err = sexp_sscan (&sig, NULL, sigtxt, strlen (sigtxt));
+      xfree (sigtxt);
+    }
+  if (!err)
+    err = sexp_sscan (&pkey, NULL, public_key, strlen (public_key));
+  if (!err)
+    err = sexp_sscan (&data, NULL, input, strlen (input));
+  if (!err)
+    err = sexp_sscan (&data_bad, NULL, input_bad, strlen (input_bad));
+  if (err)
+    {
+      errtxt = _gcry_strerror (err);
+      goto leave;
+    }
+
+  what = "verify";
+  err = _gcry_pk_verify (sig, data, pkey);
+  if (err)
+    {
+      errtxt = _gcry_strerror (err);
+      goto leave;
+    }
+  err = _gcry_pk_verify (sig, data_bad, pkey);
+  if (gcry_err_code (err) != GPG_ERR_BAD_SIGNATURE)
+    errtxt = "bad signature not detected";
+
+ leave:
+  sexp_release (sig);
+  sexp_release (data_bad);
+  sexp_release (data);
+  sexp_release (pkey);
+  if (!errtxt)
+    return 0;
+  if (report)
+    report ("pubkey", GCRY_PK_ECC, what, errtxt);
+  return GPG_ERR_SELFTEST_FAILED;
+}
+#endif /* HAVE_WOLFSSL && (HAVE_ED25519 || HAVE_ED448) */
+
+
 /* Run a full self-test for ALGO and return 0 on success.  */
 static gpg_err_code_t
 run_selftests (int algo, int extended, selftest_report_func_t report)
@@ -3468,7 +3652,37 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
                      ecdsa_sample_data_string, ecdsa_sample_data_bad_string,
                      ecdsa_signature_r, ecdsa_signature_s);
 #ifdef HAVE_WOLFSSL
-  /* Ed25519 and Ed448 are not provided by the wolfCrypt port.  */
+  /* The wolfCrypt port verifies EdDSA but neither signs nor checks EdDSA
+     secret keys: known-answer verification instead of the sign legs.  */
+  if (r)
+    return r;
+
+#ifdef HAVE_ED25519
+  r = selftest_verify_eddsa (report, ed25519_sample_public_key,
+                             ed25519_sample_data, ed25519_sample_data_bad,
+                             ed25519_signature_r, ed25519_signature_s);
+  if (!r)
+    r = selftest_verify_eddsa (report, ed25519ctx_sample_public_key,
+                               ed25519ctx_sample_data,
+                               ed25519ctx_sample_data_bad,
+                               ed25519ctx_signature_r, ed25519ctx_signature_s);
+  if (!r)
+    r = selftest_verify_eddsa (report, ed25519ph_sample_public_key,
+                               ed25519ph_sample_data,
+                               ed25519ph_sample_data_bad,
+                               ed25519ph_signature_r, ed25519ph_signature_s);
+  if (r)
+    return r;
+#endif
+#ifdef HAVE_ED448
+  r = selftest_verify_eddsa (report, ed448_sample_public_key,
+                             ed448_sample_data, ed448_sample_data_bad,
+                             ed448_signature_r, ed448_signature_s);
+  if (!r)
+    r = selftest_verify_eddsa (report, ed448ph_sample_public_key,
+                               ed448ph_sample_data, ed448ph_sample_data_bad,
+                               ed448ph_signature_r, ed448ph_signature_s);
+#endif
   return r;
 #else
   if (r)

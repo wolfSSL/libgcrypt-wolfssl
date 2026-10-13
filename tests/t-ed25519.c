@@ -293,6 +293,40 @@ one_test (int testno, const char *sk, const char *pk,
     }
 
   data_tmpl = "(data(value %b))";
+
+  /* Verify the signature given by the test vector independent of the
+     sign operation.  */
+  if (!no_verify)
+    {
+      void *sigbuf;
+      size_t siglen;
+      gcry_sexp_t s_known = NULL;
+
+      if (!(sigbuf = hex2buffer (sig, &siglen)) || siglen != 64)
+        {
+          fail ("error building s-exp for test %d, %s: %s",
+                testno, "sig", "invalid hex string");
+          xfree (sigbuf);
+          goto leave;
+        }
+      err = gcry_sexp_build (&s_known, NULL,
+                             "(sig-val(eddsa(r %b)(s %b)))",
+                             32, sigbuf, 32, (char *)sigbuf + 32);
+      xfree (sigbuf);
+      if (!err)
+        err = gcry_pk_hash_verify (s_known, data_tmpl, s_pk, NULL, ctx);
+      gcry_sexp_release (s_known);
+#if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED25519)
+      if (err && strncmp (gpg_strerror (err), "Not supported", 13) != 0
+          && strncmp (gpg_strerror (err), "Unknown elliptic curve", 22) != 0)
+        fail ("Should fail for ed25519: %s", gpg_strerror (err));
+#else
+      if (err)
+        fail ("gcry_pk_verify of known signature failed for test %d: %s",
+              testno, gpg_strerror (err));
+#endif
+    }
+
   err = gcry_pk_hash_sign (&s_sig, data_tmpl, s_sk, NULL, ctx);
 #if defined(ENABLED_WOLFSSL_FIPS) && !defined(HAVE_ED25519)
   if (strncmp(gpg_strerror(err), "Not supported", 13) != 0 && strncmp(gpg_strerror(err), "Unknown elliptic curve", 22) != 0) {
