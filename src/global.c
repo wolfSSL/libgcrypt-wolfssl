@@ -114,6 +114,16 @@ global_init (void)
     return;
   _gcry_global_any_init_done = 1;
 
+#ifdef HAVE_WOLFSSL
+  /* Set up libgpg-error's log stream now, while the application is
+     still single-threaded (gcry_check_version comes first).  The first
+     log call sets it up without a lock, so threads that log for the
+     first time at once can crash in _gpgrt_funlockfile on a NULL
+     stream.  This only installs the default stream if none is set and
+     logs nothing.  */
+  gpgrt_log_get_stream ();
+#endif
+
   /* Tell the random module that we have seen an init call.  */
   _gcry_set_preferred_rng_type (0);
 
