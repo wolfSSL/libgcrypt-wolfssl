@@ -262,14 +262,18 @@ _gcry_dsa_gen_rfc6979_k (gcry_mpi_t *r_k,
   _gcry_md_write (hd, "", 1);
   _gcry_md_write (hd, x_buf, (qbits+7)/8);
   _gcry_md_write (hd, h1_buf, (qbits+7)/8);
-  memcpy (K, _gcry_md_read (hd, 0), hlen);
+  rc = _gcry_md_read_into (hd, 0, K, hlen);
+  if (rc)
+    goto leave;
 
   /* Step e:  V = HMAC_K(V) */
   rc = _gcry_md_setkey (hd, K, hlen);
   if (rc)
     goto leave;
   _gcry_md_write (hd, V, hlen);
-  memcpy (V, _gcry_md_read (hd, 0), hlen);
+  rc = _gcry_md_read_into (hd, 0, V, hlen);
+  if (rc)
+    goto leave;
 
   /* Step f:  K = HMAC_K(V || 0x01 || int2octets(x) || bits2octets(h1) */
   rc = _gcry_md_setkey (hd, K, hlen);
@@ -279,14 +283,18 @@ _gcry_dsa_gen_rfc6979_k (gcry_mpi_t *r_k,
   _gcry_md_write (hd, "\x01", 1);
   _gcry_md_write (hd, x_buf, (qbits+7)/8);
   _gcry_md_write (hd, h1_buf, (qbits+7)/8);
-  memcpy (K, _gcry_md_read (hd, 0), hlen);
+  rc = _gcry_md_read_into (hd, 0, K, hlen);
+  if (rc)
+    goto leave;
 
   /* Step g:  V = HMAC_K(V) */
   rc = _gcry_md_setkey (hd, K, hlen);
   if (rc)
     goto leave;
   _gcry_md_write (hd, V, hlen);
-  memcpy (V, _gcry_md_read (hd, 0), hlen);
+  rc = _gcry_md_read_into (hd, 0, V, hlen);
+  if (rc)
+    goto leave;
 
   /* Step h. */
   t = xtrymalloc_secure ((qbits+7)/8+hlen);
@@ -304,7 +312,9 @@ _gcry_dsa_gen_rfc6979_k (gcry_mpi_t *r_k,
       if (rc)
         goto leave;
       _gcry_md_write (hd, V, hlen);
-      memcpy (V, _gcry_md_read (hd, 0), hlen);
+      rc = _gcry_md_read_into (hd, 0, V, hlen);
+      if (rc)
+        goto leave;
 
       /* T = T || V */
       memcpy (t+(tbits+7)/8, V, hlen);
@@ -329,14 +339,18 @@ _gcry_dsa_gen_rfc6979_k (gcry_mpi_t *r_k,
         goto leave;
       _gcry_md_write (hd, V, hlen);
       _gcry_md_write (hd, "", 1);
-      memcpy (K, _gcry_md_read (hd, 0), hlen);
+      rc = _gcry_md_read_into (hd, 0, K, hlen);
+      if (rc)
+        goto leave;
 
       /* V = HMAC_K(V) */
       rc = _gcry_md_setkey (hd, K, hlen);
       if (rc)
         goto leave;
       _gcry_md_write (hd, V, hlen);
-      memcpy (V, _gcry_md_read (hd, 0), hlen);
+      rc = _gcry_md_read_into (hd, 0, V, hlen);
+      if (rc)
+        goto leave;
 
       goto again;
     }
@@ -355,14 +369,18 @@ _gcry_dsa_gen_rfc6979_k (gcry_mpi_t *r_k,
         goto leave;
       _gcry_md_write (hd, V, hlen);
       _gcry_md_write (hd, "", 1);
-      memcpy (K, _gcry_md_read (hd, 0), hlen);
+      rc = _gcry_md_read_into (hd, 0, K, hlen);
+      if (rc)
+        goto leave;
 
       /* V = HMAC_K(V) */
       rc = _gcry_md_setkey (hd, K, hlen);
       if (rc)
         goto leave;
       _gcry_md_write (hd, V, hlen);
-      memcpy (V, _gcry_md_read (hd, 0), hlen);
+      rc = _gcry_md_read_into (hd, 0, V, hlen);
+      if (rc)
+        goto leave;
 
       goto again;
     }

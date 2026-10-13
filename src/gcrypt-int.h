@@ -153,6 +153,8 @@ gpg_err_code_t _gcry_md_ctl (gcry_md_hd_t hd, int cmd,
                           void *buffer, size_t buflen);
 void _gcry_md_write (gcry_md_hd_t hd, const void *buffer, size_t length);
 unsigned char *_gcry_md_read (gcry_md_hd_t hd, int algo);
+gpg_err_code_t _gcry_md_read_into (gcry_md_hd_t hd, int algo,
+                                   void *out, size_t n);
 gpg_err_code_t _gcry_md_extract (gcry_md_hd_t hd, int algo, void *buffer,
                                  size_t length);
 void _gcry_md_hash_buffer (int algo, void *digest,

@@ -140,6 +140,7 @@ typedef struct
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha3.h>
+#include "wolfcrypt-cast-retry.h"
 
 typedef struct {
   KECCAK_STATE state;
@@ -152,6 +153,7 @@ typedef struct {
   const keccak_ops_t *ops;
   /* wolfSSL SHA3 context */
   wc_Sha3 wc_sha3[1];
+  int wc_err;    /* first failed wolfCrypt call */
 } WOLFSSL_KECCAK_CONTEXT;
 typedef WOLFSSL_KECCAK_CONTEXT KECCAK_CONTEXT;
 
@@ -1603,9 +1605,11 @@ wolfssl_sha3_224_init(void *context, unsigned int flags)
   WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha3_224(hd->wc_sha3, NULL, INVALID_DEVID);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha3_224(hd->wc_sha3, NULL, INVALID_DEVID));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] sha3_224_init: wc_InitSha3_224 failed: %d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha3_224", ret);
   }
 
   hd->count = 0;
@@ -1624,9 +1628,11 @@ wolfssl_sha3_256_init(void *context, unsigned int flags)
   WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha3_256(hd->wc_sha3, NULL, INVALID_DEVID);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha3_256(hd->wc_sha3, NULL, INVALID_DEVID));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] sha3_256_init: wc_InitSha3_256 failed: %d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha3_256", ret);
   }
 
   hd->count = 0;
@@ -1645,9 +1651,11 @@ wolfssl_sha3_384_init(void *context, unsigned int flags)
   WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha3_384(hd->wc_sha3, NULL, INVALID_DEVID);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha3_384(hd->wc_sha3, NULL, INVALID_DEVID));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] sha3_384_init: wc_InitSha3_384 failed: %d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha3_384", ret);
   }
 
   hd->count = 0;
@@ -1666,9 +1674,11 @@ wolfssl_sha3_512_init(void *context, unsigned int flags)
   WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha3_512(hd->wc_sha3, NULL, INVALID_DEVID);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha3_512(hd->wc_sha3, NULL, INVALID_DEVID));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] sha3_512_init: wc_InitSha3_512 failed: %d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha3_512", ret);
   }
 
   hd->count = 0;
@@ -1687,19 +1697,22 @@ wolfssl_keccak_write(void *context, const void *inbuf_arg, size_t inlen)
   WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
   const byte *inbuf = inbuf_arg;
 
+  if (hd->wc_err)
+    return;
+
   /* SHA3-224, SHA3-256, SHA3-384, SHA3-512 */
   switch (hd->outlen) {
     case 28: /* SHA3-224 */
-      ret = wc_Sha3_224_Update(hd->wc_sha3, inbuf, inlen);
+      WC_CAST_RETRY (ret, wc_Sha3_224_Update(hd->wc_sha3, inbuf, inlen));
       break;
     case 32: /* SHA3-256 */
-      ret = wc_Sha3_256_Update(hd->wc_sha3, inbuf, inlen);
+      WC_CAST_RETRY (ret, wc_Sha3_256_Update(hd->wc_sha3, inbuf, inlen));
       break;
     case 48: /* SHA3-384 */
-      ret = wc_Sha3_384_Update(hd->wc_sha3, inbuf, inlen);
+      WC_CAST_RETRY (ret, wc_Sha3_384_Update(hd->wc_sha3, inbuf, inlen));
       break;
     case 64: /* SHA3-512 */
-      ret = wc_Sha3_512_Update(hd->wc_sha3, inbuf, inlen);
+      WC_CAST_RETRY (ret, wc_Sha3_512_Update(hd->wc_sha3, inbuf, inlen));
       break;
     default:
       fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_write: Unknown SHA3 variant\n");
@@ -1707,7 +1720,8 @@ wolfssl_keccak_write(void *context, const void *inbuf_arg, size_t inlen)
   }
 
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_write: Update failed: %d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_Sha3_Update", ret);
   }
 
   hd->count += inlen;
@@ -1721,19 +1735,25 @@ wolfssl_keccak_final(void *context)
   WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
   byte digest[64]; /* Maximum possible size (SHA3-512) */
 
+  if (hd->wc_err)
+    {
+      hd->count = 0;
+      return;
+    }
+
   /* SHA3-224, SHA3-256, SHA3-384, SHA3-512 */
   switch (hd->outlen) {
     case 28: /* SHA3-224 */
-      ret = wc_Sha3_224_Final(hd->wc_sha3, digest);
+      WC_CAST_RETRY (ret, wc_Sha3_224_Final(hd->wc_sha3, digest));
       break;
     case 32: /* SHA3-256 */
-      ret = wc_Sha3_256_Final(hd->wc_sha3, digest);
+      WC_CAST_RETRY (ret, wc_Sha3_256_Final(hd->wc_sha3, digest));
       break;
     case 48: /* SHA3-384 */
-      ret = wc_Sha3_384_Final(hd->wc_sha3, digest);
+      WC_CAST_RETRY (ret, wc_Sha3_384_Final(hd->wc_sha3, digest));
       break;
     case 64: /* SHA3-512 */
-      ret = wc_Sha3_512_Final(hd->wc_sha3, digest);
+      WC_CAST_RETRY (ret, wc_Sha3_512_Final(hd->wc_sha3, digest));
       break;
     default:
       fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_final: Unknown SHA3 variant\n");
@@ -1741,11 +1761,12 @@ wolfssl_keccak_final(void *context)
   }
 
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wolfssl_keccak_final: Final failed: %d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_Sha3_Final", ret);
   }
-
-  /* Copy digest to the state for keccak_read to access */
-  memcpy(&hd->state.u, digest, hd->outlen);
+  else
+    /* Copy digest to the state for keccak_read to access */
+    memcpy(&hd->state.u, digest, hd->outlen);
   hd->count = 0;
 }
 
@@ -1754,7 +1775,7 @@ static byte *
 wolfssl_keccak_read(void *context)
 {
   WOLFSSL_KECCAK_CONTEXT *hd = (WOLFSSL_KECCAK_CONTEXT*)context;
-  return (byte *)&hd->state.u;
+  return hd->wc_err ? NULL : (byte *)&hd->state.u;
 }
 
 /* Hash buffer functions */
@@ -1768,36 +1789,39 @@ _gcry_wolfssl_sha3_hash_buffer(int algo, void *outbuf, size_t nbytes,
   /* Initialize based on algorithm */
   switch (algo) {
     case GCRY_MD_SHA3_224:
-      ret = wc_InitSha3_224(&sha3, NULL, INVALID_DEVID);
-      for (;iovcnt > 0; iov++, iovcnt--)
-        wc_Sha3_224_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
-      wc_Sha3_224_Final(&sha3, outbuf);
+      WC_CAST_RETRY (ret, wc_InitSha3_224(&sha3, NULL, INVALID_DEVID));
+      for (;ret == 0 && iovcnt > 0; iov++, iovcnt--)
+        WC_CAST_RETRY (ret, wc_Sha3_224_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len));
+      if (ret == 0)
+        WC_CAST_RETRY (ret, wc_Sha3_224_Final(&sha3, outbuf));
       break;
     case GCRY_MD_SHA3_256:
-      ret = wc_InitSha3_256(&sha3, NULL, INVALID_DEVID);
-      for (;iovcnt > 0; iov++, iovcnt--)
-        wc_Sha3_256_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
-      wc_Sha3_256_Final(&sha3, outbuf);
+      WC_CAST_RETRY (ret, wc_InitSha3_256(&sha3, NULL, INVALID_DEVID));
+      for (;ret == 0 && iovcnt > 0; iov++, iovcnt--)
+        WC_CAST_RETRY (ret, wc_Sha3_256_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len));
+      if (ret == 0)
+        WC_CAST_RETRY (ret, wc_Sha3_256_Final(&sha3, outbuf));
       break;
     case GCRY_MD_SHA3_384:
-      ret = wc_InitSha3_384(&sha3, NULL, INVALID_DEVID);
-      for (;iovcnt > 0; iov++, iovcnt--)
-        wc_Sha3_384_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
-      wc_Sha3_384_Final(&sha3, outbuf);
+      WC_CAST_RETRY (ret, wc_InitSha3_384(&sha3, NULL, INVALID_DEVID));
+      for (;ret == 0 && iovcnt > 0; iov++, iovcnt--)
+        WC_CAST_RETRY (ret, wc_Sha3_384_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len));
+      if (ret == 0)
+        WC_CAST_RETRY (ret, wc_Sha3_384_Final(&sha3, outbuf));
       break;
     case GCRY_MD_SHA3_512:
-      ret = wc_InitSha3_512(&sha3, NULL, INVALID_DEVID);
-      for (;iovcnt > 0; iov++, iovcnt--)
-        wc_Sha3_512_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len);
-      wc_Sha3_512_Final(&sha3, outbuf);
+      WC_CAST_RETRY (ret, wc_InitSha3_512(&sha3, NULL, INVALID_DEVID));
+      for (;ret == 0 && iovcnt > 0; iov++, iovcnt--)
+        WC_CAST_RETRY (ret, wc_Sha3_512_Update(&sha3, (const byte*)iov[0].data + iov[0].off, iov[0].len));
+      if (ret == 0)
+        WC_CAST_RETRY (ret, wc_Sha3_512_Final(&sha3, outbuf));
       break;
     default:
       fprintf(stderr, "[WOLFSSL ERROR] _gcry_wolfssl_sha3_hash_buffer: Unknown algorithm\n");
   }
 
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] _gcry_wolfssl_sha3_hash_buffer: Init failed: %d\n", ret);
-  }
+  if (ret != 0)
+    _gcry_wc_hash_buffer_failed (algo, ret);
 }
 
 /* Helper functions that call the general hash buffer function */

@@ -46,6 +46,7 @@
 #include <wolfssl/wolfcrypt/sha512.h>
 #include <wolfssl/wolfcrypt/sha3.h>
 #include <wolfssl/wolfcrypt/integer.h>
+#include "wolfcrypt-cast-retry.h"
 
 #endif
 
@@ -2376,72 +2377,72 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
     case WC_HASH_TYPE_SHA:
     {
       wc_Sha sha;
-      ret = wc_InitSha(&sha);
+      WC_CAST_RETRY (ret, wc_InitSha(&sha));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_ShaUpdate(&sha, data, dataLen);
+      WC_CAST_RETRY (ret, wc_ShaUpdate(&sha, data, dataLen));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_ShaFinal(&sha, digest);
+      WC_CAST_RETRY (ret, wc_ShaFinal(&sha, digest));
       break;
     }
     case WC_HASH_TYPE_SHA224:
     {
       wc_Sha224 sha224;
-      ret = wc_InitSha224(&sha224);
+      WC_CAST_RETRY (ret, wc_InitSha224(&sha224));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha224Update(&sha224, data, dataLen);
+      WC_CAST_RETRY (ret, wc_Sha224Update(&sha224, data, dataLen));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha224Final(&sha224, digest);
+      WC_CAST_RETRY (ret, wc_Sha224Final(&sha224, digest));
       break;
     }
     case WC_HASH_TYPE_SHA256:
     {
       wc_Sha256 sha256;
-      ret = wc_InitSha256(&sha256);
+      WC_CAST_RETRY (ret, wc_InitSha256(&sha256));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha256Update(&sha256, data, dataLen);
+      WC_CAST_RETRY (ret, wc_Sha256Update(&sha256, data, dataLen));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha256Final(&sha256, digest);
+      WC_CAST_RETRY (ret, wc_Sha256Final(&sha256, digest));
       break;
     }
     case WC_HASH_TYPE_SHA384:
     {
       wc_Sha384 sha384;
-      ret = wc_InitSha384(&sha384);
+      WC_CAST_RETRY (ret, wc_InitSha384(&sha384));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha384Update(&sha384, data, dataLen);
+      WC_CAST_RETRY (ret, wc_Sha384Update(&sha384, data, dataLen));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha384Final(&sha384, digest);
+      WC_CAST_RETRY (ret, wc_Sha384Final(&sha384, digest));
       break;
     }
 #ifndef WOLFSSL_NOSHA512_224
     case WC_HASH_TYPE_SHA512_224:
     {
       wc_Sha512_224 sha512_224;
-      ret = wc_InitSha512_224(&sha512_224);
+      WC_CAST_RETRY (ret, wc_InitSha512_224(&sha512_224));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha512_224Update(&sha512_224, data, dataLen);
+      WC_CAST_RETRY (ret, wc_Sha512_224Update(&sha512_224, data, dataLen));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha512_224Final(&sha512_224, digest);
+      WC_CAST_RETRY (ret, wc_Sha512_224Final(&sha512_224, digest));
       break;
     }
 #endif
@@ -2449,30 +2450,30 @@ _wc_create_digest(byte* data, size_t dataLen, byte* digest, size_t digestLen, in
     case WC_HASH_TYPE_SHA512_256:
     {
       wc_Sha512_256 sha512_256;
-      ret = wc_InitSha512_256(&sha512_256);
+      WC_CAST_RETRY (ret, wc_InitSha512_256(&sha512_256));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha512_256Update(&sha512_256, data, dataLen);
+      WC_CAST_RETRY (ret, wc_Sha512_256Update(&sha512_256, data, dataLen));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha512_256Final(&sha512_256, digest);
+      WC_CAST_RETRY (ret, wc_Sha512_256Final(&sha512_256, digest));
       break;
     }
 #endif
     case WC_HASH_TYPE_SHA512:
     {
       wc_Sha512 sha512;
-      ret = wc_InitSha512(&sha512);
+      WC_CAST_RETRY (ret, wc_InitSha512(&sha512));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha512Update(&sha512, data, dataLen);
+      WC_CAST_RETRY (ret, wc_Sha512Update(&sha512, data, dataLen));
       if (ret != 0) {
         return ret;
       }
-      ret = wc_Sha512Final(&sha512, digest);
+      WC_CAST_RETRY (ret, wc_Sha512Final(&sha512, digest));
       break;
     }
     default:

@@ -38,6 +38,7 @@
 #include "wolfssl/wolfcrypt/md5.h"
 #include "wolfssl/wolfcrypt/hmac.h"
 #include "wolfssl/wolfcrypt/hash.h"
+#include "wolfcrypt-cast-retry.h"
 
 
 static gcry_err_code_t
@@ -360,9 +361,40 @@ struct gcry_wc_md_context
 {
   int use_wc;
   int flags;
+  int wc_err;   /* First failed wolfCrypt HMAC call, kept until the next
+                   setkey.  */
   GcryWcDigestEntry *list;
 };
 
+#endif
+
+#ifdef HAVE_WOLFSSL
+/* Nonzero if ALGO's hash_buffers is a wolfCrypt digest.  It returns void
+   and cannot report a failed call, so _gcry_md_hash_buffers_extract takes
+   the handle path, which returns it.  */
+static int
+md_wc_hash_buffers (int algo)
+{
+  switch (algo)
+    {
+    case GCRY_MD_SHA1:
+    case GCRY_MD_SHA224:
+    case GCRY_MD_SHA256:
+    case GCRY_MD_SHA384:
+    case GCRY_MD_SHA512:
+    case GCRY_MD_SHA512_224:
+    case GCRY_MD_SHA512_256:
+    case GCRY_MD_SHA3_224:
+    case GCRY_MD_SHA3_256:
+    case GCRY_MD_SHA3_384:
+    case GCRY_MD_SHA3_512:
+      return 1;
+    default:
+      return 0;
+    }
+}
+#else
+# define md_wc_hash_buffers(algo) 0
 #endif
 
 #define CTX_MAGIC_NORMAL 0x11071961
@@ -1264,6 +1296,22 @@ md_customize (gcry_md_hd_t h, void *buffer, size_t buflen)
 }
 
 
+#ifdef HAVE_WOLFSSL
+/* Nonzero if a wolfCrypt digest in A failed: its read function then
+   returns NULL.  XOFs (SHAKE, cSHAKE) are libgcrypt
+   code here, and their read is not side-effect free: skip them.  */
+static int
+md_wc_failed (gcry_md_hd_t a)
+{
+  GcryDigestEntry *r;
+
+  for (r = a->ctx->list; r; r = r->next)
+    if (r->spec->read && !r->spec->extract && !r->spec->read (r->context))
+      return 1;
+  return 0;
+}
+#endif
+
 gcry_err_code_t
 _gcry_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
 {
@@ -1279,6 +1327,10 @@ _gcry_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
     {
     case GCRYCTL_FINALIZE:
       md_final (hd);
+#ifdef HAVE_WOLFSSL
+      if (md_wc_failed (hd))
+        rc = GPG_ERR_NOT_OPERATIONAL;
+#endif
       break;
     case GCRYCTL_START_DUMP:
       md_start_debug (hd, buffer);
@@ -1375,7 +1427,7 @@ md_read( gcry_md_hd_t a, int algo )
 
 /*
  * Read out the complete digest, this function implictly finalizes
- * the hash.
+ * the hash.  Returns NULL if a wolfCrypt call for that digest failed.
  */
 byte *
 _gcry_md_read (gcry_md_hd_t hd, int algo)
@@ -1389,6 +1441,20 @@ _gcry_md_read (gcry_md_hd_t hd, int algo)
      non-operational state.  */
   _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
   return md_read (hd, algo);
+}
+
+/* Copy N bytes of the digest of ALGO in HD to OUT, for libgcrypt's
+   internal callers.  Writes nothing and returns GPG_ERR_NOT_OPERATIONAL
+   if the digest is not available.  */
+gpg_err_code_t
+_gcry_md_read_into (gcry_md_hd_t hd, int algo, void *out, size_t n)
+{
+  const byte *p = _gcry_md_read (hd, algo);
+
+  if (!p)
+    return GPG_ERR_NOT_OPERATIONAL;
+  memcpy (out, p, n);
+  return 0;
 }
 
 
@@ -1436,7 +1502,12 @@ _gcry_md_extract (gcry_md_hd_t hd, int algo, void *out, size_t outlen)
   if (hd->ctx->wc_c && hd->ctx->wc_c->use_wc)
     return _gcry_wc_md_extract(hd, algo, out, outlen);
 #endif
-  _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
+  {
+    gcry_err_code_t rc = _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
+
+    if (rc)
+      return rc;
+  }
   return md_extract (hd, algo, out, outlen);
 }
 
@@ -1505,7 +1576,15 @@ _gcry_md_hash_buffer (int algo, void *digest,
                 algo, gpg_strerror (gcry_error(err)));
       md_write (h, (byte *) buffer, length);
       md_final (h);
-      memcpy (digest, md_read (h, algo), md_digest_length (algo));
+      {
+        byte *p = md_read (h, algo);
+
+#ifdef HAVE_WOLFSSL
+        if (!p)
+          _gcry_wc_hash_buffer_failed (algo, 0);
+#endif
+        memcpy (digest, p, md_digest_length (algo));
+      }
       md_close (h);
     }
 }
@@ -1566,7 +1645,7 @@ _gcry_md_hash_buffers_extract (int algo, unsigned int flags, void *digest,
   if (digestlen == -1)
     digestlen = spec->mdlen;
 
-  if (!hmac && spec->hash_buffers)
+  if (!hmac && spec->hash_buffers && !md_wc_hash_buffers (algo))
     {
       if (spec->flags.disabled || (!spec->flags.fips && fips_mode ()))
         return GPG_ERR_DIGEST_ALGO;
@@ -1600,10 +1679,18 @@ _gcry_md_hash_buffers_extract (int algo, unsigned int flags, void *digest,
         md_write (h, (const char*)iov[0].data + iov[0].off, iov[0].len);
       md_final (h);
       if (digestlen == spec->mdlen)
-	memcpy (digest, md_read (h, algo), spec->mdlen);
+        {
+          byte *p = md_read (h, algo);
+
+          if (p)
+            memcpy (digest, p, spec->mdlen);
+          else
+            rc = GPG_ERR_NOT_OPERATIONAL;
+        }
       else if (digestlen > 0)
-	md_extract (h, algo, digest, digestlen);
+	rc = md_extract (h, algo, digest, digestlen);
       md_close (h);
+      return rc;
     }
 
   return 0;
@@ -2185,6 +2272,8 @@ _gcry_wc_md_copy (gcry_md_hd_t *dest, gcry_md_hd_t src)
     dest_entry->next = NULL;
     hash_copy(&dest_entry->hmac, &src_entry->hmac, src_entry->algo);
   }
+  if (!first_iter)
+    dest_wc->wc_err = src_wc->wc_err;
   *dest = hd;
   return rc;
 }
@@ -2221,10 +2310,12 @@ _gcry_wc_md_write (gcry_md_hd_t hd, const void *inbuf, size_t inlen)
   struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
-  for (entry = wc->list; entry; entry = entry->next) {
-    int ret = wc_HmacUpdate(&entry->hmac, inbuf, inlen);
+  for (entry = wc->list; entry && !wc->wc_err; entry = entry->next) {
+    int ret;
+    WC_CAST_RETRY (ret, wc_HmacUpdate(&entry->hmac, inbuf, inlen));
     if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_HmacUpdate failed with ret=%d\n", ret);
+      wc->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_HmacUpdate", ret);
     }
   }
   hd->bufpos = 0;
@@ -2239,17 +2330,21 @@ _gcry_wc_md_final (gcry_md_hd_t a)
   if (a->ctx->flags.finalized)
     return;
 
-  for (entry = wc->list; entry; entry = entry->next) {
+  for (entry = wc->list; entry && !wc->wc_err; entry = entry->next) {
+    int ret = 0;
     if (a->bufpos) {
-      int ret = wc_HmacUpdate(&entry->hmac, a->buf, a->bufpos);
+      WC_CAST_RETRY (ret, wc_HmacUpdate(&entry->hmac, a->buf, a->bufpos));
       if (ret != 0) {
-        fprintf(stderr, "[WOLFSSL ERROR] wc_HmacUpdate failed with ret=%d\n", ret);
+        wc->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_HmacUpdate", ret);
+        break;
       }
     }
 
-    int ret = wc_HmacFinal(&entry->hmac, entry->digest);
+    WC_CAST_RETRY (ret, wc_HmacFinal(&entry->hmac, entry->digest));
     if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_HmacFinal failed with ret=%d\n", ret);
+      wc->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_HmacFinal", ret);
     }
   }
 
@@ -2267,6 +2362,8 @@ _gcry_wc_md_ctl (gcry_md_hd_t hd, int cmd, void *buffer, size_t buflen)
     {
     case GCRYCTL_FINALIZE:
       _gcry_wc_md_final (hd);
+      if (hd->ctx->wc_c->wc_err)
+        rc = GPG_ERR_NOT_OPERATIONAL;
       break;
     case GCRYCTL_START_DUMP:
       md_start_debug (hd, buffer);
@@ -2290,12 +2387,14 @@ _gcry_wc_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
   GcryWcDigestEntry *entry;
   int rc;
   _gcry_wc_md_reset(hd);
+  wc->wc_err = 0;
 
   for (entry = wc->list; entry; entry = entry->next) {
     int wc_algo = map_algo_to_wc_algo(entry->algo);
-    rc = wc_HmacSetKey(&entry->hmac, wc_algo, key, keylen);
+    WC_CAST_RETRY (rc, wc_HmacSetKey(&entry->hmac, wc_algo, key, keylen));
     if (rc) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_HmacSetKey failed with rc=%d\n", rc);
+      wc->wc_err = rc;
+      _gcry_wc_hmac_setkey_failed (rc);
       return GPG_ERR_GENERAL;
     }
   }
@@ -2309,7 +2408,8 @@ _gcry_wc_md_read (gcry_md_hd_t hd, int algo)
   struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
-  _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
+  if (_gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0))
+    return NULL;
 
   for (entry = wc->list; entry; entry = entry->next) {
     /* Return the digest for the specific algo or the first
@@ -2327,7 +2427,8 @@ _gcry_wc_md_extract (gcry_md_hd_t hd, int algo, void *out, size_t outlen)
   struct gcry_wc_md_context *wc = hd->ctx->wc_c;
   GcryWcDigestEntry *entry;
 
-  _gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0);
+  if (_gcry_md_ctl (hd, GCRYCTL_FINALIZE, NULL, 0))
+    return GPG_ERR_NOT_OPERATIONAL;
 
   for (entry = wc->list; entry; entry = entry->next) {
     /* Return the digest for the specific algo or the first
@@ -2380,6 +2481,11 @@ _gcry_wc_md_hash_buffers_extract (int algo, unsigned int flags, void *digest,
   for (;iovcnt; iov++, iovcnt--)
     _gcry_wc_md_write (h, (const char*)iov[0].data + iov[0].off, iov[0].len);
   _gcry_wc_md_final (h);
+  if (h->ctx->wc_c->wc_err)
+  {
+    _gcry_wc_md_close (h);
+    return GPG_ERR_NOT_OPERATIONAL;
+  }
   _gcry_wc_md_extract (h, algo, digest, digestlen);
   _gcry_wc_md_close (h);
 

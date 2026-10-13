@@ -1223,7 +1223,7 @@ selftest (void)
     for (i = 0; i < 64; ++i)
       _gcry_md_write (h, weak_keys[i], 8);
     p = _gcry_md_read (h, GCRY_MD_SHA1);
-    i = memcmp (p, weak_keys_chksum, 20);
+    i = p ? memcmp (p, weak_keys_chksum, 20) : 1;
     _gcry_md_close (h);
     if (i)
       return "weak key table defect";

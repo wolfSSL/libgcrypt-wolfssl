@@ -37,6 +37,7 @@
 #include "wolfssl/wolfcrypt/hash.h"
 #include "wolfssl/wolfcrypt/pwdbased.h"
 #include "wolfssl/wolfcrypt/fips.h" /* maps wc_PBKDF2 to wc_PBKDF2_fips */
+#include "wolfcrypt-cast-retry.h"
 #define USE_WC_FIPS_PBKDF2 1
 #endif
 #endif
@@ -119,7 +120,12 @@ openpgp_s2k (const void *passphrase, size_t passphraselen,
       i = _gcry_md_get_algo_dlen (hashalgo);
       if (i > keysize - used)
         i = keysize - used;
-      memcpy (key+used, _gcry_md_read (md, hashalgo), i);
+      ec = _gcry_md_read_into (md, hashalgo, key+used, i);
+      if (ec)
+        {
+          _gcry_md_close (md);
+          return ec;
+        }
       used += i;
     }
   _gcry_md_close (md);
@@ -200,9 +206,10 @@ _gcry_kdf_pkdf2 (const void *passphrase, size_t passphraselen,
       int ret;
 
       PRIVATE_KEY_UNLOCK ();
-      ret = wc_PBKDF2 (keybuffer, passphrase, (int)passphraselen,
-                       salt, (int)saltlen, (int)iterations, (int)dklen,
-                       wc_pbkdf2_hash_type (hashalgo));
+      WC_CAST_RETRY (ret, wc_PBKDF2 (keybuffer, passphrase, (int)passphraselen,
+                                     salt, (int)saltlen, (int)iterations,
+                                     (int)dklen,
+                                     wc_pbkdf2_hash_type (hashalgo)));
       PRIVATE_KEY_LOCK ();
       if (ret == BAD_LENGTH_E)
         return GPG_ERR_INV_VALUE; /* dkLen below the module's 112 bits */
@@ -267,13 +274,25 @@ _gcry_kdf_pkdf2 (const void *passphrase, size_t passphraselen,
               sbuf[saltlen + 2] = (lidx >> 8);
               sbuf[saltlen + 3] = lidx;
               _gcry_md_write (md, sbuf, saltlen + 4);
-              memcpy (ubuf, _gcry_md_read (md, 0), hlen);
+              ec = _gcry_md_read_into (md, 0, ubuf, hlen);
+              if (ec)
+                {
+                  _gcry_md_close (md);
+                  xfree (sbuf);
+                  return ec;
+                }
               memcpy (tbuf, ubuf, hlen);
             }
           else /* Compute U_(2..c):  */
             {
               _gcry_md_write (md, ubuf, hlen);
-              memcpy (ubuf, _gcry_md_read (md, 0), hlen);
+              ec = _gcry_md_read_into (md, 0, ubuf, hlen);
+              if (ec)
+                {
+                  _gcry_md_close (md);
+                  xfree (sbuf);
+                  return ec;
+                }
               for (i=0; i < hlen; i++)
                 tbuf[i] ^= ubuf[i];
             }
@@ -1048,7 +1067,10 @@ prng_aes_ctr_init (gcry_cipher_hd_t *hd_p, balloon_ctx_t b,
   keylen = _gcry_cipher_get_algo_keylen (cipher_algo);
   blklen = _gcry_cipher_get_algo_blklen (cipher_algo);
 
-  b->md_spec->hash_buffers (key, b->blklen, iov, iov_count);
+  ec = _gcry_md_hash_buffers_extract (b->md_spec->algo, 0, key, b->blklen,
+                                      iov, iov_count);
+  if (ec)
+    return ec;
   ec = _gcry_cipher_open (&hd, cipher_algo, GCRY_CIPHER_MODE_CTR, 0);
   if (ec)
     return ec;
@@ -1234,8 +1256,20 @@ balloon_xor_block (balloon_ctx_t b, u64 *dst, const u64 *src)
 
 #define BALLOON_COMPRESS_BLOCKS 5
 
+/* Hash IOV into OUT for thread T; the first failure is kept in T->ec,
+   which balloon_final returns.  */
 static void
-balloon_compress (balloon_ctx_t b, u64 *counter_p, unsigned char *out,
+balloon_hash (struct balloon_thread_data *t, void *out,
+              const gcry_buffer_t *iov, int iovcnt)
+{
+  if (!t->ec)
+    t->ec = _gcry_md_hash_buffers_extract (t->b->md_spec->algo, 0, out,
+                                           t->b->blklen, iov, iovcnt);
+}
+
+static void
+balloon_compress (struct balloon_thread_data *t, balloon_ctx_t b,
+                  u64 *counter_p, unsigned char *out,
                   const unsigned char *blocks[BALLOON_COMPRESS_BLOCKS])
 {
   gcry_buffer_t iov[1+BALLOON_COMPRESS_BLOCKS];
@@ -1254,12 +1288,13 @@ balloon_compress (balloon_ctx_t b, u64 *counter_p, unsigned char *out,
       iov[i].off = 0;
     }
 
-  b->md_spec->hash_buffers (out, b->blklen, iov, 1+BALLOON_COMPRESS_BLOCKS);
+  balloon_hash (t, out, iov, 1+BALLOON_COMPRESS_BLOCKS);
   *counter_p += 1;
 }
 
 static void
-balloon_expand (balloon_ctx_t b, u64 *counter_p, unsigned char *block,
+balloon_expand (struct balloon_thread_data *t, balloon_ctx_t b,
+                u64 *counter_p, unsigned char *block,
                 u64 n_blocks)
 {
   gcry_buffer_t iov[2];
@@ -1277,7 +1312,7 @@ balloon_expand (balloon_ctx_t b, u64 *counter_p, unsigned char *block,
       buf_put_le64 (octet_counter, *counter_p);
       iov[1].data = block;
       block += b->blklen;
-      b->md_spec->hash_buffers (block, b->blklen, iov, 2);
+      balloon_hash (t, block, iov, 2);
       *counter_p += 1;
     }
 }
@@ -1317,9 +1352,9 @@ balloon_compute_fill (balloon_ctx_t b,
   iov[5].data = octet_parallelism;
   iov[5].len = 4;
   iov[5].off = 0;
-  b->md_spec->hash_buffers (t->block, b->blklen, iov, 6);
+  balloon_hash (t, t->block, iov, 6);
   *counter_p += 1;
-  balloon_expand (b, counter_p, t->block, b->n_blocks);
+  balloon_expand (t, b, counter_p, t->block, b->n_blocks);
 }
 
 static void
@@ -1350,7 +1385,7 @@ balloon_compute_mix (gcry_cipher_hd_t prng,
           blocks[n] = t->block + (b->blklen * (rand64 % b->n_blocks));
         }
 
-      balloon_compress (b, counter_p, cur_block, blocks);
+      balloon_compress (t, b, counter_p, cur_block, blocks);
     }
 }
 
@@ -1555,6 +1590,7 @@ onestep_kdf_compute (onestep_kdf_ctx_t o, const struct gcry_kdf_thread_ops *ops)
 static gpg_err_code_t
 onestep_kdf_final (onestep_kdf_ctx_t o, size_t resultlen, void *result)
 {
+  gpg_err_code_t ec;
   u32 counter = 0;
   unsigned char cnt[4];
   int i;
@@ -1570,8 +1606,10 @@ onestep_kdf_final (onestep_kdf_ctx_t o, size_t resultlen, void *result)
       _gcry_md_write (o->md, o->input, o->inputlen);
       _gcry_md_write (o->md, o->fixedinfo, o->fixedinfolen);
       _gcry_md_final (o->md);
-      memcpy ((char *)result + o->blklen * i,
-              _gcry_md_read (o->md, 0), o->blklen);
+      ec = _gcry_md_read_into (o->md, 0, (char *)result + o->blklen * i,
+                               o->blklen);
+      if (ec)
+        return ec;
       resultlen -= o->blklen;
       _gcry_md_reset (o->md);
     }
@@ -1584,8 +1622,10 @@ onestep_kdf_final (onestep_kdf_ctx_t o, size_t resultlen, void *result)
       _gcry_md_write (o->md, o->input, o->inputlen);
       _gcry_md_write (o->md, o->fixedinfo, o->fixedinfolen);
       _gcry_md_final (o->md);
-      memcpy ((char *)result + o->blklen * i,
-              _gcry_md_read (o->md, 0), resultlen);
+      ec = _gcry_md_read_into (o->md, 0, (char *)result + o->blklen * i,
+                               resultlen);
+      if (ec)
+        return ec;
     }
 
   return 0;
@@ -2015,6 +2055,7 @@ x963_kdf_compute (x963_kdf_ctx_t o, const struct gcry_kdf_thread_ops *ops)
 static gpg_err_code_t
 x963_kdf_final (x963_kdf_ctx_t o, size_t resultlen, void *result)
 {
+  gpg_err_code_t ec;
   u32 counter = 0;
   unsigned char cnt[4];
   int i;
@@ -2031,8 +2072,10 @@ x963_kdf_final (x963_kdf_ctx_t o, size_t resultlen, void *result)
       if (o->sharedinfolen)
         _gcry_md_write (o->md, o->sharedinfo, o->sharedinfolen);
       _gcry_md_final (o->md);
-      memcpy ((char *)result + o->blklen * i,
-              _gcry_md_read (o->md, 0), o->blklen);
+      ec = _gcry_md_read_into (o->md, 0, (char *)result + o->blklen * i,
+                               o->blklen);
+      if (ec)
+        return ec;
       resultlen -= o->blklen;
       _gcry_md_reset (o->md);
     }
@@ -2046,8 +2089,10 @@ x963_kdf_final (x963_kdf_ctx_t o, size_t resultlen, void *result)
       if (o->sharedinfolen)
         _gcry_md_write (o->md, o->sharedinfo, o->sharedinfolen);
       _gcry_md_final (o->md);
-      memcpy ((char *)result + o->blklen * i,
-              _gcry_md_read (o->md, 0), resultlen);
+      ec = _gcry_md_read_into (o->md, 0, (char *)result + o->blklen * i,
+                               resultlen);
+      if (ec)
+        return ec;
     }
 
   return 0;

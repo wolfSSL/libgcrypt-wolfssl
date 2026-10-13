@@ -286,6 +286,16 @@ const char *_gcry_enum_hw_features (int idx, unsigned int *r_feature);
 const char *_gcry_mpi_get_hw_config (void);
 
 
+#ifdef HAVE_WOLFSSL
+/*-- cipher/hash-common.c --*/
+/* A wolfCrypt digest call that failed for good
+   (after WC_CAST_RETRY, wolfcrypt-cast-retry.h) is reported here and
+   latched on the digest context.  */
+void _gcry_wc_digest_failed (const char *what, int ret);
+void _gcry_wc_hmac_setkey_failed (int ret);
+void _gcry_wc_hash_buffer_failed (int algo, int ret) GCC_ATTR_NORETURN;
+#endif /*HAVE_WOLFSSL*/
+
 /*-- cipher/pubkey.c --*/
 
 /* FIXME: shouldn't this go into mpi.h?  */

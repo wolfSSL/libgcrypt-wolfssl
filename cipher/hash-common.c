@@ -29,6 +29,60 @@
 #include "bufhelp.h"
 #include "hash-common.h"
 
+#ifdef HAVE_WOLFSSL
+#include "wolfcrypt-cast-retry.h"
+
+/* Report the wolfCrypt digest call WHAT that failed with RET for good,
+   after any retry.  The caller latches the failure on its context, which
+   then returns no digest.  In libgcrypt FIPS mode this also enters the
+   Error state; otherwise fips_signal_error does nothing.  */
+void
+_gcry_wc_digest_failed (const char *what, int ret)
+{
+  /* Threads failing on the same CAST log at once: see
+     _gcry_wc_log_lock.  */
+  _gcry_wc_log_lock ();
+  log_error ("wolfCrypt %s failed: %d\n", what, ret);
+  fips_signal_error ("wolfCrypt digest failure");
+  _gcry_wc_log_unlock ();
+}
+
+/* Report a wc_HmacSetKey that failed with RET for good, after any retry.
+   The caller latches the failure on the handle.  Only a module failure
+   (a CAST code, or the module not NORMAL) enters the libgcrypt FIPS
+   Error state.  A refused argument, such as a key shorter than the
+   module's minimum (HMAC_MIN_KEYLEN_E), is the caller's error: it must
+   not disable the library.  */
+void
+_gcry_wc_hmac_setkey_failed (int ret)
+{
+  _gcry_wc_log_lock ();
+  log_error ("wolfCrypt wc_HmacSetKey failed: %d\n", ret);
+#ifdef HAVE_FIPS
+  if (_gcry_wc_cast_retryable (ret)
+      || wolfCrypt_GetMode_fips () != FIPS_MODE_NORMAL)
+    fips_signal_error ("wolfCrypt digest failure");
+#endif
+  _gcry_wc_log_unlock ();
+}
+
+/* gcry_md_hash_buffer() and the digest specs' hash_buffers functions it
+   uses return void: a failed wolfCrypt digest there (after any retry)
+   aborts, as gcry_md_hash_buffer is documented to do on error, rather
+   than leave the caller an unwritten buffer.  The only place that makes
+   this choice.  */
+void
+_gcry_wc_hash_buffer_failed (int algo, int ret)
+{
+  /* RET 0: the failed call was already logged with its code.  */
+  if (ret)
+    _gcry_wc_log_fatal ("gcry_md_hash_buffer: wolfCrypt digest of algo %d"
+                        " failed: %d\n", algo, ret);
+  _gcry_wc_log_fatal ("gcry_md_hash_buffer: wolfCrypt digest of algo %d"
+                      " failed\n", algo);
+}
+#endif /*HAVE_WOLFSSL*/
+
 
 /* Run a selftest for hash algorithm ALGO.  If the resulting digest
    matches EXPECT/EXPECTLEN and everything else is fine as well,
@@ -87,7 +141,9 @@ _gcry_hash_selftest_check_one (int algo,
 	{
 	  digest = _gcry_md_read (hd, algo);
 
-	  if ( memcmp (digest, expect, expectlen) )
+	  if (!digest)
+	    result = "digest not available";
+	  else if ( memcmp (digest, expect, expectlen) )
 	    result = "digest mismatch";
 	}
       else

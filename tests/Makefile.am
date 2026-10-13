@@ -24,7 +24,7 @@
 tests_bin = \
         version t-secmem mpitests t-sexp t-convert \
 	t-mpi-bit t-mpi-point t-lock \
-	prime basic keygen pubkey hmac hashtest t-kdf keygrip \
+	prime basic keygen pubkey hmac t-hmac-shortkey hashtest t-kdf keygrip \
 	aeswrap random t-kem t-mlkem
 
 if USE_RSA

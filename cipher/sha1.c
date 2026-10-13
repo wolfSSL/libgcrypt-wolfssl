@@ -677,6 +677,7 @@ _gcry_sha1_hash_buffer (void *outbuf, const void *buffer, size_t length)
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha.h>
+#include "wolfcrypt-cast-retry.h"
 
 /* Allocate a context for the wolfSSL digest context */
 /* to be used by libgcrypt */
@@ -686,9 +687,12 @@ wolfssl_sha1_transform_generic (void *ctx, const unsigned char *data, size_t nbl
   int ret = 0;
   SHA1_CONTEXT *hd = (SHA1_CONTEXT*)ctx;
 
-  ret = wc_ShaUpdate(&hd->wc_sha1, data, 64 * nblks);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_ShaUpdate failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_ShaUpdate(&hd->wc_sha1, data, 64 * nblks));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_ShaUpdate", ret);
+    }
   }
 
   return 0;
@@ -716,9 +720,11 @@ wolfssl_sha1_init(void* context, unsigned int flags)
   int ret = 0;
   SHA1_CONTEXT *hd = (SHA1_CONTEXT*)context;
   (void)flags;
-  ret = wc_InitSha(&hd->wc_sha1);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha(&hd->wc_sha1));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha failed with ret=%d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha", ret);
   }
 
   wolfssl_sha1_common_init(hd);
@@ -733,19 +739,26 @@ wolfssl_sha1_final(void *context)
 
   /* First update with any remaining bytes in the buffer */
   if (hd->bctx.count > 0) {
-    ret = wc_ShaUpdate(&hd->wc_sha1, hd->bctx.buf, hd->bctx.count);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_ShaUpdate failed with ret=%d\n", ret);
+    if (!hd->wc_err) {
+      WC_CAST_RETRY (ret, wc_ShaUpdate(&hd->wc_sha1, hd->bctx.buf, hd->bctx.count));
+      if (ret != 0) {
+        hd->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_ShaUpdate", ret);
+      }
     }
   }
 
-  ret = wc_ShaFinal(&hd->wc_sha1, temp_buffer);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_ShaFinal failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_ShaFinal(&hd->wc_sha1, temp_buffer));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_ShaFinal", ret);
+    }
   }
 
   /* Copy the hash to hd->bctx.buf where libgcrypt expects it */
-  memcpy(hd->bctx.buf, temp_buffer, WC_SHA_DIGEST_SIZE);
+  if (!hd->wc_err)
+    memcpy(hd->bctx.buf, temp_buffer, WC_SHA_DIGEST_SIZE);
 
   /* Reset the count to 0 */
   hd->bctx.count = 0;
@@ -758,7 +771,7 @@ wolfssl_sha1_read(void *context)
 {
   SHA1_CONTEXT *hd = (SHA1_CONTEXT*)context;
 
-  return hd->bctx.buf;
+  return hd->wc_err ? NULL : hd->bctx.buf;
 }
 
 /* Shortcut functions which puts the hash value of the supplied buffer iov
@@ -777,6 +790,8 @@ _gcry_wolfssl_sha1_hash_buffers (void *outbuf, size_t nbytes,
   for (;iovcnt > 0; iov++, iovcnt--)
     _gcry_md_block_write (&hd, (const char*)iov[0].data + iov[0].off, iov[0].len);
   wolfssl_sha1_final(&hd);
+  if (hd.wc_err)
+    _gcry_wc_hash_buffer_failed (GCRY_MD_SHA1, hd.wc_err);
   memcpy (outbuf, hd.bctx.buf, WC_SHA_DIGEST_SIZE);
 }
 

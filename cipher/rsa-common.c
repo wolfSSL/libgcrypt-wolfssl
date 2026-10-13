@@ -453,6 +453,11 @@ mgf1 (unsigned char *output, size_t outlen, unsigned char *seed, size_t seedlen,
       _gcry_md_write (hd, seed, seedlen);
       _gcry_md_write (hd, c, 4);
       digest = _gcry_md_read (hd, 0);
+      if (!digest)
+        {
+          _gcry_md_close (hd);
+          return GPG_ERR_NOT_OPERATIONAL;
+        }
 
       n = (outlen - nbytes < dlen)? (outlen - nbytes) : dlen;
       memcpy (output+nbytes, digest, n);
@@ -808,7 +813,6 @@ _gcry_rsa_pss_encode (gcry_mpi_t *r_result, unsigned int nbits, int algo,
 {
   gcry_err_code_t rc = 0;
   gcry_md_hd_t hd = NULL;
-  unsigned char *digest;
   size_t hlen;                 /* Length of the hash digest.  */
   unsigned char *em = NULL;    /* Encoded message.  */
   size_t emlen = (nbits+7)/8;  /* Length in bytes of EM.  */
@@ -860,8 +864,9 @@ _gcry_rsa_pss_encode (gcry_mpi_t *r_result, unsigned int nbits, int algo,
   if (!hashed_already)
     {
       _gcry_md_write (hd, value, valuelen);
-      digest = _gcry_md_read (hd, 0);
-      memcpy (mhash, digest, hlen);
+      rc = _gcry_md_read_into (hd, 0, mhash, hlen);
+      if (rc)
+        goto leave;
       _gcry_md_reset (hd);
     }
   else
@@ -903,8 +908,9 @@ _gcry_rsa_pss_encode (gcry_mpi_t *r_result, unsigned int nbits, int algo,
   memset (buf, 0, 8);  /* Padding.  */
 
   _gcry_md_write (hd, buf, 8 + hlen + saltlen);
-  digest = _gcry_md_read (hd, 0);
-  memcpy (h, digest, hlen);
+  rc = _gcry_md_read_into (hd, 0, h, hlen);
+  if (rc)
+    goto leave;
 
   /* Step 7 and 8: DB = PS || 0x01 || salt.  */
   /* Note that we use EM to store DB and later Xor in-place.  */
@@ -974,7 +980,6 @@ _gcry_rsa_pss_verify (gcry_mpi_t value, int hashed_already,
 {
   gcry_err_code_t rc = 0;
   gcry_md_hd_t hd = NULL;
-  unsigned char *digest;
   size_t hlen;                 /* Length of the hash digest.  */
   unsigned char *em = NULL;    /* Encoded message.  */
   size_t emlen = (nbits+7)/8;  /* Length in bytes of EM.  */
@@ -1046,8 +1051,9 @@ _gcry_rsa_pss_verify (gcry_mpi_t value, int hashed_already,
   if (!hashed_already)
     {
       _gcry_md_write (hd, p, (input_nbits+7)/8);
-      digest = _gcry_md_read (hd, 0);
-      memcpy (mhash, digest, hlen);
+      rc = _gcry_md_read_into (hd, 0, mhash, hlen);
+      if (rc)
+        goto leave;
       _gcry_md_reset (hd);
     }
   else
@@ -1129,8 +1135,9 @@ _gcry_rsa_pss_verify (gcry_mpi_t value, int hashed_already,
 
   /* Step 13:  H' = Hash(M').  */
   _gcry_md_write (hd, buf, 8 + hlen + saltlen);
-  digest = _gcry_md_read (hd, 0);
-  memcpy (buf, digest, hlen);
+  rc = _gcry_md_read_into (hd, 0, buf, hlen);
+  if (rc)
+    goto leave;
 
   /* Step 14:  Check H == H'.   */
   rc = memcmp (h, buf, hlen) ? GPG_ERR_BAD_SIGNATURE : GPG_ERR_NO_ERROR;

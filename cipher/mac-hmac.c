@@ -168,6 +168,8 @@ hmac_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
 
   dlen = _gcry_md_get_algo_dlen (h->u.hmac.md_algo);
   digest = _gcry_md_read (h->u.hmac.md_ctx, h->u.hmac.md_algo);
+  if (!digest)
+    return GPG_ERR_NOT_OPERATIONAL;
 
   if (*outlen <= dlen)
     buf_cpy (outbuf, digest, *outlen);
@@ -189,6 +191,8 @@ hmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 
   dlen = _gcry_md_get_algo_dlen (h->u.hmac.md_algo);
   digest = _gcry_md_read (h->u.hmac.md_ctx, h->u.hmac.md_algo);
+  if (!digest)
+    return GPG_ERR_NOT_OPERATIONAL;
 
   if (buflen > dlen)
     return GPG_ERR_INV_LENGTH;

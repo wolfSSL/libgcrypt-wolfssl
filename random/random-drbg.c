@@ -1030,12 +1030,16 @@ drbg_hmac_update (drbg_state_t drbg, drbg_string_t *seed, int reseed)
       /* 10.1.2.2 step 1 and 4 -- concatenation and HMAC for key */
       seed2.buf = &prefix;
       retval = drbg_hash (drbg, &seed1);
+      if (!retval)
+        return GPG_ERR_NOT_OPERATIONAL;
       ret = drbg_hmac_setkey (drbg, retval);
       if (ret)
 	return ret;
 
       /* 10.1.2.2 step 2 and 5 -- HMAC for V */
       retval = drbg_hash (drbg, &cipherin);
+      if (!retval)
+        return GPG_ERR_NOT_OPERATIONAL;
       memcpy(drbg->V, retval, drbg_blocklen (drbg));
 
       /* 10.1.2.2 step 3 */
@@ -1069,6 +1073,8 @@ drbg_hmac_generate (drbg_state_t drbg, unsigned char *buf, unsigned int buflen,
       unsigned int outlen = 0;
       /* 10.1.2.5 step 4.1 */
       byte *retval = drbg_hash (drbg, &data);
+      if (!retval)
+        return GPG_ERR_NOT_OPERATIONAL;
       memcpy(drbg->V, retval, drbg_blocklen (drbg));
       outlen = (drbg_blocklen (drbg) < (buflen - len)) ?
 	drbg_blocklen (drbg) : (buflen - len);
@@ -1131,6 +1137,8 @@ drbg_hash_df (drbg_state_t drbg,
       short blocklen = 0;
       /* 10.4.1 step 4.1 */
       byte *retval = drbg_hash (drbg, &data1);
+      if (!retval)
+        return GPG_ERR_NOT_OPERATIONAL;
       /* 10.4.1 step 4.2 */
       input[0]++;
       blocklen = (drbg_blocklen (drbg) < (outlen - len)) ?
@@ -1213,6 +1221,8 @@ drbg_hash_process_addtl (drbg_state_t drbg, drbg_string_t *addtl)
   data3->next = NULL;
   /* 10.1.1.4 step 2a -- cipher invocation */
   retval = drbg_hash (drbg, &data1);
+  if (!retval)
+    return GPG_ERR_NOT_OPERATIONAL;
 
   /* 10.1.1.4 step 2b */
   drbg_add_buf (drbg->V, drbg_statelen (drbg), retval, drbg_blocklen (drbg));
@@ -1240,6 +1250,11 @@ drbg_hash_hashgen (drbg_state_t drbg, unsigned char *buf, unsigned int buflen)
       unsigned int outlen = 0;
       /* 10.1.1.4 step hashgen 4.1 */
       byte *retval = drbg_hash (drbg, &data);
+      if (!retval)
+        {
+          memset (drbg->scratchpad, 0, drbg_statelen (drbg));
+          return GPG_ERR_NOT_OPERATIONAL;
+        }
       outlen = (drbg_blocklen (drbg) < (buflen - len)) ?
 	drbg_blocklen (drbg) : (buflen - len);
       /* 10.1.1.4 step hashgen 4.2 */
@@ -1286,6 +1301,8 @@ drbg_hash_generate (drbg_state_t drbg, unsigned char *buf, unsigned int buflen,
 
   /* this is the value H as documented in 10.1.1.4 */
   retval = drbg_hash (drbg, &data1);
+  if (!retval)
+    return GPG_ERR_NOT_OPERATIONAL;
 
   /* 10.1.1.4 step 5 */
   drbg_add_buf (drbg->V, drbg_statelen (drbg), retval, drbg_blocklen (drbg));

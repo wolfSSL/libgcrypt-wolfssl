@@ -675,12 +675,14 @@ _gcry_sha224_hash_buffers (void *outbuf, size_t nbytes,
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha256.h>
+#include "wolfcrypt-cast-retry.h"
 
 typedef struct {
   gcry_md_block_ctx_t bctx;
   u32  h[8];
   /* wc_Sha256 type is used for sha224 and sha256 for wolfCrypt */
   wc_Sha256 wc_sha2[1];
+  int wc_err;    /* first failed wolfCrypt call */
 } SHA256_CONTEXT;
 
 /* Allocate a context for the wolfSSL digest context */
@@ -691,9 +693,12 @@ wolfssl_sha224_transform_generic (void *ctx, const unsigned char *data, size_t n
   int ret = 0;
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)ctx;
 
-  ret = wc_Sha224Update((wc_Sha224*)&hd->wc_sha2, data, 64 * nblks);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha224Update failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha224Update((wc_Sha224*)&hd->wc_sha2, data, 64 * nblks));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha224Update", ret);
+    }
   }
 
   return 0;
@@ -705,9 +710,12 @@ wolfssl_sha256_transform_generic (void *ctx, const unsigned char *data, size_t n
   int ret = 0;
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)ctx;
 
-  ret = wc_Sha256Update((wc_Sha256*)&hd->wc_sha2, data, 64 * nblks);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha256Update failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha256Update((wc_Sha256*)&hd->wc_sha2, data, 64 * nblks));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha256Update", ret);
+    }
   }
 
   return 0;
@@ -751,9 +759,11 @@ wolfssl_sha224_init(void* context, unsigned int flags)
   int ret = 0;
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
   (void)flags;
-  ret = wc_InitSha224((wc_Sha224*)&hd->wc_sha2);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha224((wc_Sha224*)&hd->wc_sha2));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha224 failed with ret=%d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha224", ret);
   }
 
   wolfssl_sha224_common_init(hd);
@@ -767,9 +777,11 @@ wolfssl_sha256_init(void* context, unsigned int flags)
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha256((wc_Sha256*)&hd->wc_sha2);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha256((wc_Sha256*)&hd->wc_sha2));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha256 failed with ret=%d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha256", ret);
   }
 
   wolfssl_sha256_common_init(hd);
@@ -781,7 +793,7 @@ wolfssl_sha256_read(void *context)
 {
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
 
-  return hd->bctx.buf;
+  return hd->wc_err ? NULL : hd->bctx.buf;
 }
 
 static byte *
@@ -789,7 +801,7 @@ wolfssl_sha224_read(void *context)
 {
   SHA256_CONTEXT *hd = (SHA256_CONTEXT*)context;
 
-  return hd->bctx.buf;
+  return hd->wc_err ? NULL : hd->bctx.buf;
 }
 
 
@@ -801,17 +813,24 @@ wolfssl_sha224_final(void *context)
   byte temp_buffer[WC_SHA224_DIGEST_SIZE];
 
   if (hd->bctx.count > 0) {
-    ret = wc_Sha224Update((wc_Sha224*)&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha224Update failed with ret=%d\n", ret);
+    if (!hd->wc_err) {
+      WC_CAST_RETRY (ret, wc_Sha224Update((wc_Sha224*)&hd->wc_sha2, hd->bctx.buf, hd->bctx.count));
+      if (ret != 0) {
+        hd->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_Sha224Update", ret);
+      }
     }
   }
 
-  ret = wc_Sha224Final((wc_Sha224*)&hd->wc_sha2, temp_buffer);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha224Final failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha224Final((wc_Sha224*)&hd->wc_sha2, temp_buffer));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha224Final", ret);
+    }
   }
-  memcpy(hd->bctx.buf, temp_buffer, WC_SHA224_DIGEST_SIZE);
+  if (!hd->wc_err)
+    memcpy(hd->bctx.buf, temp_buffer, WC_SHA224_DIGEST_SIZE);
   hd->bctx.count = 0;
 
   return;
@@ -828,19 +847,26 @@ wolfssl_sha256_final(void *context)
 
   /* First update with any remaining bytes in the buffer */
   if (hd->bctx.count > 0) {
-    ret = wc_Sha256Update((wc_Sha256*)&hd->wc_sha2, hd->bctx.buf, hd->bctx.count);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha256Update failed with ret=%d\n", ret);
+    if (!hd->wc_err) {
+      WC_CAST_RETRY (ret, wc_Sha256Update((wc_Sha256*)&hd->wc_sha2, hd->bctx.buf, hd->bctx.count));
+      if (ret != 0) {
+        hd->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_Sha256Update", ret);
+      }
     }
   }
   /* Might need to use wc_Sha256GetHash instead of wc_Sha256Final */
   /* This is due to sha256_final does not necassarly mean the hash is ready */
-  ret = wc_Sha256Final((wc_Sha256*)&hd->wc_sha2, temp_buffer);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha256Final failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha256Final((wc_Sha256*)&hd->wc_sha2, temp_buffer));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha256Final", ret);
+    }
   }
   /* Copy the hash to hd->bctx.buf where libgcrypt expects it */
-  memcpy(hd->bctx.buf, temp_buffer, WC_SHA256_DIGEST_SIZE);
+  if (!hd->wc_err)
+    memcpy(hd->bctx.buf, temp_buffer, WC_SHA256_DIGEST_SIZE);
 
   /* Reset the count to 0 */
   hd->bctx.count = 0;
@@ -870,6 +896,8 @@ _gcry_wolfssl_sha256_hash_buffers (void *outbuf, size_t nbytes,
     _gcry_md_block_write (&hd,
                           (const char*)iov[0].data + iov[0].off, iov[0].len);
   wolfssl_sha256_final(&hd);
+  if (hd.wc_err)
+    _gcry_wc_hash_buffer_failed (GCRY_MD_SHA256, hd.wc_err);
   memcpy (outbuf, hd.bctx.buf, WC_SHA256_DIGEST_SIZE);
 }
 
@@ -891,6 +919,8 @@ _gcry_wolfssl_sha224_hash_buffers (void *outbuf, size_t nbytes,
     _gcry_md_block_write (&hd,
                           (const char*)iov[0].data + iov[0].off, iov[0].len);
   wolfssl_sha224_final(&hd);
+  if (hd.wc_err)
+    _gcry_wc_hash_buffer_failed (GCRY_MD_SHA224, hd.wc_err);
   memcpy (outbuf, hd.bctx.buf, WC_SHA224_DIGEST_SIZE);
 }
 

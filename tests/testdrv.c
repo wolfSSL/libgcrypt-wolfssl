@@ -64,6 +64,7 @@ static struct {
    { "keygen"      },
    { "pubkey"      },
    { "hmac"        },
+   { "t-hmac-shortkey" },
    { "hashtest"    },
    { "t-kdf"       },
    { "keygrip"     },

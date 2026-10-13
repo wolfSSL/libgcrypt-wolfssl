@@ -939,7 +939,9 @@ hmac256_check (const char *filename, const char *key)
       unsigned char *digest;
 
       digest = _gcry_md_read (hd, 0);
-      if (!memcmp (digest, hmac, HMAC_LEN))
+      if (!digest)
+        err = gpg_error (GPG_ERR_NOT_OPERATIONAL);
+      else if (!memcmp (digest, hmac, HMAC_LEN))
         /* Success.  */
         err = 0;
       else

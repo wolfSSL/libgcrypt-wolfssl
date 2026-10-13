@@ -46,6 +46,7 @@ typedef struct
 #endif
 #ifdef HAVE_WOLFSSL
   wc_Sha wc_sha1;
+  int wc_err;    /* first failed wolfCrypt call */
 #endif
 } SHA1_CONTEXT;
 

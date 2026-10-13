@@ -972,7 +972,8 @@ _gcry_pk_get_keygrip (gcry_sexp_t key, unsigned char *array)
         goto fail;
     }
 
-  memcpy (array, _gcry_md_read (md, GCRY_MD_SHA1), 20);
+  if (_gcry_md_read_into (md, GCRY_MD_SHA1, array, 20))
+    goto fail;
   okay = 1;
 
  fail:

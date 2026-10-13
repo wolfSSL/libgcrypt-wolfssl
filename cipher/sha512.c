@@ -1017,12 +1017,14 @@ _gcry_sha512_224_hash_buffers (void *outbuf, size_t nbytes,
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha512.h>
+#include "wolfcrypt-cast-retry.h"
 
 typedef struct {
   gcry_md_block_ctx_t bctx;
   SHA512_STATE state;
   /* wc_Sha512 type is used for sha384, sha512, sha512_224 and sha512_256 for wolfCrypt */
   wc_Sha512 wc_sha512[1];
+  int wc_err;    /* first failed wolfCrypt call */
 } WOLF_SHA512_CONTEXT;
 
 /* Allocate a context for the wolfSSL digest context */
@@ -1033,9 +1035,12 @@ wolfssl_sha384_transform_generic (void *ctx, const unsigned char *data, size_t n
   int ret = 0;
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
 
-  ret = wc_Sha384Update((wc_Sha384*)&hd->wc_sha512, data, 128 * nblks);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha384Update failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha384Update((wc_Sha384*)&hd->wc_sha512, data, 128 * nblks));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha384Update", ret);
+    }
   }
 
   return 0;
@@ -1047,9 +1052,12 @@ wolfssl_sha512_transform_generic (void *ctx, const unsigned char *data, size_t n
   int ret = 0;
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
 
-  ret = wc_Sha512Update((wc_Sha512*)&hd->wc_sha512, data, 128 * nblks);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512Update failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha512Update((wc_Sha512*)&hd->wc_sha512, data, 128 * nblks));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha512Update", ret);
+    }
   }
 
   return 0;
@@ -1061,9 +1069,12 @@ wolfssl_sha512_224_transform_generic (void *ctx, const unsigned char *data, size
   int ret = 0;
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
 
-  ret = wc_Sha512_224Update((wc_Sha512_224*)&hd->wc_sha512, data, 128 * nblks);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_224Update failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha512_224Update((wc_Sha512_224*)&hd->wc_sha512, data, 128 * nblks));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha512_224Update", ret);
+    }
   }
 
   return 0;
@@ -1077,9 +1088,12 @@ wolfssl_sha512_256_transform_generic (void *ctx, const unsigned char *data, size
   int ret = 0;
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)ctx;
 
-  ret = wc_Sha512_256Update((wc_Sha512_256*)&hd->wc_sha512, data, 128 * nblks);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_256Update failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha512_256Update((wc_Sha512_256*)&hd->wc_sha512, data, 128 * nblks));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha512_256Update", ret);
+    }
   }
 
   return 0;
@@ -1153,9 +1167,11 @@ wolfssl_sha384_init(void* context, unsigned int flags)
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha384((wc_Sha384*)&hd->wc_sha512);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha384((wc_Sha384*)&hd->wc_sha512));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha384 failed with ret=%d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha384", ret);
   }
 
   wolfssl_sha384_common_init(hd);
@@ -1168,9 +1184,11 @@ wolfssl_sha512_init(void* context, unsigned int flags)
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha512((wc_Sha512*)&hd->wc_sha512);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha512((wc_Sha512*)&hd->wc_sha512));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha512 failed with ret=%d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha512", ret);
   }
 
   wolfssl_sha512_common_init(hd);
@@ -1184,9 +1202,11 @@ wolfssl_sha512_224_init(void* context, unsigned int flags)
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha512_224((wc_Sha512_224*)&hd->wc_sha512);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha512_224((wc_Sha512_224*)&hd->wc_sha512));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha512_224 failed with ret=%d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha512_224", ret);
   }
 
   wolfssl_sha512_224_common_init(hd);
@@ -1201,9 +1221,11 @@ wolfssl_sha512_256_init(void* context, unsigned int flags)
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
   (void)flags;
 
-  ret = wc_InitSha512_256((wc_Sha512_256*)&hd->wc_sha512);
+  hd->wc_err = 0;
+  WC_CAST_RETRY (ret, wc_InitSha512_256((wc_Sha512_256*)&hd->wc_sha512));
   if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_InitSha512_256 failed with ret=%d\n", ret);
+    hd->wc_err = ret;
+    _gcry_wc_digest_failed ("wc_InitSha512_256", ret);
   }
 
   wolfssl_sha512_256_common_init(hd);
@@ -1214,7 +1236,7 @@ static byte *
 wolfssl_sha512_read(void *context)
 {
   WOLF_SHA512_CONTEXT *hd = (WOLF_SHA512_CONTEXT*)context;
-  return hd->bctx.buf;
+  return hd->wc_err ? NULL : hd->bctx.buf;
 }
 
 static void
@@ -1225,17 +1247,24 @@ wolfssl_sha384_final(void *context)
   byte temp_buffer[WC_SHA384_DIGEST_SIZE];
 
   if (hd->bctx.count > 0) {
-    ret = wc_Sha384Update((wc_Sha384*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha384Update failed with ret=%d\n", ret);
+    if (!hd->wc_err) {
+      WC_CAST_RETRY (ret, wc_Sha384Update((wc_Sha384*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count));
+      if (ret != 0) {
+        hd->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_Sha384Update", ret);
+      }
     }
   }
 
-  ret = wc_Sha384Final((wc_Sha384*)&hd->wc_sha512, temp_buffer);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha384Final failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha384Final((wc_Sha384*)&hd->wc_sha512, temp_buffer));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha384Final", ret);
+    }
   }
-  memcpy(hd->bctx.buf, temp_buffer, WC_SHA384_DIGEST_SIZE);
+  if (!hd->wc_err)
+    memcpy(hd->bctx.buf, temp_buffer, WC_SHA384_DIGEST_SIZE);
   hd->bctx.count = 0;
 
   return;
@@ -1249,17 +1278,24 @@ wolfssl_sha512_final(void *context)
   byte temp_buffer[WC_SHA512_DIGEST_SIZE];
 
   if (hd->bctx.count > 0) {
-    ret = wc_Sha512Update((wc_Sha512*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512Update failed with ret=%d\n", ret);
+    if (!hd->wc_err) {
+      WC_CAST_RETRY (ret, wc_Sha512Update((wc_Sha512*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count));
+      if (ret != 0) {
+        hd->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_Sha512Update", ret);
+      }
     }
   }
 
-  ret = wc_Sha512Final((wc_Sha512*)&hd->wc_sha512, temp_buffer);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512Final failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha512Final((wc_Sha512*)&hd->wc_sha512, temp_buffer));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha512Final", ret);
+    }
   }
-  memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_DIGEST_SIZE);
+  if (!hd->wc_err)
+    memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_DIGEST_SIZE);
   hd->bctx.count = 0;
 
   return;
@@ -1274,17 +1310,24 @@ wolfssl_sha512_224_final(void *context)
   byte temp_buffer[WC_SHA512_224_DIGEST_SIZE];
 
   if (hd->bctx.count > 0) {
-    ret = wc_Sha512_224Update((wc_Sha512_224*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_224Update failed with ret=%d\n", ret);
+    if (!hd->wc_err) {
+      WC_CAST_RETRY (ret, wc_Sha512_224Update((wc_Sha512_224*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count));
+      if (ret != 0) {
+        hd->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_Sha512_224Update", ret);
+      }
     }
   }
 
-  ret = wc_Sha512_224Final((wc_Sha512_224*)&hd->wc_sha512, temp_buffer);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_224Final failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha512_224Final((wc_Sha512_224*)&hd->wc_sha512, temp_buffer));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha512_224Final", ret);
+    }
   }
-  memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_224_DIGEST_SIZE);
+  if (!hd->wc_err)
+    memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_224_DIGEST_SIZE);
   hd->bctx.count = 0;
 
   return;
@@ -1300,17 +1343,24 @@ wolfssl_sha512_256_final(void *context)
   byte temp_buffer[WC_SHA512_256_DIGEST_SIZE];
 
   if (hd->bctx.count > 0) {
-    ret = wc_Sha512_256Update((wc_Sha512_256*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count);
-    if (ret != 0) {
-      fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_256Update failed with ret=%d\n", ret);
+    if (!hd->wc_err) {
+      WC_CAST_RETRY (ret, wc_Sha512_256Update((wc_Sha512_256*)&hd->wc_sha512, hd->bctx.buf, hd->bctx.count));
+      if (ret != 0) {
+        hd->wc_err = ret;
+        _gcry_wc_digest_failed ("wc_Sha512_256Update", ret);
+      }
     }
   }
 
-  ret = wc_Sha512_256Final((wc_Sha512_256*)&hd->wc_sha512, temp_buffer);
-  if (ret != 0) {
-    fprintf(stderr, "[WOLFSSL ERROR] wc_Sha512_256Final failed with ret=%d\n", ret);
+  if (!hd->wc_err) {
+    WC_CAST_RETRY (ret, wc_Sha512_256Final((wc_Sha512_256*)&hd->wc_sha512, temp_buffer));
+    if (ret != 0) {
+      hd->wc_err = ret;
+      _gcry_wc_digest_failed ("wc_Sha512_256Final", ret);
+    }
   }
-  memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_256_DIGEST_SIZE);
+  if (!hd->wc_err)
+    memcpy(hd->bctx.buf, temp_buffer, WC_SHA512_256_DIGEST_SIZE);
   hd->bctx.count = 0;
 
   return;
@@ -1334,6 +1384,8 @@ _gcry_wolfssl_sha512_hash_buffers (void *outbuf, size_t nbytes,
     _gcry_md_block_write (&hd,
                           (const char*)iov[0].data + iov[0].off, iov[0].len);
   wolfssl_sha512_final(&hd);
+  if (hd.wc_err)
+    _gcry_wc_hash_buffer_failed (GCRY_MD_SHA512, hd.wc_err);
   memcpy (outbuf, hd.bctx.buf, WC_SHA512_DIGEST_SIZE);
 }
 
@@ -1354,6 +1406,8 @@ _gcry_wolfssl_sha384_hash_buffers (void *outbuf, size_t nbytes,
     _gcry_md_block_write (&hd,
                           (const char*)iov[0].data + iov[0].off, iov[0].len);
   wolfssl_sha384_final(&hd);
+  if (hd.wc_err)
+    _gcry_wc_hash_buffer_failed (GCRY_MD_SHA384, hd.wc_err);
   memcpy (outbuf, hd.bctx.buf, WC_SHA384_DIGEST_SIZE);
 }
 
@@ -1373,6 +1427,8 @@ _gcry_wolfssl_sha512_224_hash_buffers (void *outbuf, size_t nbytes,
     _gcry_md_block_write (&hd,
                           (const char*)iov[0].data + iov[0].off, iov[0].len);
   wolfssl_sha512_224_final(&hd);
+  if (hd.wc_err)
+    _gcry_wc_hash_buffer_failed (GCRY_MD_SHA512_224, hd.wc_err);
   memcpy (outbuf, hd.bctx.buf, WC_SHA512_224_DIGEST_SIZE);
 }
 #endif /* WOLFSSL_NOSHA512_224 */
@@ -1393,6 +1449,8 @@ _gcry_wolfssl_sha512_256_hash_buffers (void *outbuf, size_t nbytes,
     _gcry_md_block_write (&hd,
                           (const char*)iov[0].data + iov[0].off, iov[0].len);
   wolfssl_sha512_256_final(&hd);
+  if (hd.wc_err)
+    _gcry_wc_hash_buffer_failed (GCRY_MD_SHA512_256, hd.wc_err);
   memcpy (outbuf, hd.bctx.buf, WC_SHA512_256_DIGEST_SIZE);
 }
 #endif /* WOLFSSL_NOSHA512_256 */
