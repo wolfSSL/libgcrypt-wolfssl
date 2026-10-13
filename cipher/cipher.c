@@ -552,6 +552,8 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
       case GCRY_CIPHER_MODE_CBC:
 #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_CFB)
       case GCRY_CIPHER_MODE_CFB:
+#endif
+#if !defined(HAVE_WOLFSSL)
       case GCRY_CIPHER_MODE_CFB8:
 #endif
       case GCRY_CIPHER_MODE_OFB:
@@ -560,12 +562,23 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
       case GCRY_CIPHER_MODE_AESWRAP:
 #endif
       case GCRY_CIPHER_MODE_CMAC:
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_EAX)
+#if !defined(HAVE_WOLFSSL)
       case GCRY_CIPHER_MODE_EAX:
 #endif
 	if (!spec->encrypt || !spec->decrypt)
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
+
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_CFB)
+      case GCRY_CIPHER_MODE_CFB8:
+        /* The module's AES-CFB8 (cipher-cfb.c); a wolfCrypt build has no
+           CFB8 for the other ciphers.  */
+	if (spec->algo != GCRY_CIPHER_AES
+	    && spec->algo != GCRY_CIPHER_AES192
+	    && spec->algo != GCRY_CIPHER_AES256)
+	  err = GPG_ERR_INV_CIPHER_MODE;
+	break;
+#endif
 
 
       case GCRY_CIPHER_MODE_CCM:
@@ -573,6 +586,14 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	else if (spec->blocksize != GCRY_CCM_BLOCK_LEN)
 	  err = GPG_ERR_INV_CIPHER_MODE;
+#ifdef HAVE_WOLFSSL
+        /* CCM runs the module's AES-CCM (cipher-ccm.c) on the AES
+           context; there is none for the other ciphers.  */
+	else if (spec->algo != GCRY_CIPHER_AES
+	         && spec->algo != GCRY_CIPHER_AES192
+	         && spec->algo != GCRY_CIPHER_AES256)
+	  err = GPG_ERR_INV_CIPHER_MODE;
+#endif
 	break;
 
 #if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_XTS)
@@ -581,6 +602,14 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	else if (spec->blocksize != GCRY_XTS_BLOCK_LEN)
 	  err = GPG_ERR_INV_CIPHER_MODE;
+#ifdef HAVE_WOLFSSL
+        /* The module's AES-XTS (cipher-xts.c), which takes 128- and
+           256-bit keys only; a wolfCrypt build has no XTS for the other
+           ciphers.  */
+	else if (spec->algo != GCRY_CIPHER_AES
+	         && spec->algo != GCRY_CIPHER_AES256)
+	  err = GPG_ERR_INV_CIPHER_MODE;
+#endif
 	break;
 #endif
 
@@ -591,7 +620,7 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
 
-#if !defined(HAVE_WOLFSSL) || defined(WOLFSSL_AES_SIV)
+#if !defined(HAVE_WOLFSSL)
       case GCRY_CIPHER_MODE_SIV:
       case GCRY_CIPHER_MODE_GCM_SIV:
 	if (!spec->encrypt || !spec->decrypt)
@@ -601,7 +630,7 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	break;
 #endif
 
-#if !defined(HAVE_WOLFSSL) || defined(HAVE_POLY1305)
+#if !defined(HAVE_WOLFSSL)
       case GCRY_CIPHER_MODE_POLY1305:
 	if (!spec->stencrypt || !spec->stdecrypt || !spec->setiv)
 	  err = GPG_ERR_INV_CIPHER_MODE;
@@ -623,12 +652,16 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	break;
 #endif
 
-#if !defined(HAVE_WOLFSSL) || !defined(ENABLED_WOLFSSL_FIPS)
       case GCRY_CIPHER_MODE_STREAM:
+#ifdef HAVE_WOLFSSL
+        /* No stream cipher (ChaCha20, Salsa20, ARCFOUR) runs in the
+           module.  */
+	err = GPG_ERR_NOT_SUPPORTED;
+#else
 	if (!spec->stencrypt || !spec->stdecrypt)
 	  err = GPG_ERR_INV_CIPHER_MODE;
-	break;
 #endif
+	break;
 
       case GCRY_CIPHER_MODE_NONE:
         /* This mode may be used for debugging.  It copies the main
@@ -665,6 +698,11 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	case GCRY_CIPHER_MODE_SIV:
 	  /* Additional cipher context for tweak. */
 	  size += 2 * spec->contextsize + 15;
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+	  /* The module's XTS contexts, after the tweak context.  */
+	  if (mode == GCRY_CIPHER_MODE_XTS)
+	    size += 2 * sizeof (XtsAes) + 15;
+#endif
 	  break;
 
 	default:
@@ -715,6 +753,11 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	      tc = h->context.c + spec->contextsize * 2;
 	      tc += (16 - (uintptr_t)tc % 16) % 16;
 	      h->u_mode.xts.tweak_context = tc;
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+	      tc += spec->contextsize * 2;
+	      tc += (16 - (uintptr_t)tc % 16) % 16;
+	      h->u_mode.xts.wc_xts = (XtsAes *)tc;
+#endif
 	      break;
 
 	    case GCRY_CIPHER_MODE_SIV:
@@ -773,6 +816,10 @@ _gcry_cipher_close (gcry_cipher_hd_t h)
       _wc_cipher_aes_ccm_close(h);
   }
   #endif
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+  if (h->mode == GCRY_CIPHER_MODE_XTS)
+    _wc_cipher_aes_xts_close (h);
+#endif
   /* We always want to wipe out the memory even when the context has
      been allocated in secure memory.  The user might have disabled
      secure memory or is using his own implementation which does not
@@ -874,6 +921,15 @@ cipher_setkey (gcry_cipher_hd_t c, byte *key, size_t keylen)
           break;
 
 	case GCRY_CIPHER_MODE_XTS:
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+	  /* Both halves go to the module's XTS; the tweak context is
+	     unused.  The module cannot be keyed with equal halves, so
+	     GCRYCTL_SET_ALLOW_WEAK_KEY does not apply.  */
+	  rc = _wc_cipher_aes_xts_setkey (c, key, keylen * 2);
+	  if (rc)
+	    c->marks.key = 0;
+	  break;
+#endif
 	  /* Setup tweak cipher with second part of XTS key. */
 	  rc = c->spec->setkey (c->u_mode.xts.tweak_context, key + keylen,
 				keylen, &c->bulk);
@@ -1239,6 +1295,8 @@ _gcry_cipher_encrypt (gcry_cipher_hd_t h, void *out, size_t outsize,
       return GPG_ERR_MISSING_KEY;
     }
 
+  if (!h->mode_ops.encrypt)
+    return GPG_ERR_INV_CIPHER_MODE;
   rc = h->mode_ops.encrypt (h, out, outsize, in, inlen);
 
   /* Failsafe: Make sure that the plaintext will never make it into
@@ -1270,6 +1328,8 @@ _gcry_cipher_decrypt (gcry_cipher_hd_t h, void *out, size_t outsize,
       return GPG_ERR_MISSING_KEY;
     }
 
+  if (!h->mode_ops.decrypt)
+    return GPG_ERR_INV_CIPHER_MODE;
   return h->mode_ops.decrypt (h, out, outsize, in, inlen);
 }
 
@@ -1505,7 +1565,10 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_CFB8:
-    #if defined(HAVE_WOLFSSL) && !defined(WOLFSSL_AES_CFB8)
+    #if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_CFB)
+      c->mode_ops.encrypt = _wc_cipher_aes_cfb8_encrypt;
+      c->mode_ops.decrypt = _wc_cipher_aes_cfb8_decrypt;
+    #elif defined(HAVE_WOLFSSL)
       c->mode_ops.encrypt = NULL;
       c->mode_ops.decrypt = NULL;
     #else
@@ -1591,7 +1654,10 @@ _gcry_cipher_setup_mode_ops(gcry_cipher_hd_t c, int mode)
       break;
 
     case GCRY_CIPHER_MODE_XTS:
-    #ifdef HAVE_WOLFSSL
+    #if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_XTS)
+      c->mode_ops.encrypt = _wc_cipher_aes_xts_encrypt;
+      c->mode_ops.decrypt = _wc_cipher_aes_xts_decrypt;
+    #elif defined(HAVE_WOLFSSL)
       c->mode_ops.encrypt = NULL;
       c->mode_ops.decrypt = NULL;
     #else

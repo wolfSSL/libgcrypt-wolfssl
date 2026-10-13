@@ -315,3 +315,58 @@ _gcry_cipher_cfb8_decrypt (gcry_cipher_hd_t c,
 
   return 0;
 }
+
+
+#if defined(HAVE_WOLFSSL) && defined(WOLFSSL_AES_CFB)
+#include <wolfssl/wolfcrypt/error-crypt.h>
+#include "rijndael-internal.h"
+
+/* AES-CFB8 through the module (wc_AesCfb8Encrypt/wc_AesCfb8Decrypt,
+   mapped to the _fips entry points by wolfssl/wolfcrypt/fips.h).  Both
+   directions use the encryption key schedule; the module keeps the shift
+   register in aes->reg, which is c->u_iv.iv between calls.  A module
+   refusal wipes the output and returns GPG_ERR_NOT_OPERATIONAL.  */
+static gcry_err_code_t
+wc_cfb8_crypt (gcry_cipher_hd_t c, unsigned char *outbuf, size_t outbuflen,
+               const unsigned char *inbuf, size_t inbuflen, int encrypt)
+{
+  Aes *aes = &((RIJNDAEL_context *)c->context.c)->wc_aes_enc;
+  int ret;
+
+  if (outbuflen < inbuflen)
+    return GPG_ERR_BUFFER_TOO_SHORT;
+  if (inbuflen > 0xffffffffU)
+    return GPG_ERR_INV_LENGTH;
+  if (!inbuflen)
+    return GPG_ERR_NO_ERROR;
+
+  ret = wc_AesSetIV (aes, c->u_iv.iv);
+  if (!ret && encrypt)
+    ret = wc_AesCfb8Encrypt (aes, outbuf, inbuf, inbuflen);
+  else if (!ret)
+    ret = wc_AesCfb8Decrypt (aes, outbuf, inbuf, inbuflen);
+  if (ret)
+    {
+      wipememory (outbuf, inbuflen);
+      return ret == BAD_FUNC_ARG ? GPG_ERR_INV_ARG : GPG_ERR_NOT_OPERATIONAL;
+    }
+  memcpy (c->u_iv.iv, aes->reg, WC_AES_BLOCK_SIZE);
+  return GPG_ERR_NO_ERROR;
+}
+
+gcry_err_code_t
+_wc_cipher_aes_cfb8_encrypt (gcry_cipher_hd_t c,
+                             unsigned char *outbuf, size_t outbuflen,
+                             const unsigned char *inbuf, size_t inbuflen)
+{
+  return wc_cfb8_crypt (c, outbuf, outbuflen, inbuf, inbuflen, 1);
+}
+
+gcry_err_code_t
+_wc_cipher_aes_cfb8_decrypt (gcry_cipher_hd_t c,
+                             unsigned char *outbuf, size_t outbuflen,
+                             const unsigned char *inbuf, size_t inbuflen)
+{
+  return wc_cfb8_crypt (c, outbuf, outbuflen, inbuf, inbuflen, 0);
+}
+#endif /* HAVE_WOLFSSL && WOLFSSL_AES_CFB */
