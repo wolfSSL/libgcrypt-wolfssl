@@ -630,6 +630,21 @@ _wc_cipher_aes_ccm_tag (gcry_cipher_hd_t c, unsigned char *outbuf,
       c->marks.tag = 1;
     }
 
+  /* wc_c->authtag is set by the encrypt and decrypt calls.  For a message
+     without payload, compute it here over the associated data.  */
+  if (wc_c->databuf_len == 0)
+    {
+      Aes *aesCcmEnc = &(((RIJNDAEL_context *)(c->context.c))->wc_aes_enc);
+      unsigned char *aadbuf = (wc_c->aadbuf_len > 0) ? wc_c->aadbuf : NULL;
+      byte nodata[1];
+
+      if (wc_AesCcmEncrypt (aesCcmEnc, nodata, nodata, 0,
+                            (byte *)aesCcmEnc->reg, aesCcmEnc->nonceSz,
+                            wc_c->authtag, wc_c->authtag_len,
+                            aadbuf, wc_c->aadbuf_len) != 0)
+        return GPG_ERR_INV_ARG;
+    }
+
   if (!check)
     {
       memcpy (outbuf, wc_c->authtag, outbuflen);
