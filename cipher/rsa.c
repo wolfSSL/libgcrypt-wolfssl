@@ -3536,6 +3536,7 @@ wc_rsa_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
   hashValue = _libgcrypt_hash_length(ctx.hash_algo);
   if (hashValue == 0) {
+    rc = GPG_ERR_DIGEST_ALGO;
     goto leave_wolf;
   }
 
