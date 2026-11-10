@@ -474,19 +474,18 @@ selftests_sha224 (int extended, selftest_report_func_t report)
 
   for (tvidx=0; tv[tvidx].desc; tvidx++)
     {
+    #ifdef HAVE_WOLFSSL
+      /* Skip the vectors with keys shorter than wc_HamcKeyAllowed().  */
+      if (strlen(tv[tvidx].key) < wc_HamcKeyAllowed(GCRY_MD_SHA224))
+        continue;
+    #endif
       what = tv[tvidx].desc;
       errtxt = check_one (GCRY_MD_SHA224,
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
-    #ifdef HAVE_WOLFSSL
-      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA224) && errtxt)
-    #else
       if (errtxt)
-    #endif
-      {
         goto failed;
-      }
       if (!extended)
         break;
     }
@@ -594,16 +593,18 @@ selftests_sha256 (int extended, selftest_report_func_t report)
 
   for (tvidx=0; tv[tvidx].desc; tvidx++)
     {
+    #ifdef HAVE_WOLFSSL
+      /* Skip the vectors with keys shorter than wc_HamcKeyAllowed().  */
+      if (strlen(tv[tvidx].key) < wc_HamcKeyAllowed(GCRY_MD_SHA256))
+        continue;
+    #endif
       what = tv[tvidx].desc;
       errtxt = check_one (GCRY_MD_SHA256,
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
-    #ifdef HAVE_WOLFSSL
-      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA256) && errtxt)
-    #else
       if (errtxt)
-    #endif
+        goto failed;
       if (!extended)
         break;
     }
@@ -723,16 +724,17 @@ selftests_sha384 (int extended, selftest_report_func_t report)
 
   for (tvidx=0; tv[tvidx].desc; tvidx++)
     {
+    #ifdef HAVE_WOLFSSL
+      /* Skip the vectors with keys shorter than wc_HamcKeyAllowed().  */
+      if (strlen(tv[tvidx].key) < wc_HamcKeyAllowed(GCRY_MD_SHA384))
+        continue;
+    #endif
       what = tv[tvidx].desc;
       errtxt = check_one (GCRY_MD_SHA384,
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
-    #ifdef HAVE_WOLFSSL
-      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA384) && errtxt)
-    #else
       if (errtxt)
-    #endif
         goto failed;
       if (!extended)
         break;
@@ -865,16 +867,18 @@ selftests_sha512 (int extended, selftest_report_func_t report)
 
   for (tvidx=0; tv[tvidx].desc; tvidx++)
     {
+    #ifdef HAVE_WOLFSSL
+      /* Skip the vectors with keys shorter than wc_HamcKeyAllowed().  */
+      if (strlen(tv[tvidx].key) < wc_HamcKeyAllowed(GCRY_MD_SHA512))
+        continue;
+    #endif
       what = tv[tvidx].desc;
       errtxt = check_one (GCRY_MD_SHA512,
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           tv[tvidx].expect, DIM (tv[tvidx].expect), 0);
-    #ifdef HAVE_WOLFSSL
-      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(GCRY_MD_SHA512) && errtxt)
-    #else
       if (errtxt)
-    #endif
+        goto failed;
       if (!extended)
         break;
     }
@@ -1249,6 +1253,11 @@ selftests_sha3 (int hashalgo, int extended, selftest_report_func_t report)
 
   for (tvidx=0; tvidx < DIM(tv); tvidx++)
     {
+    #ifdef HAVE_WOLFSSL
+      /* Skip the vectors with keys shorter than wc_HamcKeyAllowed().  */
+      if (strlen(tv[tvidx].key) < wc_HamcKeyAllowed(hashalgo))
+        continue;
+    #endif
       what = tv[tvidx].desc;
       if (hashalgo == GCRY_MD_SHA3_224)
         {
@@ -1280,11 +1289,8 @@ selftests_sha3 (int hashalgo, int extended, selftest_report_func_t report)
                           tv[tvidx].data, strlen (tv[tvidx].data),
                           tv[tvidx].key, strlen (tv[tvidx].key),
                           expect, nexpect, !!tv[tvidx].trunc);
-    #ifdef HAVE_WOLFSSL
-      if (strlen(tv[tvidx].key) == wc_HamcKeyAllowed(hashalgo) && errtxt)
-    #else
       if (errtxt)
-    #endif
+        goto failed;
       if (!extended)
         break;
     }
