@@ -346,10 +346,14 @@ wc_aes_gmac_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
 static gcry_err_code_t
 wc_aes_gmac_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
 {
-  return wc_GmacVerify(h->key, h->key_len,
-                          h->iv, h->iv_len,
-                          h->authIn, h->authIn_len,
-                          h->authTag, h->authTag_len);
+  /* wc_GmacVerify computes the GMAC and compares it with BUF in constant
+     time.  */
+  if (wc_GmacVerify(h->key, h->key_len,
+                    h->iv, h->iv_len,
+                    h->authIn, h->authIn_len,
+                    buf, buflen) != 0)
+    return GPG_ERR_CHECKSUM;
+  return GPG_ERR_NO_ERROR;
 }
 
 
