@@ -424,6 +424,59 @@ check_rsa_15 (const char *fname)
 }
 
 
+/* Check that gcry_pk_verify returns an error for a signature that the
+   key did not produce, with RIPEMD-160 and SM3 data.  The key is the
+   first 2048 bit key of t-rsa-15.inp.  */
+static void
+check_bad_signature_rmd160_sm3 (void)
+{
+  static const char pubkey[] =
+    "(public-key (rsa (n #"
+    "cea80475324c1dc8347827818da58bac069d3419c614a6ea1ac6a3b510dcd72c"
+    "c516954905e9fef908d45e13006adf27d467a7d83c111d1a5df15ef293771aef"
+    "b920032a5bb989f8e4f5e1b05093d3f130f984c07a772a3683f4dc6fb28a9681"
+    "5b32123ccdd13954f19d5b8b24a103e771a34c328755c65ed64e1924ffd04d30"
+    "b2142cc262f6e0048fef6dbc652f21479ea1c4b1d66d28f4d46ef7185e390cbf"
+    "a2e02380582f3188bb94ebbf05d31487a09aff01fcbb4cd4bfd1f0a833b38c11"
+    "813c84360bb53c7d4481031c40bad8713bb6b835cb08098ed15ba31ee4ba728a"
+    "8c8e10f7294e1b4163b7aee57277bfd881a6f9d43e02c6925aa3a043fb7fb78d"
+    "#) (e #260445#)))";
+  static const char *datas[] =
+    {
+      "(data (flags pkcs1) (hash rmd160 "
+      "#000102030405060708090a0b0c0d0e0f10111213#))",
+      "(data (flags pkcs1) (hash sm3 "
+      "#000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f#))"
+    };
+  gcry_sexp_t s_pk, s_sig, s_data;
+  gpg_error_t err;
+  size_t i;
+
+  info ("Checking a wrong signature with RIPEMD-160 and SM3 data.\n");
+
+  err = gcry_sexp_new (&s_pk, pubkey, 0, 1);
+  if (!err)
+    err = gcry_sexp_new (&s_sig, "(sig-val (rsa (s #01#)))", 0, 1);
+  if (err)
+    die ("error building SEXP: %s\n", gpg_strerror (err));
+
+  for (i = 0; i < DIM (datas); i++)
+    {
+      err = gcry_sexp_new (&s_data, datas[i], 0, 1);
+      if (err)
+        die ("error building SEXP: %s\n", gpg_strerror (err));
+      err = gcry_pk_verify (s_sig, s_data, s_pk);
+      if (!err)
+        fail ("gcry_pk_verify returned success for a wrong signature: %s\n",
+              datas[i]);
+      gcry_sexp_release (s_data);
+    }
+
+  gcry_sexp_release (s_sig);
+  gcry_sexp_release (s_pk);
+}
+
+
 int
 main (int argc, char **argv)
 {
@@ -501,6 +554,8 @@ main (int argc, char **argv)
 
   start_timer ();
   check_rsa_15 (fname);
+  if (!no_verify)
+    check_bad_signature_rmd160_sm3 ();
   stop_timer ();
 
   xfree (fname);
