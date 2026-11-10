@@ -2934,6 +2934,7 @@ bench_ecc_init (struct bench_obj *obj)
   struct bench_ecc_oper *oper = obj->priv;
   struct bench_ecc_hd *hd;
   int p_size = ecc_nbits (oper->algo);
+  int hash_bits;
   gpg_error_t err;
   gcry_mpi_t x;
 
@@ -2961,8 +2962,20 @@ bench_ecc_init (struct bench_obj *obj)
   if (!hd)
     return -1;
 
-  x = gcry_mpi_new (p_size);
-  gcry_mpi_randomize (x, p_size, GCRY_WEAK_RANDOM);
+  /* ECDSA signs a message hash, and no approved hash exceeds 512 bits
+     (SHA-512 / SHA3-512 = 64 bytes).  Size the synthetic hash like a real
+     digest rather than the full curve, so curves whose order is larger than
+     the maximum digest size (P-521 = 521 bits) get a realistic input instead
+     of an impossible 66-byte "hash".  Only affects P-521; all other curves
+     are <= 512 bits already. */
+  if (p_size > 512) {
+    hash_bits = 512;
+  } else {
+    hash_bits = p_size;
+  }
+
+  x = gcry_mpi_new (hash_bits);
+  gcry_mpi_randomize (x, hash_bits, GCRY_WEAK_RANDOM);
 
   on_ecc_algo = oper->algo;
   switch (oper->algo)
