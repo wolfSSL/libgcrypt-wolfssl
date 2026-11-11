@@ -71,6 +71,7 @@ static struct {
    { "aeswrap"     },
    { "pkcs1v2"     },
    { "random"      },
+   { "t-ccm"       },
    { "dsa-rfc6979" },
    { "t-ed25519"   },
    { "t-cv25519"   },
