@@ -102,6 +102,22 @@ check_ccm_no_payload (void)
   else if (memcmp (out, tag_c, sizeof tag_c))
     fail ("message C: gettag returned a wrong tag\n");
 
+  /* The finished message keeps its tag.  */
+  err = gcry_cipher_gettag (hd, out, sizeof tag_c);
+  if (err)
+    fail ("message C: second gettag failed: %s\n", gpg_strerror (err));
+  else if (memcmp (out, tag_c, sizeof tag_c))
+    fail ("message C: second gettag returned a wrong tag\n");
+  err = gcry_cipher_checktag (hd, tag_c, sizeof tag_c);
+  if (err)
+    fail ("message C: checktag after gettag failed for the right tag: %s\n",
+          gpg_strerror (err));
+  err = gcry_cipher_checktag (hd, zeros, sizeof tag_c);
+  if (gpg_err_code (err) != GPG_ERR_CHECKSUM)
+    fail ("message C: checktag of an all-zero tag after gettag returned '%s',"
+          " expected '%s'\n", gpg_strerror (err),
+          gpg_strerror (GPG_ERR_CHECKSUM));
+
   err = start_message (hd, nonce_c, sizeof nonce_c, 0, aad_c, sizeof aad_c,
                        sizeof tag_c);
   if (!err)
@@ -152,6 +168,16 @@ check_ccm_no_payload (void)
   if (err)
     fail ("message B: checktag failed for the right tag: %s\n",
           gpg_strerror (err));
+
+  /* Message C after message B on the same handle.  */
+  err = start_message (hd, nonce_c, sizeof nonce_c, 0, aad_c, sizeof aad_c,
+                       sizeof tag_c);
+  if (!err)
+    err = gcry_cipher_gettag (hd, out, sizeof tag_c);
+  if (err)
+    fail ("message C after B: gettag failed: %s\n", gpg_strerror (err));
+  else if (memcmp (out, tag_c, sizeof tag_c))
+    fail ("message C after B: gettag returned a wrong tag\n");
 
   gcry_cipher_close (hd);
 }
